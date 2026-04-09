@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Vue Liste -->
+    <record id="view_ticket_tree" model="ir.ui.view">
+        <field name="name">it.support.ticket.tree</field>
+        <field name="model">it.support.ticket</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="name"/>
+                <field name="ai_category"/>
+                <field name="ai_priority"/>
+                <field name="state"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Vue Formulaire -->
+    <record id="view_ticket_form" model="ir.ui.view">
+        <field name="name">it.support.ticket.form</field>
+        <field name="model">it.support.ticket</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <field name="state" widget="statusbar"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name" placeholder="Ex: Mon écran ne s'allume plus"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="description" placeholder="Détaillez votre problème..."/>
+                        </group>
+                        <group string="Analyse IA">
+                            <field name="ai_category"/>
+                            <field name="ai_priority"/>
+                        </group>
+                    </group>
+                </sheet>
+                <!-- Pour voir les logs et les notes internes -->
+                <div class="oe_chatter">
+                    <field name="message_follower_ids"/>
+                    <field name="message_ids"/>
+                </div>
+            </form>
+        </field>
+    </record>
+    <!-- Vue Kanban (Drag & Drop) -->
+    <record id="view_ticket_kanban" model="ir.ui.view">
+        <field name="name">it.support.ticket.kanban</field>
+        <field name="model">it.support.ticket</field>
+        <field name="arch" type="xml">
+            <!-- default_group_by permet de créer les colonnes basées sur le champ 'state' -->
+            <kanban default_group_by="state" class="o_kanban_small_column">
+                <field name="name"/>
+                <field name="state"/>
+                <field name="ai_priority"/>
+                <templates>
+                    <t t-name="kanban-box">
+                        <div t-attf-class="oe_kanban_global_click card mb-2 shadow-sm">
+                            <div class="card-body p-2">
+                                <strong class="o_kanban_record_title"><field name="name"/></strong>
+                                <div class="mt-2 text-muted">
+                                    Catégorie: <field name="ai_category" widget="badge"/>
+                                </div>
+                                <div class="mt-1">
+                                    Priorité: <field name="ai_priority" widget="badge" decoration-danger="ai_priority == 'urgent'" decoration-warning="ai_priority == 'high'"/>
+                                </div>
+                            </div>
+                        </div>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+
+    <!-- Actions et Menus -->
+    <record id="action_tickets" model="ir.actions.act_window">
+        <field name="name">Tickets de Support</field>
+        <field name="res_model">it.support.ticket</field>
+        <field name="view_mode">tree,form,form</field>
+    </record>
+
+    <menuitem id="menu_it_root" name="IT Support IA" sequence="10"/>
+    <menuitem id="menu_it_tickets" name="Tickets" parent="menu_it_root" action="action_tickets"/>
+</odoo>

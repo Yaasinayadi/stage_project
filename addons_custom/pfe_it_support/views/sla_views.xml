@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_support_sla_tree" model="ir.ui.view">
+        <field name="name">support.sla.tree</field>
+        <field name="model">support.sla</field>
+        <field name="arch" type="xml">
+            <list editable="bottom">
+                <field name="name"/>
+                <field name="priority"/>
+                <field name="max_hours" widget="float_time"/>
+                <field name="active" widget="boolean_toggle"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="action_support_sla" model="ir.actions.act_window">
+        <field name="name">Règles SLA</field>
+        <field name="res_model">support.sla</field>
+        <field name="view_mode">list</field>
+    </record>
+
+    <menuitem id="menu_support_configuration" name="Configuration" parent="menu_support_root" sequence="100"/>
+    <menuitem id="menu_support_sla" name="SLA" parent="menu_support_configuration" action="action_support_sla" sequence="10"/>
+</odoo>

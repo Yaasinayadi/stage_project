@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Vue Liste (Tree) pour les Tickets -->
+    <record id="view_support_ticket_tree" model="ir.ui.view">
+        <field name="name">support.ticket.tree</field>
+        <field name="model">support.ticket</field>
+        <field name="arch" type="xml">
+            <list decoration-danger="sla_status=='breached'" decoration-warning="sla_status=='at_risk'" decoration-success="state=='resolved'">
+                <field name="name"/>
+                <field name="user_id"/>
+                <field name="priority" widget="badge"/>
+                <field name="ai_classification"/>
+                <field name="state" widget="badge" decoration-info="state=='new'" decoration-success="state=='resolved'"/>
+                <field name="sla_status" widget="badge" decoration-danger="sla_status=='breached'"/>
+                <field name="create_date"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Vue Formulaire pour les Tickets -->
+    <record id="view_support_ticket_form" model="ir.ui.view">
+        <field name="name">support.ticket.form</field>
+        <field name="model">support.ticket</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <field name="state" widget="statusbar" options="{'clickable': '1'}"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" placeholder="Sujet du ticket..."/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="user_id"/>
+                            <field name="assigned_to"/>
+                            <field name="priority"/>
+                        </group>
+                        <group>
+                            <field name="ai_classification"/>
+                            <field name="ai_confidence" widget="progressbar"/>
+                            <field name="sla_deadline" widget="remaining_days"/>
+                            <field name="sla_status"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Description">
+                            <field name="description"/>
+                        </page>
+                        <page string="IA : Solution suggérée">
+                            <field name="ai_suggested_solution"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Action de la fenêtre -->
+    <record id="action_support_ticket" model="ir.actions.act_window">
+        <field name="name">Tickets IT</field>
+        <field name="res_model">support.ticket</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <!-- Menu Principal -->
+    <menuitem id="menu_support_root" name="IT Support IA" sequence="10" web_icon="pfe_it_support,static/description/icon.png"/>
+    <menuitem id="menu_support_tickets" name="Tickets" parent="menu_support_root" action="action_support_ticket" sequence="10"/>
+
+</odoo>

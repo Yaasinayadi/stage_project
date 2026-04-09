@@ -1,0 +1,5 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_support_ticket_user,support.ticket.user,model_support_ticket,base.group_user,1,1,1,0
+access_support_ticket_manager,support.ticket.manager,model_support_ticket,base.group_system,1,1,1,1
+access_support_sla_user,support.sla.user,model_support_sla,base.group_user,1,0,0,0
+access_support_sla_manager,support.sla.manager,model_support_sla,base.group_system,1,1,1,1
