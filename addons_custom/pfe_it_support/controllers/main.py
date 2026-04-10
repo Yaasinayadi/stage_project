@@ -49,3 +49,53 @@ class SupportTicketController(http.Controller):
             json.dumps({'status': 201, 'message': 'Success', 'ticket_id': new_ticket.id}),
             headers=[('Content-Type', 'application/json')]
         )
+
+    @http.route('/api/ticket/update/<int:ticket_id>', type='http', auth='public', methods=['PUT', 'OPTIONS'], cors='*', csrf=False)
+    def update_ticket(self, ticket_id, **kw):
+        """Met à jour un ticket de support via l'API."""
+        if request.httprequest.method == 'OPTIONS':
+            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'PUT, OPTIONS')])
+            
+        post = json.loads(request.httprequest.data.decode('utf-8'))
+        env = request.env['support.ticket'].sudo()
+        ticket = env.browse(ticket_id)
+        
+        if not ticket.exists():
+            return request.make_response(
+                json.dumps({'status': 404, 'message': 'Ticket not found'}),
+                headers=[('Content-Type', 'application/json')]
+            )
+
+        vals = {}
+        if 'name' in post: vals['name'] = post['name']
+        if 'description' in post: vals['description'] = post['description']
+        if 'priority' in post: vals['priority'] = post['priority']
+        if 'category' in post: vals['ai_classification'] = post['category']
+        if 'state' in post: vals['state'] = post['state']
+
+        ticket.write(vals)
+        return request.make_response(
+            json.dumps({'status': 200, 'message': 'Success updated'}),
+            headers=[('Content-Type', 'application/json')]
+        )
+
+    @http.route('/api/ticket/<int:ticket_id>', type='http', auth='public', methods=['DELETE', 'OPTIONS'], cors='*', csrf=False)
+    def delete_ticket(self, ticket_id, **kw):
+        """Supprime un ticket de support."""
+        if request.httprequest.method == 'OPTIONS':
+            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'DELETE, OPTIONS')])
+            
+        env = request.env['support.ticket'].sudo()
+        ticket = env.browse(ticket_id)
+        
+        if not ticket.exists():
+            return request.make_response(
+                json.dumps({'status': 404, 'message': 'Ticket not found'}),
+                headers=[('Content-Type', 'application/json')]
+            )
+            
+        ticket.unlink()
+        return request.make_response(
+            json.dumps({'status': 200, 'message': 'Ticket deleted successfully'}),
+            headers=[('Content-Type', 'application/json')]
+        )
