@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { MessageCircle, X, Send, Bot, User } from "lucide-react";
+import { MessageCircle, X, Send, Bot, User, Sparkles } from "lucide-react";
 import axios from "axios";
 
 type Message = { sender: "user" | "bot"; text: string };
@@ -15,7 +15,6 @@ export default function Chatbot() {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Générer un ID de session unique pour la mémoire de conversation
   const [sessionId] = useState(() => `session_${Date.now()}_${Math.random().toString(36).slice(2)}`);
 
   const scrollToBottom = () => {
@@ -39,7 +38,7 @@ export default function Chatbot() {
         session_id: sessionId,
       });
       setMessages(prev => [...prev, { sender: "bot", text: res.data.bot_reply }]);
-    } catch (error) {
+    } catch {
       setMessages(prev => [...prev, { sender: "bot", text: "⚠️ Erreur de connexion au service IA. Veuillez réessayer." }]);
     } finally {
       setIsLoading(false);
@@ -48,66 +47,91 @@ export default function Chatbot() {
 
   return (
     <>
-      {/* Bouton flottant */}
-      <button
-        onClick={() => setIsOpen(true)}
-        className={`fixed bottom-6 right-6 p-4 rounded-full shadow-xl transition-all transform hover:scale-110 z-50 ${isOpen ? "hidden" : "flex"}`}
-        style={{ background: "linear-gradient(135deg, #3b82f6, #8b5cf6)" }}
-      >
-        <MessageCircle size={28} className="text-white" />
-      </button>
+      {/* Floating Action Button */}
+      {!isOpen && (
+        <button
+          onClick={() => setIsOpen(true)}
+          className="fixed bottom-6 right-6 w-14 h-14 rounded-2xl flex items-center justify-center z-50 transition-all duration-300 hover:scale-110 hover:shadow-xl active:scale-95 accent-gradient shadow-lg"
+          style={{ boxShadow: "0 8px 24px hsl(var(--primary) / 0.35)" }}
+          id="chatbot-toggle"
+        >
+          <MessageCircle size={22} className="text-white" />
+        </button>
+      )}
 
-      {/* Fenêtre du Chatbot */}
+      {/* Chat Panel */}
       {isOpen && (
-        <div className="fixed bottom-6 right-6 w-[380px] h-[520px] rounded-2xl shadow-2xl flex flex-col overflow-hidden z-50 border"
-          style={{ background: "var(--chatbot-bg, hsl(var(--card)))" }}
+        <div
+          className="fixed bottom-6 right-6 w-[380px] h-[520px] rounded-2xl flex flex-col overflow-hidden z-50 chatbot-panel animate-slide-up"
+          id="chatbot-panel"
         >
           {/* Header */}
-          <div className="flex justify-between items-center p-4 text-white"
-            style={{ background: "linear-gradient(135deg, #3b82f6, #8b5cf6)" }}
-          >
+          <div className="flex justify-between items-center px-4 py-3 accent-gradient">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-white/20 rounded-lg">
-                <Bot size={20} />
+              <div className="w-9 h-9 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center">
+                <Sparkles size={16} className="text-white" />
               </div>
               <div>
-                <h3 className="font-semibold text-sm">Assistant IA Support</h3>
-                <p className="text-xs opacity-80">En ligne • Propulsé par GPT-4o</p>
+                <h3 className="font-semibold text-sm text-white">Assistant IA</h3>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                  <p className="text-[0.65rem] text-white/70 font-medium">En ligne</p>
+                </div>
               </div>
             </div>
-            <button onClick={() => setIsOpen(false)} className="hover:bg-white/20 p-1 rounded-lg transition-colors">
-              <X size={20} />
+            <button
+              onClick={() => setIsOpen(false)}
+              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/15 transition-colors text-white/80 hover:text-white"
+            >
+              <X size={18} />
             </button>
           </div>
 
           {/* Messages */}
-          <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-3" style={{ background: "hsl(var(--muted) / 0.3)" }}>
+          <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-3 bg-[hsl(var(--background))]">
             {messages.map((msg, idx) => (
-              <div key={idx} className={`flex gap-2 ${msg.sender === "user" ? "flex-row-reverse" : "flex-row"}`}>
-                <div className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-white text-xs ${msg.sender === "user" ? "bg-blue-500" : "bg-purple-500"}`}>
-                  {msg.sender === "user" ? <User size={14} /> : <Bot size={14} />}
-                </div>
-                <div className={`max-w-[75%] p-3 rounded-2xl text-sm leading-relaxed ${
-                  msg.sender === "user"
-                    ? "bg-blue-500 text-white rounded-br-sm"
-                    : "rounded-bl-sm border"
+              <div
+                key={idx}
+                className={`flex gap-2.5 animate-fade-in ${
+                  msg.sender === "user" ? "flex-row-reverse" : "flex-row"
                 }`}
-                  style={msg.sender === "bot" ? { background: "hsl(var(--card))", color: "hsl(var(--foreground))" } : {}}
+                style={{ animationDelay: `${idx * 50}ms` }}
+              >
+                {/* Avatar */}
+                <div
+                  className={`flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs ${
+                    msg.sender === "user"
+                      ? "bg-[hsl(var(--info))]"
+                      : "accent-gradient"
+                  }`}
+                >
+                  {msg.sender === "user" ? <User size={13} /> : <Bot size={13} />}
+                </div>
+
+                {/* Bubble */}
+                <div
+                  className={`max-w-[78%] px-3.5 py-2.5 text-sm leading-relaxed ${
+                    msg.sender === "user"
+                      ? "bg-[hsl(var(--info))] text-white rounded-2xl rounded-br-md"
+                      : "bg-[hsl(var(--card))] border border-[hsl(var(--border))] text-[hsl(var(--foreground))] rounded-2xl rounded-bl-md"
+                  }`}
                 >
                   {msg.text}
                 </div>
               </div>
             ))}
+
+            {/* Loading dots */}
             {isLoading && (
-              <div className="flex gap-2">
-                <div className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-white text-xs bg-purple-500">
-                  <Bot size={14} />
+              <div className="flex gap-2.5 animate-fade-in">
+                <div className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs accent-gradient">
+                  <Bot size={13} />
                 </div>
-                <div className="p-3 rounded-2xl rounded-bl-sm border text-sm" style={{ background: "hsl(var(--card))" }}>
-                  <span className="flex gap-1">
-                    <span className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "0ms" }}></span>
-                    <span className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "150ms" }}></span>
-                    <span className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "300ms" }}></span>
+                <div className="px-4 py-3 rounded-2xl rounded-bl-md bg-[hsl(var(--card))] border border-[hsl(var(--border))]">
+                  <span className="flex gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--muted-foreground))] animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--muted-foreground))] animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--muted-foreground))] animate-bounce" style={{ animationDelay: "300ms" }} />
                   </span>
                 </div>
               </div>
@@ -116,7 +140,7 @@ export default function Chatbot() {
           </div>
 
           {/* Input */}
-          <div className="p-3 border-t" style={{ background: "hsl(var(--background))" }}>
+          <div className="p-3 border-t border-[hsl(var(--border))] bg-[hsl(var(--card))]">
             <form onSubmit={(e) => { e.preventDefault(); sendMessage(); }} className="flex gap-2">
               <input
                 type="text"
@@ -124,16 +148,16 @@ export default function Chatbot() {
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Décrivez votre problème..."
                 disabled={isLoading}
-                className="flex-1 px-4 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm border"
-                style={{ background: "hsl(var(--muted))", color: "hsl(var(--foreground))" }}
+                className="input-field focus-ring flex-1 text-sm"
+                id="chatbot-input"
               />
               <button
                 type="submit"
-                className="p-2.5 text-white rounded-xl transition-all hover:scale-105 disabled:opacity-50"
-                style={{ background: "linear-gradient(135deg, #3b82f6, #8b5cf6)" }}
+                className="w-10 h-10 rounded-xl flex items-center justify-center text-white accent-gradient transition-all hover:scale-105 disabled:opacity-40 disabled:hover:scale-100 flex-shrink-0"
                 disabled={!input.trim() || isLoading}
+                id="chatbot-send"
               >
-                <Send size={16} />
+                <Send size={15} />
               </button>
             </form>
           </div>

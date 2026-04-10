@@ -23,7 +23,7 @@ services:
       - odoo_data:/var/lib/odoo
     command: odoo -u pfe_it_support
     environment:
-      - HOST=odoo_db
+      - HOST=db
       - USER=odoo
       - PASSWORD=odoo
 
@@ -38,9 +38,7 @@ services:
     volumes:
       - ./ia_service:/app
     environment:
-      - GROQ_API_KEY=${GROQ_API_KEY}
-    env_file:
-      - .env
+       - GROQ_API_KEY=${GROQ_API_KEY}
     depends_on:
       - web
 
