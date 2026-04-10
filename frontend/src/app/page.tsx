@@ -18,6 +18,12 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
+  // Search & Filter states
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("Tous");
+  
+  const categories = ["Tous", "Logiciel", "Matériel", "Accès", "Réseau", "Messagerie", "Infrastructure", "Autre"];
+
   // Form states
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
@@ -84,6 +90,20 @@ export default function Home() {
     }
   };
 
+  // Filtrage combiné par recherche de texte et catégorie
+  const filteredTickets = tickets.filter(ticket => {
+    const safeName = (ticket.name || "").toLowerCase();
+    const safeDesc = (ticket.description || "").toLowerCase();
+    const safeSearch = (searchTerm || "").toLowerCase();
+    
+    const matchesSearch = safeName.includes(safeSearch) || safeDesc.includes(safeSearch);
+    
+    const ticketCat = ticket.category ? ticket.category.toLowerCase() : "autre";
+    const matchesCategory = selectedCategory === "Tous" || ticketCat.includes(selectedCategory.toLowerCase());
+    
+    return matchesSearch && matchesCategory;
+  });
+
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8">
       {/* Header */}
@@ -101,24 +121,64 @@ export default function Home() {
         </button>
       </div>
 
-      {/* Barre de recherche */}
-      <div className="relative">
-        <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground" size={20} />
-        <input
-          type="text"
-          placeholder="Rechercher un ticket..."
-          className="w-full bg-card border pl-12 pr-4 py-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all text-sm"
-        />
+      {/* Barre de recherche et Filtres */}
+      <div className="space-y-5 bg-card/40 p-6 rounded-3xl border border-border/50 shadow-sm">
+        {/* Recherche focus */}
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="relative flex-1 group">
+            <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
+              <Search className="text-muted-foreground group-focus-within:text-blue-600 transition-colors duration-300" size={20} />
+            </div>
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Rechercher un ticket par titre ou description..."
+              className="w-full bg-background border border-border/80 pl-12 pr-4 py-4 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all text-sm font-medium"
+            />
+          </div>
+          <button 
+            className="cursor-pointer bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-8 py-4 rounded-2xl font-semibold transition-all duration-300 shadow-lg shadow-blue-600/20 hover:shadow-blue-600/40 hover:-translate-y-1 hover:scale-[1.03] active:scale-[0.98] flex items-center justify-center gap-3"
+          >
+            <Search size={18} />
+            <span className="hidden sm:inline">Chercher</span>
+          </button>
+        </div>
+
+        {/* Categories (Pills) */}
+        <div className="flex flex-wrap gap-2.5 pt-1">
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setSelectedCategory(cat)}
+              className={`cursor-pointer px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 border flex items-center justify-center min-w-[80px] hover:-translate-y-1 active:scale-95 ${
+                selectedCategory === cat 
+                  ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/40 scale-[1.05]" 
+                  : "bg-white/80 backdrop-blur-sm border-gray-200 hover:border-blue-400 hover:bg-blue-50 text-gray-500 hover:text-blue-600 shadow-sm hover:shadow-md"
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Liste des tickets (Cards) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {tickets.length === 0 ? (
-          <div className="col-span-full py-12 text-center text-muted-foreground bg-card/50 rounded-2xl border border-dashed">
-            Aucun ticket trouvé. Créez-en un nouveau.
+        {filteredTickets.length === 0 ? (
+          <div className="col-span-full py-20 text-center bg-card/30 rounded-3xl border border-dashed border-border/60">
+            <div className="flex flex-col items-center justify-center space-y-4">
+              <div className="p-4 bg-muted/50 rounded-full">
+                <Search className="h-8 w-8 text-muted-foreground/60" />
+              </div>
+              <h3 className="text-xl font-semibold text-foreground/80">Aucun ticket trouvé</h3>
+              <p className="text-sm text-muted-foreground max-w-sm text-center">
+                Essayez de modifier votre terme de recherche ou changez la catégorie sélectionnée ci-dessus.
+              </p>
+            </div>
           </div>
         ) : (
-          tickets.map(ticket => (
+          filteredTickets.map(ticket => (
             <div key={ticket.id} className="bg-card border rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow group cursor-pointer hover:border-blue-500/50">
               <div className="flex justify-between items-start mb-4">
                 <div className="p-3 rounded-xl bg-muted/50 group-hover:bg-blue-500/10 transition-colors">

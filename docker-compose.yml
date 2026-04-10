@@ -23,7 +23,7 @@ services:
       - odoo_data:/var/lib/odoo
     command: odoo -u pfe_it_support
     environment:
-      - HOST=db
+      - HOST=odoo_db
       - USER=odoo
       - PASSWORD=odoo
 
