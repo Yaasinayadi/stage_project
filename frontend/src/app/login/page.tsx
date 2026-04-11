@@ -142,7 +142,7 @@ export default function LoginPage() {
               <div className="relative">
                 <Mail
                   size={16}
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]"
                 />
                 <input
                   id="login-email"
@@ -150,7 +150,7 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="input-field focus-ring pl-10"
+                  className="input-field focus-ring !pl-11"
                   placeholder="nom@entreprise.com"
                   autoComplete="email"
                 />
@@ -165,7 +165,7 @@ export default function LoginPage() {
               <div className="relative">
                 <Lock
                   size={16}
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]"
                 />
                 <input
                   id="login-password"
@@ -173,7 +173,7 @@ export default function LoginPage() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="input-field focus-ring pl-10"
+                  className="input-field focus-ring !pl-11"
                   placeholder="••••••••"
                   autoComplete="current-password"
                 />

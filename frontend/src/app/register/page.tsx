@@ -164,7 +164,7 @@ export default function RegisterPage() {
                   <div className="relative">
                     <User
                       size={16}
-                      className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]"
                     />
                     <input
                       id="register-name"
@@ -172,7 +172,7 @@ export default function RegisterPage() {
                       required
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      className="input-field focus-ring pl-10"
+                      className="input-field focus-ring !pl-11"
                       placeholder="Ahmed Benali"
                       autoComplete="name"
                     />
@@ -187,7 +187,7 @@ export default function RegisterPage() {
                   <div className="relative">
                     <Mail
                       size={16}
-                      className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]"
                     />
                     <input
                       id="register-email"
@@ -195,7 +195,7 @@ export default function RegisterPage() {
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="input-field focus-ring pl-10"
+                      className="input-field focus-ring !pl-11"
                       placeholder="nom@entreprise.com"
                       autoComplete="email"
                     />
@@ -210,7 +210,7 @@ export default function RegisterPage() {
                   <div className="relative">
                     <Lock
                       size={16}
-                      className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]"
                     />
                     <input
                       id="register-password"
@@ -218,7 +218,7 @@ export default function RegisterPage() {
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="input-field focus-ring pl-10"
+                      className="input-field focus-ring !pl-11"
                       placeholder="Min. 6 caractères"
                       autoComplete="new-password"
                     />
@@ -233,7 +233,7 @@ export default function RegisterPage() {
                   <div className="relative">
                     <Lock
                       size={16}
-                      className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]"
                     />
                     <input
                       id="register-confirm"
@@ -241,7 +241,7 @@ export default function RegisterPage() {
                       required
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="input-field focus-ring pl-10"
+                      className="input-field focus-ring !pl-11"
                       placeholder="••••••••"
                       autoComplete="new-password"
                     />
