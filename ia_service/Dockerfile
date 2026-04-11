@@ -7,8 +7,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Exposer le port par défaut de Uvicorn
+# Exposer le port par défaut de Flask
 EXPOSE 8000
 
-# Lancer le serveur
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Lancer le serveur Flask
+CMD ["python", "main.py"]

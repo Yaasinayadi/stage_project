@@ -53,5 +53,5 @@ odoo_pg_data/
 ehthumbs.db
 Thumbs.db
 
-
+*.pdf
 *.txt
