@@ -10,8 +10,10 @@ import {
   ChevronRight,
   Sparkles,
   Headphones,
+  LogOut,
 } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
+import { useAuth } from "@/lib/auth";
 
 type NavItem = {
   id: string;
@@ -24,13 +26,30 @@ type NavItem = {
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [activeItem, setActiveItem] = useState("dashboard");
+  const { user, logout } = useAuth();
 
   const navItems: NavItem[] = [
     { id: "dashboard", label: "Tableau de bord", icon: <LayoutDashboard size={20} /> },
     { id: "tickets", label: "Tickets", icon: <Ticket size={20} /> },
     { id: "analytics", label: "Analytiques", icon: <BarChart3 size={20} />, disabled: true },
-    { id: "settings", label: "Paramètres", icon: <Settings size={20} />, disabled: true },
+    { id: "settings", label: "Paramètres", icon: <Settings size={20} />, disabled: user?.role === "user" },
   ];
+
+  // User initials for avatar
+  const initials = user?.name
+    ? user.name
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2)
+    : "?";
+
+  const roleLabels: Record<string, string> = {
+    user: "Utilisateur",
+    agent: "Agent IT",
+    admin: "Administrateur",
+  };
 
   return (
     <aside
@@ -39,9 +58,7 @@ export default function Sidebar() {
     >
       {/* Logo Area */}
       <div className="flex items-center gap-3 px-4 h-16 border-b border-[hsl(var(--border)/0.5)] flex-shrink-0">
-        <div
-          className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 accent-gradient"
-        >
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 accent-gradient">
           <Headphones size={18} className="text-white" />
         </div>
         {!collapsed && (
@@ -87,13 +104,45 @@ export default function Sidebar() {
 
       {/* Footer */}
       <div className="px-3 py-3 border-t border-[hsl(var(--border)/0.5)] space-y-2 flex-shrink-0">
-        {/* Theme Toggle */}
-        <div className={`flex ${collapsed ? "justify-center" : "justify-between items-center px-2"}`}>
+        {/* User Info */}
+        {user && (
+          <div className={`flex items-center gap-3 px-2 py-2 ${collapsed ? "justify-center" : ""}`}>
+            <div
+              className="w-8 h-8 rounded-lg accent-gradient flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+              title={user.name}
+            >
+              {initials}
+            </div>
+            {!collapsed && (
+              <div className="overflow-hidden animate-fade-in flex-1 min-w-0">
+                <p className="text-xs font-semibold truncate">{user.name}</p>
+                <p className="text-[0.6rem] text-[hsl(var(--muted-foreground))] truncate">
+                  {roleLabels[user.role] || user.role}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Theme + Collapse row */}
+        <div className={`flex ${collapsed ? "flex-col items-center gap-1" : "justify-between items-center px-2"}`}>
           {!collapsed && (
             <span className="text-xs font-medium text-[hsl(var(--muted-foreground))]">Thème</span>
           )}
           <ThemeToggle />
         </div>
+
+        {/* Logout */}
+        <button
+          onClick={logout}
+          className={`sidebar-item w-full text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive)/0.08)] ${
+            collapsed ? "justify-center px-0" : ""
+          }`}
+          title={collapsed ? "Déconnexion" : undefined}
+        >
+          <LogOut size={18} />
+          {!collapsed && <span className="text-sm">Déconnexion</span>}
+        </button>
 
         {/* Collapse Toggle */}
         <button

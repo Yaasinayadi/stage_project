@@ -17,6 +17,8 @@ import StatsCard from "@/components/StatsCard";
 import TicketCard from "@/components/TicketCard";
 import TicketTable from "@/components/TicketTable";
 import TicketModal from "@/components/TicketModal";
+import ProtectedRoute from "@/components/ProtectedRoute";
+import { useAuth } from "@/lib/auth";
 
 type TicketType = {
   id: number;
@@ -27,7 +29,8 @@ type TicketType = {
   category: string;
 };
 
-export default function Home() {
+function Dashboard() {
+  const { user } = useAuth();
   const [tickets, setTickets] = useState<TicketType[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -52,7 +55,10 @@ export default function Home() {
 
   const fetchTickets = async () => {
     try {
-      const res = await axios.get("http://localhost:8069/api/tickets");
+      const url = user?.role === "user"
+        ? `http://localhost:8069/api/tickets?user_id=${user.id}`
+        : "http://localhost:8069/api/tickets";
+      const res = await axios.get(url);
       if (res.data.status === 200) {
         setTickets(res.data.data);
       }
@@ -107,7 +113,7 @@ export default function Home() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-in">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
-            Tableau de bord
+            {user ? `Bonjour, ${user.name.split(" ")[0]} 👋` : "Tableau de bord"}
           </h1>
           <p className="text-sm text-[hsl(var(--muted-foreground))] mt-0.5">
             Vue d&apos;ensemble de vos demandes de support IT
@@ -255,5 +261,14 @@ export default function Home() {
         onSuccess={fetchTickets}
       />
     </div>
+  );
+}
+
+// Wrap with ProtectedRoute
+export default function Home() {
+  return (
+    <ProtectedRoute>
+      <Dashboard />
+    </ProtectedRoute>
   );
 }

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { X, Sparkles, Send, Loader2, CheckCircle2 } from "lucide-react";
 import axios from "axios";
+import { useAuth } from "@/lib/auth";
 
 type TicketModalProps = {
   isOpen: boolean;
@@ -13,6 +14,7 @@ type TicketModalProps = {
 type Step = "form" | "analyzing" | "success";
 
 export default function TicketModal({ isOpen, onClose, onSuccess }: TicketModalProps) {
+  const { user } = useAuth();
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
   const [step, setStep] = useState<Step>("form");
@@ -30,12 +32,13 @@ export default function TicketModal({ isOpen, onClose, onSuccess }: TicketModalP
       const { category, priority } = iaRes.data;
       setAiResult({ category, priority });
 
-      // 2. Create in Odoo
+      // 2. Create in Odoo (with user_id from auth)
       await axios.post("http://localhost:8069/api/ticket/create", {
         name: title,
         description: desc,
         category,
         priority,
+        user_id: user?.id,
       });
 
       setStep("success");

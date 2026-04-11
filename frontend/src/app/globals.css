@@ -96,13 +96,16 @@
     width: 6px;
     height: 6px;
   }
+
   ::-webkit-scrollbar-track {
     background: transparent;
   }
+
   ::-webkit-scrollbar-thumb {
     background: hsl(var(--muted-foreground) / 0.3);
     border-radius: 999px;
   }
+
   ::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--muted-foreground) / 0.5);
   }
@@ -110,43 +113,124 @@
 
 /* ─── Animations ─── */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px) scale(0.98); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 @keyframes slideInRight {
-  from { opacity: 0; transform: translateX(20px); }
-  to   { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 @keyframes shimmer {
-  0%   { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0% {
+    background-position: -200% 0;
+  }
+
+  100% {
+    background-position: 200% 0;
+  }
 }
 
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4); }
-  50%      { box-shadow: 0 0 0 8px hsl(var(--primary) / 0); }
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4);
+  }
+
+  50% {
+    box-shadow: 0 0 0 8px hsl(var(--primary) / 0);
+  }
 }
 
 @keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-4px); }
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-4px);
+  }
 }
 
 @keyframes countUp {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes borderGlow {
-  0%, 100% { border-color: hsl(var(--border)); }
-  50%      { border-color: hsl(var(--primary) / 0.4); }
+
+  0%,
+  100% {
+    border-color: hsl(var(--border));
+  }
+
+  50% {
+    border-color: hsl(var(--primary) / 0.4);
+  }
+}
+
+@keyframes shake {
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
+    transform: translateX(-4px);
+  }
+
+  20%,
+  40%,
+  60%,
+  80% {
+    transform: translateX(4px);
+  }
+}
+
+.animate-shake {
+  animation: shake 0.5s ease-in-out;
 }
 
 /* ─── Utility Classes ─── */
@@ -164,10 +248,9 @@
 
 .animate-shimmer {
   background: linear-gradient(90deg,
-    hsl(var(--muted)) 25%,
-    hsl(var(--muted-foreground) / 0.08) 50%,
-    hsl(var(--muted)) 75%
-  );
+      hsl(var(--muted)) 25%,
+      hsl(var(--muted-foreground) / 0.08) 50%,
+      hsl(var(--muted)) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.8s infinite;
 }
@@ -327,10 +410,25 @@
   flex-shrink: 0;
 }
 
-.status-dot.new       { background: hsl(var(--info)); box-shadow: 0 0 6px hsl(var(--info) / 0.4); }
-.status-dot.open      { background: hsl(var(--warning)); box-shadow: 0 0 6px hsl(var(--warning) / 0.4); }
-.status-dot.progress  { background: hsl(var(--primary)); box-shadow: 0 0 6px hsl(var(--primary) / 0.4); }
-.status-dot.resolved  { background: hsl(var(--success)); box-shadow: 0 0 6px hsl(var(--success) / 0.4); }
+.status-dot.new {
+  background: hsl(var(--info));
+  box-shadow: 0 0 6px hsl(var(--info) / 0.4);
+}
+
+.status-dot.open {
+  background: hsl(var(--warning));
+  box-shadow: 0 0 6px hsl(var(--warning) / 0.4);
+}
+
+.status-dot.progress {
+  background: hsl(var(--primary));
+  box-shadow: 0 0 6px hsl(var(--primary) / 0.4);
+}
+
+.status-dot.resolved {
+  background: hsl(var(--success));
+  box-shadow: 0 0 6px hsl(var(--success) / 0.4);
+}
 
 /* ─── Table Styles ─── */
 .ticket-table {
@@ -354,6 +452,7 @@
 .ticket-table thead th:first-child {
   border-radius: var(--radius) 0 0 0;
 }
+
 .ticket-table thead th:last-child {
   border-radius: 0 var(--radius) 0 0;
 }
@@ -426,14 +525,37 @@
 }
 
 /* ─── Stagger Animations ─── */
-.stagger-1 { animation-delay: 0.05s; }
-.stagger-2 { animation-delay: 0.1s; }
-.stagger-3 { animation-delay: 0.15s; }
-.stagger-4 { animation-delay: 0.2s; }
-.stagger-5 { animation-delay: 0.25s; }
-.stagger-6 { animation-delay: 0.3s; }
-.stagger-7 { animation-delay: 0.35s; }
-.stagger-8 { animation-delay: 0.4s; }
+.stagger-1 {
+  animation-delay: 0.05s;
+}
+
+.stagger-2 {
+  animation-delay: 0.1s;
+}
+
+.stagger-3 {
+  animation-delay: 0.15s;
+}
+
+.stagger-4 {
+  animation-delay: 0.2s;
+}
+
+.stagger-5 {
+  animation-delay: 0.25s;
+}
+
+.stagger-6 {
+  animation-delay: 0.3s;
+}
+
+.stagger-7 {
+  animation-delay: 0.35s;
+}
+
+.stagger-8 {
+  animation-delay: 0.4s;
+}
 
 /* ─── Gradient Accent Line ─── */
 .accent-gradient {
