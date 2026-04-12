@@ -172,6 +172,7 @@ class SupportTicketController(http.Controller):
             'user_name': t.user_id.name if t.user_id else None,
             'assigned_to': t.assigned_to.name if t.assigned_to else None,
             'create_date': str(t.create_date) if t.create_date else None,
+            'write_date': str(t.write_date) if t.write_date else None,
         } for t in tickets]
         return request.make_response(
             json.dumps({'status': 200, 'data': data}),
