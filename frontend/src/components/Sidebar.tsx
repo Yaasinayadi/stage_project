@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard,
+  Home,
   Ticket,
   BarChart3,
   Settings,
@@ -18,22 +20,32 @@ import { useAuth } from "@/lib/auth";
 type NavItem = {
   id: string;
   label: string;
+  href: string;
   icon: React.ReactNode;
-  active?: boolean;
   disabled?: boolean;
 };
 
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
-  const [activeItem, setActiveItem] = useState("dashboard");
+  const pathname = usePathname();
   const { user, logout } = useAuth();
 
-  const navItems: NavItem[] = [
-    { id: "dashboard", label: "Tableau de bord", icon: <LayoutDashboard size={20} /> },
-    { id: "tickets", label: "Tickets", icon: <Ticket size={20} /> },
-    { id: "analytics", label: "Analytiques", icon: <BarChart3 size={20} />, disabled: true },
-    { id: "settings", label: "Paramètres", icon: <Settings size={20} />, disabled: user?.role === "user" },
-  ];
+  // Navigation Items by role
+  let navItems: NavItem[] = [];
+
+  if (user?.role === "admin" || user?.role === "agent") {
+    navItems = [
+      { id: "analytics", label: "Analytiques", href: "/analytics", icon: <BarChart3 size={20} /> },
+      { id: "tickets", label: "Tickets", href: "/tickets", icon: <Ticket size={20} /> },
+      { id: "settings", label: "Paramètres", href: "#", icon: <Settings size={20} />, disabled: true },
+    ];
+  } else {
+    // Regular User
+    navItems = [
+      { id: "welcome", label: "Accueil", href: "/welcome", icon: <Home size={20} /> },
+      { id: "tickets", label: "Mes Tickets", href: "/tickets", icon: <Ticket size={20} /> },
+    ];
+  }
 
   // User initials for avatar
   const initials = user?.name
@@ -68,7 +80,7 @@ export default function Sidebar() {
             </h1>
             <p className="text-[0.65rem] text-[hsl(var(--muted-foreground))] font-medium flex items-center gap-1">
               <Sparkles size={10} className="text-[hsl(var(--primary))]" />
-              Propulsé par l&apos;IA
+              Propulsé par l'IA
             </p>
           </div>
         )}
@@ -81,25 +93,40 @@ export default function Sidebar() {
             Navigation
           </p>
         )}
-        {navItems.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => !item.disabled && setActiveItem(item.id)}
-            className={`sidebar-item w-full ${activeItem === item.id ? "active" : ""} ${
-              item.disabled ? "opacity-40 cursor-not-allowed" : ""
-            } ${collapsed ? "justify-center px-0" : ""}`}
-            title={collapsed ? item.label : undefined}
-            disabled={item.disabled}
-          >
-            <span className="flex-shrink-0">{item.icon}</span>
-            {!collapsed && <span className="whitespace-nowrap">{item.label}</span>}
-            {!collapsed && item.disabled && (
-              <span className="ml-auto text-[0.6rem] uppercase bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] px-1.5 py-0.5 rounded font-semibold">
-                Bientôt
-              </span>
-            )}
-          </button>
-        ))}
+        {navItems.map((item) => {
+          const isActive = pathname === item.href;
+          
+          if (item.disabled) {
+            return (
+              <button
+                key={item.id}
+                className={`sidebar-item w-full opacity-40 cursor-not-allowed ${collapsed ? "justify-center px-0" : ""}`}
+                title={collapsed ? item.label : undefined}
+                disabled={true}
+              >
+                <span className="flex-shrink-0">{item.icon}</span>
+                {!collapsed && <span className="whitespace-nowrap">{item.label}</span>}
+                {!collapsed && (
+                  <span className="ml-auto text-[0.6rem] uppercase bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] px-1.5 py-0.5 rounded font-semibold">
+                    Bientôt
+                  </span>
+                )}
+              </button>
+            );
+          }
+
+          return (
+            <Link
+              key={item.id}
+              href={item.href}
+              className={`sidebar-item w-full ${isActive ? "active" : ""} ${collapsed ? "justify-center px-0" : ""}`}
+              title={collapsed ? item.label : undefined}
+            >
+              <span className="flex-shrink-0">{item.icon}</span>
+              {!collapsed && <span className="whitespace-nowrap">{item.label}</span>}
+            </Link>
+          );
+        })}
       </nav>
 
       {/* Footer */}
