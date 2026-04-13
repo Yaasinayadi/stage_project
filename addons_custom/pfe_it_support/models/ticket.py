@@ -46,6 +46,15 @@ class SupportTicket(models.Model):
 
     active = fields.Boolean(default=True)
 
+    # Pièces jointes (logs, images, captures d'écran)
+    attachment_ids = fields.Many2many(
+        'ir.attachment',
+        'support_ticket_attachment_rel',
+        'ticket_id',
+        'attachment_id',
+        string='Pièces jointes'
+    )
+
     @api.depends('priority')
     def _compute_sla(self):
         for ticket in self:

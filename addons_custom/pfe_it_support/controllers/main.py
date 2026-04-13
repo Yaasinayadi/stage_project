@@ -277,3 +277,145 @@ class SupportTicketController(http.Controller):
             headers=[('Content-Type', 'application/json')]
 
         )
+
+    # ─────────────────────────────────────────────
+    # ATTACHMENTS API
+    # ─────────────────────────────────────────────
+
+    @http.route('/api/ticket/<int:ticket_id>/upload', type='http', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def upload_attachment(self, ticket_id, **kw):
+        """Upload une ou plusieurs pièces jointes pour un ticket."""
+        if request.httprequest.method == 'OPTIONS':
+            return request.make_response('', headers=[
+                ('Access-Control-Allow-Origin', '*'),
+                ('Access-Control-Allow-Methods', 'POST, OPTIONS'),
+                ('Access-Control-Allow-Headers', 'Content-Type'),
+            ])
+
+        try:
+            ticket = request.env['support.ticket'].sudo().browse(ticket_id)
+            if not ticket.exists():
+                return self._json_response({'status': 404, 'message': 'Ticket introuvable.'}, 404)
+
+            uploaded_files = request.httprequest.files.getlist('files')
+            if not uploaded_files:
+                return self._json_response({'status': 400, 'message': 'Aucun fichier reçu.'}, 400)
+
+            # Limite : 10 Mo par fichier, 5 fichiers max
+            MAX_SIZE = 10 * 1024 * 1024  # 10 MB
+            MAX_FILES = 5
+            ALLOWED_TYPES = [
+                'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+                'application/pdf',
+                'text/plain', 'text/csv',
+                'application/zip',
+                'application/vnd.ms-excel',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'application/msword',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            ]
+
+            if len(uploaded_files) > MAX_FILES:
+                return self._json_response({'status': 400, 'message': f'Maximum {MAX_FILES} fichiers à la fois.'}, 400)
+
+            created_attachments = []
+            for file in uploaded_files:
+                file_data = file.read()
+
+                if len(file_data) > MAX_SIZE:
+                    return self._json_response({
+                        'status': 400,
+                        'message': f'Le fichier "{file.filename}" dépasse 10 Mo.'
+                    }, 400)
+
+                if file.content_type not in ALLOWED_TYPES:
+                    return self._json_response({
+                        'status': 400,
+                        'message': f'Type de fichier non autorisé : {file.content_type}'
+                    }, 400)
+
+                import base64
+                attachment = request.env['ir.attachment'].sudo().create({
+                    'name': file.filename,
+                    'datas': base64.b64encode(file_data).decode('utf-8'),
+                    'res_model': 'support.ticket',
+                    'res_id': ticket_id,
+                    'mimetype': file.content_type,
+                })
+
+                # Lier à la relation Many2many du ticket
+                ticket.sudo().write({
+                    'attachment_ids': [(4, attachment.id)]
+                })
+
+                created_attachments.append({
+                    'id': attachment.id,
+                    'name': attachment.name,
+                    'mimetype': attachment.mimetype,
+                    'file_size': len(file_data),
+                    'url': f'/web/content/{attachment.id}?download=true',
+                })
+
+            return self._json_response({
+                'status': 201,
+                'message': f'{len(created_attachments)} fichier(s) uploadé(s) avec succès.',
+                'data': created_attachments
+            }, 201)
+
+        except Exception as e:
+            import traceback
+            return self._json_response({'status': 500, 'message': str(e), 'trace': traceback.format_exc()}, 500)
+
+    @http.route('/api/ticket/<int:ticket_id>/attachments', type='http', auth='public', methods=['GET', 'OPTIONS'], cors='*', csrf=False)
+    def get_attachments(self, ticket_id, **kw):
+        """Récupère la liste des pièces jointes d'un ticket."""
+        if request.httprequest.method == 'OPTIONS':
+            return request.make_response('', headers=[
+                ('Access-Control-Allow-Origin', '*'),
+                ('Access-Control-Allow-Methods', 'GET, OPTIONS'),
+            ])
+
+        try:
+            ticket = request.env['support.ticket'].sudo().browse(ticket_id)
+            if not ticket.exists():
+                return self._json_response({'status': 404, 'message': 'Ticket introuvable.'}, 404)
+
+            attachments = request.env['ir.attachment'].sudo().search([
+                ('res_model', '=', 'support.ticket'),
+                ('res_id', '=', ticket_id),
+            ])
+
+            data = [{
+                'id': att.id,
+                'name': att.name,
+                'mimetype': att.mimetype or 'application/octet-stream',
+                'file_size': att.file_size or 0,
+                'create_date': str(att.create_date) if att.create_date else None,
+                'url': f'/web/content/{att.id}?download=true',
+            } for att in attachments]
+
+            return self._json_response({'status': 200, 'data': data})
+
+        except Exception as e:
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
+
+    @http.route('/api/attachment/<int:attachment_id>', type='http', auth='public', methods=['DELETE', 'OPTIONS'], cors='*', csrf=False)
+    def delete_attachment(self, attachment_id, **kw):
+        """Supprime une pièce jointe."""
+        if request.httprequest.method == 'OPTIONS':
+            return request.make_response('', headers=[
+                ('Access-Control-Allow-Origin', '*'),
+                ('Access-Control-Allow-Methods', 'DELETE, OPTIONS'),
+            ])
+
+        try:
+            attachment = request.env['ir.attachment'].sudo().browse(attachment_id)
+            if not attachment.exists():
+                return self._json_response({'status': 404, 'message': 'Pièce jointe introuvable.'}, 404)
+
+            attachment.sudo().unlink()
+            return self._json_response({'status': 200, 'message': 'Fichier supprimé avec succès.'})
+
+        except Exception as e:
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
+
