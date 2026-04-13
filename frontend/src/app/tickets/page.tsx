@@ -30,6 +30,11 @@ type TicketType = {
   state: string;
   priority: string;
   category: string;
+  assigned_to?: string | null;
+  create_date?: string | null;
+  write_date?: string | null;
+  sla_deadline?: string | null;
+  sla_status?: string | null;
 };
 
 function Dashboard() {
@@ -84,6 +89,26 @@ function Dashboard() {
   useEffect(() => {
     fetchTickets();
   }, []);
+
+  // ── Polling automatique toutes les 30s (sans loading spinner) ──
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const url = user?.role === "user"
+          ? `http://localhost:8069/api/tickets?user_id=${user.id}`
+          : "http://localhost:8069/api/tickets";
+        const res = await axios.get(url);
+        if (res.data.status === 200) {
+          setTickets(res.data.data);
+        }
+      } catch {
+        // silent — polling failure shouldn't interrupt UX
+      }
+    };
+
+    const interval = setInterval(poll, 30000);
+    return () => clearInterval(interval);
+  }, [user]);
 
   const toggleFilter = (key: "categories" | "statuses" | "priorities", value: string) => {
     setActiveFilters((prev) => {
@@ -156,9 +181,9 @@ function Dashboard() {
         <div>
 
           <h1 className="text-2xl font-bold tracking-tight">
-            {user ? `Bonjour, ${user.name.split(" ")[0]} 👋` : "Mes Tickets"}
+            {user ? `Bonjour, ${user.name.split(" ")[0].charAt(0).toUpperCase() + user.name.split(" ")[0].slice(1)} ` : "Mes Tickets"}
           </h1>
-
+          <br />
           <h1 className="text-2xl font-bold tracking-tight">Gestion des Tickets</h1>
 
           <p className="text-sm text-[hsl(var(--muted-foreground))] mt-0.5">

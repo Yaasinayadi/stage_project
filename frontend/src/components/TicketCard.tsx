@@ -11,6 +11,11 @@ type Ticket = {
   state: string;
   priority: string;
   category: string;
+  assigned_to?: string | null;
+  create_date?: string | null;
+  write_date?: string | null;
+  sla_deadline?: string | null;
+  sla_status?: string | null;
 };
 
 type TicketCardProps = {

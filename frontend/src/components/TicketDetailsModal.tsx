@@ -5,9 +5,11 @@ import axios from "axios";
 import {
   X, Edit2, Trash2, Save, Sparkles, Loader2,
   Paperclip, Upload, FileText, Image, File, Download,
-  AlertCircle, CheckCircle2, XCircle
+  AlertCircle, CheckCircle2, XCircle, Clock, User,
+  CalendarDays, ShieldCheck, ShieldAlert, ShieldX, RefreshCw
 } from "lucide-react";
 import { getCategoryColor, getCategoryIcon, getPriorityBadge, getStatusInfo } from "./TicketCard";
+import { useAuth } from "@/lib/auth";
 
 // ─── Types ───
 
@@ -18,6 +20,12 @@ type Ticket = {
   state: string;
   priority: string;
   category: string;
+  assigned_to_id?: number | null;
+  assigned_to?: string | null;
+  create_date?: string | null;
+  write_date?: string | null;
+  sla_deadline?: string | null;
+  sla_status?: string | null;
 };
 
 type Attachment = {
@@ -52,6 +60,7 @@ const MAX_SIZE   = 10 * 1024 * 1024;
 const MAX_FILES  = 5;
 const ODOO_BASE  = "http://localhost:8069";
 const FLASK_BASE = "http://localhost:8000";
+const POLL_INTERVAL = 30000; // 30 seconds
 
 // ─── Helpers ───
 
@@ -68,6 +77,22 @@ function formatDate(dateStr: string | null) {
   });
 }
 
+/** Parse Odoo UTC datetime (no Z suffix) into a proper Date */
+function parseOdooDate(raw: string): Date {
+  const sanitized = raw.trim().replace(" ", "T");
+  return new Date(sanitized.endsWith("Z") ? sanitized : sanitized + "Z");
+}
+
+function formatFullDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return "—";
+  const d = parseOdooDate(dateStr);
+  return d.toLocaleDateString("fr-FR", {
+    day: "numeric", month: "long", year: "numeric",
+  }) + " à " + d.toLocaleTimeString("fr-FR", {
+    hour: "2-digit", minute: "2-digit",
+  });
+}
+
 function getFileIcon(mimetype: string, size = 16) {
   if (mimetype.startsWith("image/")) return <Image size={size} className="text-blue-400" />;
   if (mimetype === "application/pdf")  return <FileText size={size} className="text-red-400" />;
@@ -78,11 +103,95 @@ function isImageMime(mimetype: string) {
   return mimetype.startsWith("image/");
 }
 
+// ─── SLA Helpers ───
+
+function getSlaInfo(status: string | null | undefined): {
+  label: string;
+  color: string;
+  icon: React.ReactNode;
+  bgClass: string;
+} {
+  switch (status) {
+    case "on_track":
+      return {
+        label: "Dans les temps",
+        color: "#10b981",
+        icon: <ShieldCheck size={14} />,
+        bgClass: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+      };
+    case "at_risk":
+      return {
+        label: "À risque",
+        color: "#f59e0b",
+        icon: <ShieldAlert size={14} />,
+        bgClass: "bg-amber-500/10 text-amber-500 border-amber-500/20",
+      };
+    case "breached":
+      return {
+        label: "Dépassé",
+        color: "#ef4444",
+        icon: <ShieldX size={14} />,
+        bgClass: "bg-red-500/10 text-red-500 border-red-500/20",
+      };
+    default:
+      return {
+        label: "Non défini",
+        color: "#71717a",
+        icon: <Clock size={14} />,
+        bgClass: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
+      };
+  }
+}
+
+function computeSlaProgress(createDate: string | null | undefined, deadline: string | null | undefined): number {
+  if (!createDate || !deadline) return 0;
+  const start = parseOdooDate(createDate).getTime();
+  const end = parseOdooDate(deadline).getTime();
+  const now = Date.now();
+  const total = end - start;
+  if (total <= 0) return 100;
+  const elapsed = now - start;
+  return Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)));
+}
+
+function getRemainingTime(deadline: string | null | undefined): string {
+  if (!deadline) return "—";
+  const end = parseOdooDate(deadline).getTime();
+  const now = Date.now();
+  const diff = end - now;
+  if (diff <= 0) return "Expiré";
+  const hours = Math.floor(diff / 3600000);
+  const mins = Math.floor((diff % 3600000) / 60000);
+  if (hours >= 24) {
+    const days = Math.floor(hours / 24);
+    const remH = hours % 24;
+    return `${days}j ${remH}h`;
+  }
+  return `${hours}h ${mins}min`;
+}
+
+// ─── Status Timeline ───
+
+const TIMELINE_STEPS = [
+  { key: "new", label: "Nouveau", stateMatch: ["new", "nouveau"] },
+  { key: "in_progress", label: "En cours", stateMatch: ["in_progress", "cours", "progress"] },
+  { key: "waiting", label: "En attente", stateMatch: ["waiting", "attente"] },
+  { key: "resolved", label: "Résolu", stateMatch: ["resolved", "résolu", "done", "closed", "fermé"] },
+];
+
+function getStepIndex(state: string): number {
+  const s = (state || "").toLowerCase();
+  for (let i = 0; i < TIMELINE_STEPS.length; i++) {
+    if (TIMELINE_STEPS[i].stateMatch.some(m => s.includes(m))) return i;
+  }
+  return 0;
+}
+
 // ─── Component ───
 
 export default function TicketDetailsModal({
   isOpen,
-  ticket,
+  ticket: initialTicket,
   onClose,
   onRefresh,
 }: TicketDetailsModalProps) {
@@ -91,12 +200,18 @@ export default function TicketDetailsModal({
   //  HOOKS — tous AVANT le return conditionnel
   // ══════════════════════════════════════════
 
+  const { user } = useAuth();
+  const [ticket, setTicket] = useState<Ticket>(initialTicket);
   const [isEditing,     setIsEditing]     = useState(false);
   const [isAnalyzing,   setIsAnalyzing]   = useState(false);
   const [editForm,      setEditForm]      = useState({
-    name:        ticket.name,
-    description: ticket.description,
+    name:        initialTicket.name,
+    description: initialTicket.description,
+    assigned_to: initialTicket.assigned_to_id || "",
   });
+  
+  // Agents
+  const [agents, setAgents] = useState<{id: number, name: string}[]>([]);
 
   // Attachments
   const [attachments,   setAttachments]   = useState<Attachment[]>([]);
@@ -107,7 +222,15 @@ export default function TicketDetailsModal({
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const [deletingId,    setDeletingId]    = useState<number | null>(null);
 
+  // Polling visual indicator
+  const [lastPolled, setLastPolled] = useState<Date | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync ticket prop to state when modal opens or prop changes
+  useEffect(() => {
+    setTicket(initialTicket);
+  }, [initialTicket]);
 
   // Chargement des pièces jointes
   const fetchAttachments = useCallback(async () => {
@@ -130,11 +253,43 @@ export default function TicketDetailsModal({
   useEffect(() => {
     if (isOpen) {
       setIsEditing(false);
-      setEditForm({ name: ticket.name, description: ticket.description });
+      setEditForm({ name: initialTicket.name, description: initialTicket.description, assigned_to: initialTicket.assigned_to_id || "" });
       setUploadError(null);
       setUploadSuccess(null);
+      
+      // Fetch agents if user is admin or agent
+      if (user?.role === "admin" || user?.role === "agent") {
+        axios.get(`${ODOO_BASE}/api/agents`).then(res => {
+          if (res.data.status === 200) {
+            setAgents(res.data.data);
+          }
+        }).catch(err => console.error("Error fetching agents", err));
+      }
     }
-  }, [isOpen, ticket.name, ticket.description]);
+  }, [isOpen, initialTicket.name, initialTicket.description, initialTicket.assigned_to_id, user?.role]);
+
+  // ══ POLLING — Refresh ticket data every 30s ══
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const poll = async () => {
+      try {
+        const res = await axios.get(`${ODOO_BASE}/api/tickets`);
+        if (res.data.status === 200) {
+          const fresh = (res.data.data as Ticket[]).find((t: Ticket) => t.id === ticket.id);
+          if (fresh) {
+            setTicket(fresh);
+            setLastPolled(new Date());
+          }
+        }
+      } catch {
+        // silent — polling failure shouldn't interrupt UX
+      }
+    };
+
+    const interval = setInterval(poll, POLL_INTERVAL);
+    return () => clearInterval(interval);
+  }, [isOpen, ticket.id]);
 
   // Handlers
   const handleClose = useCallback(() => {
@@ -145,10 +300,10 @@ export default function TicketDetailsModal({
 
   const handleCancelEdit = useCallback(() => {
     setIsEditing(false);
-    setEditForm({ name: ticket.name, description: ticket.description });
+    setEditForm({ name: ticket.name, description: ticket.description, assigned_to: ticket.assigned_to_id || "" });
     setUploadError(null);
     setUploadSuccess(null);
-  }, [ticket.name, ticket.description]);
+  }, [ticket.name, ticket.description, ticket.assigned_to_id]);
 
   const handleDelete = useCallback(async () => {
     if (!confirm("Êtes-vous sûr de vouloir supprimer ce ticket ?")) return;
@@ -172,6 +327,7 @@ export default function TicketDetailsModal({
       await axios.put(`${ODOO_BASE}/api/ticket/update/${ticket.id}`, {
         name:        editForm.name,
         description: editForm.description,
+        assigned_to: editForm.assigned_to,
         category,
         priority,
       });
@@ -250,14 +406,19 @@ export default function TicketDetailsModal({
 
   const status   = getStatusInfo(ticket.state);
   const catColor = getCategoryColor(ticket.category);
-  const canEdit  = status.dotClass === "new"; // bouton crayon visible uniquement si ticket "Nouveau"
+  // Agents and admins can edit tickets until they are resolved, normal users can only edit when new
+  const canEdit  = status.dotClass === "new" || ((user?.role === "admin" || user?.role === "agent") && status.dotClass !== "resolved"); 
+  const activeStep = getStepIndex(ticket.state);
+  const slaInfo = getSlaInfo(ticket.sla_status);
+  const slaProgress = computeSlaProgress(ticket.create_date, ticket.sla_deadline);
+  const slaRemaining = getRemainingTime(ticket.sla_deadline);
 
   // ─── Render ───
   return (
     <div className="modal-overlay" onClick={handleClose}>
       <div
         className="modal-content overflow-hidden flex flex-col"
-        style={{ maxHeight: "92vh", maxWidth: "600px" }}
+        style={{ maxHeight: "92vh", maxWidth: "640px" }}
         onClick={(e) => e.stopPropagation()}
       >
 
@@ -274,12 +435,19 @@ export default function TicketDetailsModal({
               <h2 className="text-lg font-bold leading-tight">Détails du ticket</h2>
               <div className="flex items-center gap-2 mt-0.5">
                 <p className="text-xs text-[hsl(var(--muted-foreground))]">
-                  Ticket #{ticket.id}
+                  Réf. TK-{String(ticket.id).padStart(4, "0")}
                 </p>
                 {/* Badge mode */}
                 {isEditing && (
                   <span className="text-[0.6rem] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md bg-[hsl(var(--primary)/0.12)] text-[hsl(var(--primary))] animate-fade-in">
                     Mode édition
+                  </span>
+                )}
+                {/* Polling indicator */}
+                {lastPolled && !isEditing && (
+                  <span className="text-[0.6rem] font-medium text-[hsl(var(--muted-foreground))] flex items-center gap-1 opacity-60" title={`Dernière mise à jour: ${lastPolled.toLocaleTimeString("fr-FR")}`}>
+                    <RefreshCw size={9} />
+                    Live
                   </span>
                 )}
               </div>
@@ -394,6 +562,168 @@ export default function TicketDetailsModal({
                 <span className="text-sm font-semibold truncate block" style={{ color: catColor }}>
                   {ticket.category || "Non classé"}
                 </span>
+              </div>
+            </div>
+
+            {/* ══════════════════════════════════════
+                SECTION SUIVI DU TICKET (NOUVEAU)
+            ══════════════════════════════════════ */}
+            <div className="space-y-4">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))] flex items-center gap-2">
+                <Clock size={13} />
+                Suivi du ticket
+              </h4>
+
+              {/* ── Timeline Visuelle ── */}
+              <div className="p-4 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))]">
+                <div className="flex items-center justify-between relative">
+                  {/* Connecting line behind the dots */}
+                  <div className="absolute top-[13px] left-[16px] right-[16px] h-[2px] bg-[hsl(var(--border))]" />
+                  <div
+                    className="absolute top-[13px] left-[16px] h-[2px] transition-all duration-700 ease-out"
+                    style={{
+                      width: `${(activeStep / (TIMELINE_STEPS.length - 1)) * 100}%`,
+                      maxWidth: "calc(100% - 32px)",
+                      background: activeStep === TIMELINE_STEPS.length - 1 ? "#10b981" : "hsl(var(--primary))",
+                    }}
+                  />
+
+                  {TIMELINE_STEPS.map((step, idx) => {
+                    const isActive = idx === activeStep;
+                    const isPast = idx < activeStep;
+                    const isResolved = activeStep === TIMELINE_STEPS.length - 1;
+
+                    return (
+                      <div key={step.key} className="flex flex-col items-center relative z-10" style={{ flex: 1 }}>
+                        {/* Dot */}
+                        <div
+                          className={`w-[26px] h-[26px] rounded-full flex items-center justify-center border-2 transition-all duration-500 ${
+                            isActive
+                              ? isResolved
+                                ? "border-emerald-500 bg-emerald-500 text-white shadow-lg shadow-emerald-500/30"
+                                : "border-[hsl(var(--primary))] bg-[hsl(var(--primary))] text-white shadow-lg shadow-[hsl(var(--primary)/0.3)]"
+                              : isPast
+                                ? isResolved
+                                  ? "border-emerald-500 bg-emerald-500/20 text-emerald-500"
+                                  : "border-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.15)] text-[hsl(var(--primary))]"
+                                : "border-[hsl(var(--border))] bg-[hsl(var(--background))] text-[hsl(var(--muted-foreground)/0.4)]"
+                          }`}
+                        >
+                          {isPast ? (
+                            <CheckCircle2 size={12} />
+                          ) : isActive ? (
+                            <div className="w-2 h-2 rounded-full bg-white" />
+                          ) : (
+                            <div className="w-2 h-2 rounded-full bg-current opacity-30" />
+                          )}
+                        </div>
+                        {/* Label */}
+                        <span className={`text-[0.65rem] font-semibold mt-2 text-center leading-tight ${
+                          isActive
+                            ? isResolved ? "text-emerald-500" : "text-[hsl(var(--primary))]"
+                            : isPast
+                              ? "text-[hsl(var(--foreground))]"
+                              : "text-[hsl(var(--muted-foreground)/0.5)]"
+                        }`}>
+                          {step.label}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* ── SLA Progress ── */}
+              {ticket.sla_deadline && (
+                <div className="p-4 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))] space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg border ${slaInfo.bgClass}`}>
+                        {slaInfo.icon}
+                        SLA : {slaInfo.label}
+                      </span>
+                    </div>
+                    <span className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">
+                      {slaRemaining !== "Expiré" ? `${slaRemaining} restant` : "Expiré"}
+                    </span>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div className="relative h-2.5 rounded-full bg-[hsl(var(--muted))] overflow-hidden">
+                    <div
+                      className="absolute inset-y-0 left-0 rounded-full transition-all duration-1000 ease-out"
+                      style={{
+                        width: `${slaProgress}%`,
+                        background: slaProgress < 60
+                          ? "#10b981"
+                          : slaProgress < 85
+                            ? "#f59e0b"
+                            : "#ef4444",
+                      }}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between text-[0.65rem] text-[hsl(var(--muted-foreground))]">
+                    <span>Créé le {formatFullDate(ticket.create_date)}</span>
+                    <span className="font-semibold">{slaProgress}%</span>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Métadonnées ── */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))] flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-[hsl(var(--primary)/0.1)] flex items-center justify-center flex-shrink-0">
+                    <CalendarDays size={14} className="text-[hsl(var(--primary))]" />
+                  </div>
+                  <div>
+                    <span className="block text-[0.65rem] font-semibold opacity-50 uppercase tracking-wide">Créé le</span>
+                    <span className="text-xs font-semibold">{formatFullDate(ticket.create_date)}</span>
+                  </div>
+                </div>
+                <div className="p-3 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))] flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+                    <RefreshCw size={14} className="text-amber-500" />
+                  </div>
+                  <div>
+                    <span className="block text-[0.65rem] font-semibold opacity-50 uppercase tracking-wide">Mis à jour</span>
+                    <span className="text-xs font-semibold">{formatFullDate(ticket.write_date)}</span>
+                  </div>
+                </div>
+                <div className="p-3 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))] flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center flex-shrink-0">
+                    <User size={14} className="text-indigo-500" />
+                  </div>
+                  <div>
+                    <span className="block text-[0.65rem] font-semibold opacity-50 uppercase tracking-wide">Agent assigné</span>
+                    {isEditing && (user?.role === "admin" || user?.role === "agent") ? (
+                      <select
+                        value={editForm.assigned_to}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, assigned_to: e.target.value }))}
+                        disabled={isAnalyzing}
+                        className="input-field focus-ring disabled:opacity-50 text-xs w-full mt-1 px-2 py-1"
+                      >
+                        <option value="">Non assigné</option>
+                        {agents.map(agent => (
+                          <option key={agent.id} value={agent.id}>{agent.name}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="text-xs font-semibold block mt-0.5">{ticket.assigned_to || "Non assigné"}</span>
+                    )}
+                  </div>
+                </div>
+                {ticket.sla_deadline && (
+                  <div className="p-3 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))] flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${slaInfo.color}15` }}>
+                      <Clock size={14} style={{ color: slaInfo.color }} />
+                    </div>
+                    <div>
+                      <span className="block text-[0.65rem] font-semibold opacity-50 uppercase tracking-wide">Deadline SLA</span>
+                      <span className="text-xs font-semibold">{formatFullDate(ticket.sla_deadline)}</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
