@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 type StatsCardProps = {
   title: string;
-  value: number;
+  value: number | string;
   icon: React.ReactNode;
   color: string; // CSS color for the accent
   loading?: boolean;
@@ -12,11 +12,17 @@ type StatsCardProps = {
 };
 
 export default function StatsCard({ title, value, icon, color, loading, delay = 0 }: StatsCardProps) {
-  const [displayValue, setDisplayValue] = useState(0);
+  const [displayValue, setDisplayValue] = useState<number | string>(0);
 
   // Count-up animation
   useEffect(() => {
     if (loading) return;
+    
+    if (typeof value === 'string') {
+      setDisplayValue(value);
+      return;
+    }
+    
     if (value === 0) { setDisplayValue(0); return; }
 
     const duration = 800;

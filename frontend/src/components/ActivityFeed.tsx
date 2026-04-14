@@ -24,18 +24,29 @@ type ActivityEvent = {
   icon: React.ReactNode;
 };
 
+/**
+ * Parse an Odoo datetime string (UTC, but without trailing 'Z') into a proper Date.
+ */
+function parseOdooDate(raw: string): Date {
+  // Odoo returns "2026-04-13 15:30:00" (UTC) — no 'Z' suffix.
+  // Without it, `new Date()` treats it as local time → wrong offset.
+  const sanitized = raw.trim().replace(" ", "T");
+  return new Date(sanitized.endsWith("Z") ? sanitized : sanitized + "Z");
+}
+
 function formatRelativeDate(date: Date): string {
   const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
+  const diffMs = Math.max(0, now.getTime() - date.getTime());
+  const diffSec = Math.floor(diffMs / 1000);
   const diffMin = Math.floor(diffMs / 60000);
   const diffH = Math.floor(diffMs / 3600000);
   const diffD = Math.floor(diffMs / 86400000);
 
-  if (diffMin < 2) return "À l'instant";
+  if (diffSec < 60) return "À l'instant";
   if (diffMin < 60) return `Il y a ${diffMin} min`;
   if (diffH < 24) return `Il y a ${diffH}h`;
   if (diffD === 1) return "Hier";
-  if (diffD < 7) return `Il y a ${diffD} jours`;
+  if (diffD < 7) return `Il y a ${diffD} jour${diffD > 1 ? "s" : ""}`;
   return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
 }
 
@@ -68,14 +79,16 @@ function buildEvents(tickets: TicketType[], user: { name: string } | null): Acti
 
     // Ticket created event
     const createDate = ticket.create_date
-      ? new Date(ticket.create_date)
+      ? parseOdooDate(ticket.create_date)
       : new Date(Date.now() - Math.random() * 86400000 * 7);
+
+    const ticketTitle = ticket.name || "Demande de support";
 
     events.push({
       id: `ticket-created-${ticket.id}`,
       type: "ticket_created",
-      label: `Ticket #${ticket.id} créé`,
-      description: ticket.name || "Nouvelle demande de support soumise.",
+      label: "Nouvelle demande soumise",
+      description: `"${ticketTitle}" a été créée et est en attente de traitement.`,
       date: createDate,
       color: "hsl(var(--primary))",
       icon: <Ticket size={14} />,
@@ -84,28 +97,28 @@ function buildEvents(tickets: TicketType[], user: { name: string } | null): Acti
     // Ticket resolved event
     if (isResolved) {
       const writeDate = ticket.write_date
-        ? new Date(ticket.write_date)
+        ? parseOdooDate(ticket.write_date)
         : new Date(createDate.getTime() + 3600000 * 24);
 
       events.push({
         id: `ticket-resolved-${ticket.id}`,
         type: "ticket_resolved",
-        label: `Ticket #${ticket.id} résolu`,
-        description: `"${ticket.name}" a été résolu avec succès par le support.`,
+        label: "Demande résolue",
+        description: `"${ticketTitle}" a été résolu avec succès par le support.`,
         date: writeDate,
         color: "hsl(var(--success))",
         icon: <CheckCircle2 size={14} />,
       });
     } else if (isInProgress) {
       const writeDate = ticket.write_date
-        ? new Date(ticket.write_date)
+        ? parseOdooDate(ticket.write_date)
         : new Date(createDate.getTime() + 3600000 * 2);
 
       events.push({
         id: `ticket-updated-${ticket.id}`,
         type: "ticket_updated",
-        label: `Ticket #${ticket.id} mis à jour`,
-        description: `"${ticket.name}" est maintenant pris en charge par un agent.`,
+        label: "Demande prise en charge",
+        description: `"${ticketTitle}" est maintenant pris en charge par un agent.`,
         date: writeDate,
         color: "hsl(var(--warning))",
         icon: <RefreshCw size={14} />,

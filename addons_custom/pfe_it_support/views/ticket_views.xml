@@ -8,6 +8,7 @@
             <list decoration-danger="sla_status=='breached'" decoration-warning="sla_status=='at_risk'" decoration-success="state=='resolved'">
                 <field name="name"/>
                 <field name="user_id"/>
+                <field name="assigned_to" optional="show"/>
                 <field name="priority" widget="badge"/>
                 <field name="ai_classification"/>
                 <field name="state" widget="badge" decoration-info="state=='new'" decoration-success="state=='resolved'"/>

@@ -27,8 +27,8 @@ class SupportTicket(models.Model):
     # Lien avec l'utilisateur qui a créé le ticket
     user_id = fields.Many2one('res.users', string='Demandeur', default=lambda self: self.env.user)
     
-    # Agent IT assigné au ticket
-    assigned_to = fields.Many2one('res.users', string='Agent Assigné')
+    # Agent IT assigné au ticket (seulement les utilisateurs internes)
+    assigned_to = fields.Many2one('res.users', string='Agent Assigné', domain=[('share', '=', False)])
     
     # SLA
     sla_id = fields.Many2one('support.sla', string='Règle SLA', compute='_compute_sla', store=True)
