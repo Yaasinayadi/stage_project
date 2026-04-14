@@ -3,7 +3,10 @@ from odoo.http import request
 import json
 import hashlib
 import secrets
+import logging
+from datetime import datetime, timedelta
 
+_logger = logging.getLogger(__name__)
 
 class SupportTicketController(http.Controller):
 
@@ -279,6 +282,92 @@ class SupportTicketController(http.Controller):
         )
 
     # ─────────────────────────────────────────────
+    # COMMENTS API
+    # ─────────────────────────────────────────────
+
+    @http.route('/api/ticket/<int:ticket_id>/comments', type='http', auth='public', methods=['GET', 'OPTIONS'], cors='*', csrf=False)
+    def get_comments(self, ticket_id, **kw):
+        """Récupère les commentaires d'un ticket"""
+        if request.httprequest.method == 'OPTIONS':
+            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'GET, OPTIONS')])
+
+        try:
+            ticket = request.env['support.ticket'].sudo().browse(ticket_id)
+            if not ticket.exists():
+                return self._json_response({'status': 404, 'message': 'Ticket introuvable.'}, 404)
+
+            comments = request.env['support.ticket.comment'].sudo().search(
+                [('ticket_id', '=', ticket_id)], order='create_date asc'
+            )
+            data = []
+            for c in comments:
+                author_name = c.author_id.name if c.author_id else 'Inconnu'
+                _logger.info("DEBUG_VALEUR_NOM: %s", author_name)
+                
+                role = 'admin' if c.author_id and c.author_id.id == 1 else 'user'
+                
+                data.append({
+                    'id': c.id,
+                    'author_name': author_name,
+                    'role': role,
+                    'date': str(c.create_date) if c.create_date else None,
+                    'body': c.body,
+                })
+
+            _logger.info("DEBUG COMMENTS: %s", data)
+            return self._json_response({'status': 200, 'data': data})
+        except Exception as e:
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
+
+    @http.route('/api/ticket/<int:ticket_id>/comment', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def post_comment(self, ticket_id, **kw):
+        """Ajoute un commentaire à un ticket (Format JSON-RPC)"""
+        _logger.info(f"==> POST /api/ticket/{ticket_id}/comment - Appel reçu")
+        try:
+            ticket = request.env['support.ticket'].sudo().browse(ticket_id)
+            if not ticket.exists():
+                _logger.warning(f"Ticket {ticket_id} introuvable.")
+                return {'status': 404, 'message': 'Ticket introuvable.'}
+            
+            _logger.info(f"Payload reçu : {kw}")
+            body = kw.get('body', '').strip()
+            user_id = kw.get('user_id')
+            author_name = kw.get('author', 'Utilisateur')
+
+            if not body:
+                _logger.warning("Le corps du commentaire est vide.")
+                return {'status': 400, 'message': 'Le corps du commentaire est requis.'}
+
+            vals = {
+                'ticket_id': ticket_id,
+                'body': body,
+            }
+            if user_id:
+                vals['author_id'] = int(user_id)
+            else:
+                vals['author'] = author_name
+
+            _logger.info(f"Création du commentaire avec les valeurs : {vals}")
+            new_comment = request.env['support.ticket.comment'].sudo().create(vals)
+            _logger.info(f"Commentaire créé avec l'ID : {new_comment.id}")
+            
+            return {
+                'status': 201, 
+                'message': 'Commentaire ajouté.',
+                'data': {
+                    'id': new_comment.id,
+                    'author': new_comment.author_id.name if new_comment.author_id else new_comment.author,
+                    'date': str(new_comment.create_date) if new_comment.create_date else None,
+                    'body': new_comment.body,
+                }
+            }
+        except Exception as e:
+            import traceback
+            _logger.error(f"Erreur lors de la création du commentaire : {str(e)}")
+            _logger.error(traceback.format_exc())
+            return {'status': 500, 'message': str(e)}
+
+    # ─────────────────────────────────────────────
     # ATTACHMENTS API
     # ─────────────────────────────────────────────
 
@@ -417,5 +506,99 @@ class SupportTicketController(http.Controller):
             return self._json_response({'status': 200, 'message': 'Fichier supprimé avec succès.'})
 
         except Exception as e:
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
+
+    # ─────────────────────────────────────────────
+    # DASHBOARD & KPIS API
+    # ─────────────────────────────────────────────
+    
+    @http.route('/api/admin/stats', type='http', auth='public', methods=['GET', 'OPTIONS'], cors='*', csrf=False)
+    def admin_stats(self, **kw):
+        """Récupère les statistiques pour le dashboard administrateur."""
+        if request.httprequest.method == 'OPTIONS':
+            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'GET, OPTIONS')])
+
+        try:
+            env = request.env['support.ticket'].sudo()
+            period = kw.get('period', 'all')
+            domain = []
+            now = datetime.utcnow()
+            
+            if period == 'today':
+                domain.append(('create_date', '>=', now - timedelta(days=1)))
+            elif period == 'week':
+                domain.append(('create_date', '>=', now - timedelta(days=7)))
+            elif period == 'month':
+                domain.append(('create_date', '>=', now - timedelta(days=30)))
+
+            total_count = env.search_count(domain)
+            open_count = env.search_count(domain + [('state', '=', 'new')])
+            in_progress_count = env.search_count(domain + [('state', 'in', ('in_progress', 'waiting'))])
+            resolved_count = env.search_count(domain + [('state', 'in', ('resolved', 'closed'))])
+
+            # Répartition par catégorie
+            cats_group = env.read_group(domain, ['ai_classification'], ['ai_classification'])
+            category_stats = []
+            for cg in cats_group:
+                cat_name = cg.get('ai_classification')
+                count = cg.get('ai_classification_count', cg.get('__count', 0))
+                category_stats.append({
+                    'name': cat_name if cat_name else "Non classé",
+                    'value': count
+                })
+
+            # Evolution 7 derniers jours
+            trend_stats = []
+            today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            jour_mapping = {'Mon': 'Lun', 'Tue': 'Mar', 'Wed': 'Mer', 'Thu': 'Jeu', 'Fri': 'Ven', 'Sat': 'Sam', 'Sun': 'Dim'}
+            for i in range(6, -1, -1):
+                day_start = today - timedelta(days=i)
+                day_end = day_start + timedelta(days=1)
+                cnt = env.search_count([('create_date', '>=', day_start), ('create_date', '<', day_end)])
+                en_day = day_start.strftime("%a")
+                trend_stats.append({
+                    'name': jour_mapping.get(en_day, en_day),
+                    'date': day_start.strftime("%Y-%m-%d"),
+                    'tickets': cnt
+                })
+                
+            # MTTR & SLA
+            resolved_tickets = env.search(domain + [('state', 'in', ('resolved', 'closed'))])
+            total_duration_hours = 0
+            sla_ok_count = 0
+            
+            for rt in resolved_tickets:
+                if rt.create_date and rt.write_date:
+                    diff = rt.write_date - rt.create_date
+                    total_duration_hours += diff.total_seconds() / 3600.0
+                if rt.sla_status in (False, 'on_track'):
+                    sla_ok_count += 1
+            
+            mttr = 0
+            sla_compliance = 100
+            resolved_t_count = len(resolved_tickets)
+            
+            if resolved_t_count > 0:
+                mttr = round(total_duration_hours / resolved_t_count, 1)
+                sla_compliance = round((sla_ok_count / resolved_t_count) * 100, 1)
+            
+            data = {
+                'counters': {
+                    'total': total_count,
+                    'open': open_count,
+                    'in_progress': in_progress_count,
+                    'resolved': resolved_count,
+                },
+                'categories': category_stats,
+                'trend': trend_stats,
+                'kpis': {
+                    'mttr_hours': mttr,
+                    'sla_compliance': sla_compliance
+                }
+            }
+            return self._json_response({'status': 200, 'data': data})
+        except Exception as e:
+            import traceback
+            _logger.error("Error in admin stats: %s", traceback.format_exc())
             return self._json_response({'status': 500, 'message': str(e)}, 500)
 

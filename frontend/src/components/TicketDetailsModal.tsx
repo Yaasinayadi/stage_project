@@ -29,6 +29,14 @@ type Attachment = {
   url: string;
 };
 
+type Comment = {
+  id: number;
+  author_name: string;
+  role?: string;
+  date: string;
+  body: string;
+};
+
 type TicketDetailsModalProps = {
   isOpen: boolean;
   ticket: Ticket;
@@ -107,9 +115,15 @@ export default function TicketDetailsModal({
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const [deletingId,    setDeletingId]    = useState<number | null>(null);
 
+  // Commentaires
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(true);
+  const [newComment, setNewComment] = useState("");
+  const [postingComment, setPostingComment] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Chargement des pièces jointes
+  // Chargement des pièces jointes et commentaires
   const fetchAttachments = useCallback(async () => {
     setAttachLoading(true);
     try {
@@ -122,9 +136,25 @@ export default function TicketDetailsModal({
     }
   }, [ticket.id]);
 
+  const fetchComments = useCallback(async () => {
+    setCommentsLoading(true);
+    try {
+      const res = await axios.get(`${ODOO_BASE}/api/ticket/${ticket.id}/comments`);
+      console.log("DATA_RECUE_DE_ODOO:", res.data.data);
+      if (res.data.status === 200) setComments(res.data.data);
+    } catch {
+      // silently ignore
+    } finally {
+      setCommentsLoading(false);
+    }
+  }, [ticket.id]);
+
   useEffect(() => {
-    if (isOpen) fetchAttachments();
-  }, [isOpen, fetchAttachments]);
+    if (isOpen) {
+      fetchAttachments();
+      fetchComments();
+    }
+  }, [isOpen, fetchAttachments, fetchComments]);
 
   // Réinitialiser le mode édition à chaque ouverture
   useEffect(() => {
@@ -133,15 +163,16 @@ export default function TicketDetailsModal({
       setEditForm({ name: ticket.name, description: ticket.description });
       setUploadError(null);
       setUploadSuccess(null);
+      setNewComment("");
     }
   }, [isOpen, ticket.name, ticket.description]);
 
   // Handlers
   const handleClose = useCallback(() => {
-    if (isAnalyzing || isUploading) return;
+    if (isAnalyzing || isUploading || postingComment) return;
     setIsEditing(false);
     onClose();
-  }, [isAnalyzing, isUploading, onClose]);
+  }, [isAnalyzing, isUploading, postingComment, onClose]);
 
   const handleCancelEdit = useCallback(() => {
     setIsEditing(false);
@@ -183,6 +214,36 @@ export default function TicketDetailsModal({
       setIsAnalyzing(false);
     }
   }, [editForm, ticket.id, onRefresh]);
+
+  const handlePostComment = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newComment.trim()) return;
+    setPostingComment(true);
+    try {
+      const userStr = localStorage.getItem("it_support_user");
+      let author = "";
+      let user_id = null;
+      if (userStr) {
+        const u = JSON.parse(userStr);
+        author = u.name;
+        user_id = u.id;
+      }
+
+      await axios.post(`${ODOO_BASE}/api/ticket/${ticket.id}/comment`, {
+        params: {
+          body: newComment,
+          author: author,
+          user_id: user_id
+        }
+      });
+      setNewComment("");
+      await fetchComments();
+    } catch {
+      alert("Erreur lors de l'ajout du commentaire.");
+    } finally {
+      setPostingComment(false);
+    }
+  }, [newComment, ticket.id, fetchComments]);
 
   const uploadFiles = useCallback(async (files: FileList | File[]) => {
     setUploadError(null);
@@ -324,8 +385,8 @@ export default function TicketDetailsModal({
         </div>
 
         {/* ══ CORPS SCROLLABLE ══ */}
-        <form onSubmit={handleUpdate} className="flex-1 overflow-y-auto custom-scrollbar">
-          <div className="p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
+          <form onSubmit={handleUpdate} className="p-6 space-y-6">
 
             {/* ── Titre ── */}
             <div>
@@ -594,8 +655,90 @@ export default function TicketDetailsModal({
               </div>
             )}
 
+          </form>
+
+          {/* ══════════════════════════════════════
+              SECTION COMMENTAIRES
+          ══════════════════════════════════════ */}
+          <div className="px-6 pb-6 pt-0 space-y-4">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))] flex items-center gap-2 border-t border-[hsl(var(--border)/0.5)] pt-6">
+              Commentaires
+              {!commentsLoading && (
+                <span className="normal-case font-normal bg-[hsl(var(--muted))] px-2 py-0.5 rounded-full text-[0.65rem]">
+                  {comments.length}
+                </span>
+              )}
+            </h4>
+
+            {commentsLoading ? (
+              <div className="flex justify-center py-4">
+                <Loader2 size={20} className="text-[hsl(var(--muted-foreground))] animate-spin" />
+              </div>
+            ) : comments.length === 0 ? (
+              <div className="text-center py-5 text-[hsl(var(--muted-foreground))] text-xs rounded-xl bg-[hsl(var(--muted)/0.2)] border border-[hsl(var(--border)/0.5)]">
+                Aucun commentaire pour le moment.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {comments.map((c) => (
+                  <div key={c.id} className="flex gap-3">
+                    <div className="w-8 h-8 rounded-full bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))] flex items-center justify-center font-bold text-xs flex-shrink-0 uppercase">
+                      {c.author_name ? c.author_name.substring(0, 2).toUpperCase() : '??'}
+                    </div>
+                    <div className="flex-1 bg-[hsl(var(--card))] border border-[hsl(var(--border)/0.5)] rounded-xl rounded-tl-none p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-sm tracking-tight">{c.author_name}</span>
+                          {c.role === 'admin' ? (
+                            <span className="px-1.5 py-0.5 rounded-md text-[0.6rem] font-bold uppercase tracking-wide bg-red-500/10 text-red-500 border border-red-500/20">
+                              Administrateur
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 rounded-md text-[0.6rem] font-bold uppercase tracking-wide bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))] border border-[hsl(var(--primary)/0.2)]">
+                              Utilisateur
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[0.65rem] text-[hsl(var(--muted-foreground))] font-medium bg-[hsl(var(--muted)/0.3)] px-1.5 py-0.5 rounded-md">
+                          {c.date ? new Date(c.date).toLocaleString('fr-FR', {
+                            day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+                          }) : ''}
+                        </span>
+                      </div>
+                      <p className="text-sm text-[hsl(var(--foreground))] whitespace-pre-wrap leading-relaxed opacity-90">
+                        {c.body}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Zone d'ajout de commentaire */}
+            {!isEditing && (
+              <form onSubmit={handlePostComment} className="flex gap-3 mt-5 items-start">
+                <div className="flex-1">
+                  <textarea
+                    required
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    placeholder="Répondre à ce ticket..."
+                    disabled={postingComment}
+                    className="input-field focus-ring resize-none w-full text-sm py-3 px-4 rounded-xl"
+                    style={{ height: "60px" }}
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={postingComment || !newComment.trim()}
+                  className="btn-primary h-[60px] px-5 flex-shrink-0 disabled:opacity-50 flex items-center justify-center rounded-xl font-bold shadow-sm"
+                >
+                  {postingComment ? <Loader2 size={16} className="animate-spin" /> : "Envoyer"}
+                </button>
+              </form>
+            )}
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );

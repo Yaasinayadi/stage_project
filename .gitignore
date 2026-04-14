@@ -53,8 +53,6 @@ Thumbs.db
 
 *.pdf
 *.txt
-
-# Documentation
-Architecture_Finale_PFE.md
+infos/
 
 ia_service/uploads

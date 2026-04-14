@@ -3,3 +3,5 @@ access_support_ticket_user,support.ticket.user,model_support_ticket,base.group_u
 access_support_ticket_manager,support.ticket.manager,model_support_ticket,base.group_system,1,1,1,1
 access_support_sla_user,support.sla.user,model_support_sla,base.group_user,1,0,0,0
 access_support_sla_manager,support.sla.manager,model_support_sla,base.group_system,1,1,1,1
+access_support_ticket_comment_user,support.ticket.comment.user,model_support_ticket_comment,base.group_user,1,1,1,0
+access_support_ticket_comment_manager,support.ticket.comment.manager,model_support_ticket_comment,base.group_system,1,1,1,1
