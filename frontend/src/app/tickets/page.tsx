@@ -72,9 +72,13 @@ function Dashboard() {
 
   const fetchTickets = async () => {
     try {
-      const url = user?.role === "user"
-        ? `http://localhost:8069/api/tickets?user_id=${user.id}`
-        : "http://localhost:8069/api/tickets";
+      let url = "http://localhost:8069/api/tickets";
+      if (user?.role === "user") {
+        url += `?user_id=${user.id}`;
+      } else if (user?.role === "agent") {
+        url += `?assigned_to=${user.id}`;
+      }
+      
       const res = await axios.get(url);
       if (res.data.status === 200) {
         setTickets(res.data.data);
