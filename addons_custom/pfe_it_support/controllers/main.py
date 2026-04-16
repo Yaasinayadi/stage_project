@@ -150,11 +150,20 @@ class SupportTicketController(http.Controller):
         """Récupère la liste de tous les tickets de support."""
         env = request.env['support.ticket'].sudo()
 
-        # Filtrer par user_id si fourni
+        # Filtrer par user_id ou assigned_to si fourni
         user_id = kw.get('user_id')
-        domain = [('user_id', '=', int(user_id))] if user_id else []
+        assigned_to = kw.get('assigned_to')
+        domain = []
+        
+        if user_id:
+            domain.append(('user_id', '=', int(user_id)))
+            
+        if assigned_to:
+            # L'agent voit aussi les tickets non assignés s'il le veut, ou que les siens ? 
+            # Pour l'instant, on limite strictement à ceux qui lui sont assignés
+            domain.append(('assigned_to', '=', int(assigned_to)))
 
-        tickets = env.search(domain)
+        tickets = env.search(domain, order='create_date desc')
         data = [{
             'id': t.id,
             'name': t.name,
@@ -637,4 +646,86 @@ class SupportTicketController(http.Controller):
             import traceback
             _logger.error("Error in admin stats: %s", traceback.format_exc())
             return self._json_response({'status': 500, 'message': str(e)}, 500)
+
+    # ─────────────────────────────────────────────
+    # USERS ADMINISTRATION API
+    # ─────────────────────────────────────────────
+
+    @http.route('/api/admin/users', type='http', auth='public', methods=['GET', 'OPTIONS'], cors='*', csrf=False)
+    def admin_get_users(self, **kw):
+        """Récupère la liste de tous les utilisateurs (pour le dashboard Admin)."""
+        if request.httprequest.method == 'OPTIONS':
+            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'GET, OPTIONS')])
+
+        try:
+            # active_test=False permet de voir aussi les utilisateurs archivés/bannis
+            users = request.env['res.users'].sudo().with_context(active_test=False).search([('id', '>', 2)], order='create_date desc')
+            
+            data = []
+            system_group = request.env.ref('base.group_system', raise_if_not_found=False)
+            agent_group = request.env.ref('base.group_user', raise_if_not_found=False)
+            
+            for u in users:
+                role = 'user'
+                if system_group and u.has_group('base.group_system'):
+                    role = 'admin'
+                elif agent_group and u.has_group('base.group_user'):
+                    role = 'agent'
+                
+                data.append({
+                    'id': u.id,
+                    'name': u.name,
+                    'email': u.email or u.login,
+                    'role': role,
+                    'it_domain': getattr(u, 'it_domain', False),
+                    'active': u.active
+                })
+                
+            return self._json_response({'status': 200, 'data': data})
+        except Exception as e:
+            import traceback
+            return self._json_response({'status': 500, 'message': str(e), 'trace': traceback.format_exc()}, 500)
+
+    @http.route('/api/admin/users/<int:user_id>', type='http', auth='public', methods=['PUT', 'OPTIONS'], cors='*', csrf=False)
+    def admin_update_user(self, user_id, **kw):
+        """Met à jour un utilisateur (rôle, domaine, statut actif)."""
+        if request.httprequest.method == 'OPTIONS':
+            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'PUT, OPTIONS')])
+
+        try:
+            post = json.loads(request.httprequest.data.decode('utf-8'))
+            user = request.env['res.users'].sudo().with_context(active_test=False).browse(user_id)
+            
+            if not user.exists():
+                return self._json_response({'status': 404, 'message': 'Utilisateur introuvable'}, 404)
+            
+            vals = {}
+            if 'active' in post:
+                vals['active'] = post['active']
+            if 'it_domain' in post:
+                vals['it_domain'] = post['it_domain']
+                
+            if 'role' in post:
+                role = post['role']
+                system_group = request.env.ref('base.group_system')
+                agent_group = request.env.ref('base.group_user')
+                portal_group = request.env.ref('base.group_portal')
+                
+                # (3, id) = remove, (4, id) = add
+                groups_cmds = []
+                if role == 'admin':
+                    groups_cmds.extend([(4, agent_group.id), (4, system_group.id), (3, portal_group.id)])
+                elif role == 'agent':
+                    groups_cmds.extend([(4, agent_group.id), (3, system_group.id), (3, portal_group.id)])
+                else: # user
+                    groups_cmds.extend([(3, agent_group.id), (3, system_group.id), (4, portal_group.id)])
+                
+                vals['groups_id'] = groups_cmds
+            
+            user.write(vals)
+            
+            return self._json_response({'status': 200, 'message': 'Utilisateur mis à jour avec succès'})
+        except Exception as e:
+            import traceback
+            return self._json_response({'status': 500, 'message': str(e), 'trace': traceback.format_exc()}, 500)
 

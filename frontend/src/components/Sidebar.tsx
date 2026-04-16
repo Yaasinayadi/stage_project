@@ -36,6 +36,7 @@ export default function Sidebar() {
   // Navigation Items by role
   let navItems: NavItem[] = [];
 
+<<<<<<< HEAD
   if (user?.x_support_role === "admin") {
     navItems = [
       { id: "analytics", label: "Analytiques", href: "/analytics", icon: <BarChart3 size={20} /> },
@@ -43,6 +44,18 @@ export default function Sidebar() {
       { id: "queue", label: "File d'attente", href: "/tech/queue", icon: <Inbox size={20} /> },
       { id: "knowledge", label: "Base de connaissances", href: "/tech/knowledge", icon: <BookOpen size={20} /> },
       { id: "settings", label: "Paramètres", href: "#", icon: <Settings size={20} />, disabled: true },
+=======
+  if (user?.role === "admin") {
+    navItems = [
+      { id: "analytics", label: "Analytiques", href: "/analytics", icon: <BarChart3 size={20} /> },
+      { id: "tickets", label: "Tickets", href: "/tickets", icon: <Ticket size={20} /> },
+      { id: "users", label: "Équipe & Rôles", href: "/users", icon: <Settings size={20} /> },
+    ];
+  } else if (user?.role === "agent") {
+    navItems = [
+      { id: "analytics", label: "Analytiques", href: "/analytics", icon: <BarChart3 size={20} /> },
+      { id: "tickets", label: "Mes Tickets", href: "/tickets", icon: <Ticket size={20} /> },
+>>>>>>> dfe14c44c38ce42cc82d717696767fa25ac07508
     ];
   } else if (user?.x_support_role === "tech") {
     navItems = [

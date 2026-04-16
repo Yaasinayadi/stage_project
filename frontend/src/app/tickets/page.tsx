@@ -58,7 +58,7 @@ function Dashboard() {
     statuses: [],
     priorities: [],
   });
-  
+
   const [openDropdown, setOpenDropdown] = useState<"status" | "priority" | null>(null);
 
   const categories = ["Logiciel", "Matériel", "Accès", "Réseau", "Messagerie", "Infrastructure", "Autre"];
@@ -72,6 +72,13 @@ function Dashboard() {
 
   const fetchTickets = async () => {
     try {
+      let url = "http://localhost:8069/api/tickets";
+      if (user?.role === "user") {
+        url += `?user_id=${user.id}`;
+      } else if (user?.role === "agent") {
+        url += `?assigned_to=${user.id}`;
+      }
+
       const url = user?.x_support_role === "user"
         ? `http://localhost:8069/api/tickets?user_id=${user.id}`
         : "http://localhost:8069/api/tickets";
@@ -125,10 +132,10 @@ function Dashboard() {
     setOpenDropdown(null);
   };
 
-  const hasActiveFilters = 
-    activeFilters.search !== "" || 
-    activeFilters.categories.length > 0 || 
-    activeFilters.statuses.length > 0 || 
+  const hasActiveFilters =
+    activeFilters.search !== "" ||
+    activeFilters.categories.length > 0 ||
+    activeFilters.statuses.length > 0 ||
     activeFilters.priorities.length > 0;
 
   // Filter logic (Cumulative Intersection)
@@ -211,7 +218,7 @@ function Dashboard() {
       {/* ─── Filters Bar ─── */}
       <div className="glass-card relative z-50 p-4 space-y-4 shadow-sm animate-fade-in" style={{ animationDelay: "0.2s" }}>
         <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
-          
+
           {/* Top Row: Search & View Toggle */}
           <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto flex-1">
             <div className="relative flex-1 w-full max-w-md">
@@ -233,11 +240,10 @@ function Dashboard() {
               <div className="relative" onClick={(e) => e.stopPropagation()}>
                 <button
                   onClick={() => setOpenDropdown(openDropdown === "status" ? null : "status")}
-                  className={`flex items-center gap-1.5 h-10 px-3.5 rounded-lg text-sm font-semibold transition-all duration-200 border ${
-                    activeFilters.statuses.length > 0 || openDropdown === "status"
+                  className={`flex items-center gap-1.5 h-10 px-3.5 rounded-lg text-sm font-semibold transition-all duration-200 border ${activeFilters.statuses.length > 0 || openDropdown === "status"
                       ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
                       : "bg-transparent border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)] hover:text-[hsl(var(--foreground))]"
-                  }`}
+                    }`}
                 >
                   <Filter size={14} />
                   Statut {activeFilters.statuses.length > 0 && `(${activeFilters.statuses.length})`}
@@ -263,11 +269,10 @@ function Dashboard() {
               <div className="relative" onClick={(e) => e.stopPropagation()}>
                 <button
                   onClick={() => setOpenDropdown(openDropdown === "priority" ? null : "priority")}
-                  className={`flex items-center gap-1.5 h-10 px-3.5 rounded-lg text-sm font-semibold transition-all duration-200 border ${
-                    activeFilters.priorities.length > 0 || openDropdown === "priority"
+                  className={`flex items-center gap-1.5 h-10 px-3.5 rounded-lg text-sm font-semibold transition-all duration-200 border ${activeFilters.priorities.length > 0 || openDropdown === "priority"
                       ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
                       : "bg-transparent border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)] hover:text-[hsl(var(--foreground))]"
-                  }`}
+                    }`}
                 >
                   <AlertTriangle size={14} />
                   Priorité {activeFilters.priorities.length > 0 && `(${activeFilters.priorities.length})`}
@@ -320,11 +325,10 @@ function Dashboard() {
                 <button
                   key={cat}
                   onClick={() => toggleFilter("categories", cat)}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 cursor-pointer border ${
-                    isSelected
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 cursor-pointer border ${isSelected
                       ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
                       : "bg-[hsl(var(--background)/0.5)] border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)] hover:text-[hsl(var(--foreground))]"
-                  }`}
+                    }`}
                 >
                   {cat}
                 </button>
@@ -337,9 +341,9 @@ function Dashboard() {
             <span className="text-xs font-medium text-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted)/0.5)] px-3 py-1.5 rounded-md">
               <span className="text-[hsl(var(--foreground))] font-bold">{filteredTickets.length}</span> ticket{filteredTickets.length !== 1 ? 's' : ''} {hasActiveFilters && "trouvé(s)"}
             </span>
-            
+
             {hasActiveFilters && (
-              <button 
+              <button
                 onClick={resetFilters}
                 className="flex items-center gap-1.5 text-xs font-semibold text-red-500 hover:text-red-600 bg-red-500/10 hover:bg-red-500/20 px-3 py-1.5 rounded-md transition-colors ml-auto sm:ml-0"
               >
