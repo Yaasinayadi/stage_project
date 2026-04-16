@@ -40,7 +40,7 @@ type Attachment = {
 type Comment = {
   id: number;
   author_name: string;
-  role?: string;
+  x_support_role?: string;
   date: string;
   body: string;
 };
@@ -294,7 +294,7 @@ export default function TicketDetailsModal({
       setNewComment("");
       
       // Fetch agents if user is admin or agent
-      if (user?.role === "admin" || user?.role === "agent") {
+      if (user?.x_support_role === "admin" || user?.x_support_role === "tech") {
         axios.get(`${ODOO_BASE}/api/agents`).then(res => {
           if (res.data.status === 200) {
             setAgents(res.data.data);
@@ -302,7 +302,7 @@ export default function TicketDetailsModal({
         }).catch(err => console.error("Error fetching agents", err));
       }
     }
-  }, [isOpen, initialTicket.name, initialTicket.description, initialTicket.assigned_to_id, user?.role]);
+  }, [isOpen, initialTicket.name, initialTicket.description, initialTicket.assigned_to_id, user?.x_support_role]);
 
   // ══ POLLING — Refresh ticket data every 30s ══
   useEffect(() => {
@@ -473,7 +473,7 @@ export default function TicketDetailsModal({
   const status   = getStatusInfo(ticket.state);
   const catColor = getCategoryColor(ticket.category);
   // Agents and admins can edit tickets until they are resolved, normal users can only edit when new
-  const canEdit  = status.dotClass === "new" || ((user?.role === "admin" || user?.role === "agent") && status.dotClass !== "resolved"); 
+  const canEdit  = status.dotClass === "new" || ((user?.x_support_role === "admin" || user?.x_support_role === "tech") && status.dotClass !== "resolved"); 
   const activeStep = getStepIndex(ticket.state);
   const slaInfo = getSlaInfo(ticket.sla_status);
   const slaProgress = computeSlaProgress(ticket.create_date, ticket.sla_deadline);
@@ -762,7 +762,7 @@ export default function TicketDetailsModal({
                   </div>
                   <div>
                     <span className="block text-[0.65rem] font-semibold opacity-50 uppercase tracking-wide">Agent assigné</span>
-                    {isEditing && (user?.role === "admin" || user?.role === "agent") ? (
+                    {isEditing && (user?.x_support_role === "admin" || user?.x_support_role === "tech") ? (
                       <select
                         value={editForm.assigned_to}
                         onChange={(e) => setEditForm(prev => ({ ...prev, assigned_to: e.target.value }))}
@@ -1024,7 +1024,7 @@ export default function TicketDetailsModal({
                       <div className="flex items-center justify-between mb-1.5">
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-sm tracking-tight">{c.author_name}</span>
-                          {c.role === 'admin' ? (
+                          {c.x_support_role === 'admin' ? (
                             <span className="px-1.5 py-0.5 rounded-md text-[0.6rem] font-bold uppercase tracking-wide bg-red-500/10 text-red-500 border border-red-500/20">
                               Administrateur
                             </span>

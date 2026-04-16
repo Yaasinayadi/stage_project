@@ -5,15 +5,24 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
 
-export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+interface ProtectedRouteProps {
+  children: React.ReactNode;
+  roles?: string[];
+}
+
+export default function ProtectedRoute({ children, roles }: ProtectedRouteProps) {
+  const { isAuthenticated, isLoading, user } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       router.replace("/login");
     }
-  }, [isLoading, isAuthenticated, router]);
+    // Role guard — redirect to /tickets if role not authorized
+    if (!isLoading && isAuthenticated && roles && user && !roles.includes(user.x_support_role)) {
+      router.replace("/tickets");
+    }
+  }, [isLoading, isAuthenticated, router, roles, user]);
 
   // Loading state
   if (isLoading) {
@@ -31,10 +40,9 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     );
   }
 
-  // Not authenticated — will redirect
-  if (!isAuthenticated) {
-    return null;
-  }
+  // Not authenticated or not authorized — will redirect
+  if (!isAuthenticated) return null;
+  if (roles && user && !roles.includes(user.x_support_role)) return null;
 
   return <>{children}</>;
 }

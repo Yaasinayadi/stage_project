@@ -2,21 +2,18 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install dependencies based on the preferred package manager
+# Copie des fichiers de dépendances
 COPY package.json package-lock.json* ./
-RUN npm ci
 
+# Installation des dépendances
+RUN npm install
+
+# Copie du reste des fichiers du frontend
 COPY . .
 
-# Next.js collects completely anonymous telemetry data about general usage.
-# Learn more here: https://nextjs.org/telemetry
-ENV NEXT_TELEMETRY_DISABLED=1
-
-RUN npm run build
-
+# Exposition du port
 EXPOSE 3000
 
-ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
-
-CMD ["npm", "start"]
+# La commande de démarrage est gérée par docker-compose (npm run dev)
+# mais on peut mettre une valeur par défaut
+CMD ["npm", "run", "dev"]

@@ -4,13 +4,13 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import axios from "axios";
 
 // ─── Types ───
-export type UserRole = "user" | "agent" | "admin";
+export type UserRole = "user" | "tech" | "admin";
 
 export type User = {
   id: number;
   name: string;
   email: string;
-  role: UserRole;
+  x_support_role: UserRole;
   token?: string;
 };
 

@@ -12,7 +12,7 @@ function RootRedirect() {
 
   useEffect(() => {
     if (isAuthenticated && user) {
-      if (user.role === "admin" || user.role === "agent") {
+      if (user.x_support_role === "admin" || user.x_support_role === "tech") {
         router.replace("/analytics");
       } else {
         router.replace("/welcome");

@@ -11,8 +11,11 @@ class SupportTicket(models.Model):
     
     state = fields.Selection([
         ('new', 'Nouveau'),
+        ('assigned', 'Assigné'),
         ('in_progress', 'En Cours'),
         ('waiting', 'Attente Client'),
+        ('blocked', 'Bloqué'),
+        ('escalated', 'Escaladé'),
         ('resolved', 'Résolu'),
         ('closed', 'Fermé')
     ], string='Statut', default='new')
@@ -28,7 +31,7 @@ class SupportTicket(models.Model):
     user_id = fields.Many2one('res.users', string='Demandeur', default=lambda self: self.env.user)
     
     # Agent IT assigné au ticket (seulement les utilisateurs internes)
-    assigned_to = fields.Many2one('res.users', string='Agent Assigné', domain=[('share', '=', False)])
+    assigned_to_id = fields.Many2one('res.users', string='Agent Assigné', domain=[('share', '=', False)])
     
     # SLA
     sla_id = fields.Many2one('support.sla', string='Règle SLA', compute='_compute_sla', store=True)
@@ -45,6 +48,9 @@ class SupportTicket(models.Model):
     ai_suggested_solution = fields.Text(string='Solution Suggérée (IA)')
 
     active = fields.Boolean(default=True)
+    
+    # Résolution apportée par le technicien
+    resolution = fields.Text(string='Résolution Appliquée')
 
     # Pièces jointes (logs, images, captures d'écran)
     attachment_ids = fields.Many2many(
@@ -61,11 +67,18 @@ class SupportTicket(models.Model):
             sla = self.env['support.sla'].search([('priority', '=', ticket.priority)], limit=1)
             ticket.sla_id = sla.id if sla else False
 
-    @api.depends('create_date', 'sla_id', 'sla_id.max_hours')
+    @api.depends('create_date', 'priority')
     def _compute_sla_deadline(self):
+        sla_hours = {
+            '0': 48,  # Basse
+            '1': 24,  # Moyenne
+            '2': 8,   # Haute
+            '3': 2    # Critique
+        }
         for ticket in self:
-            if ticket.create_date and ticket.sla_id:
-                ticket.sla_deadline = ticket.create_date + timedelta(hours=ticket.sla_id.max_hours)
+            if ticket.create_date and ticket.priority:
+                hours = sla_hours.get(ticket.priority, 24)
+                ticket.sla_deadline = ticket.create_date + timedelta(hours=hours)
             else:
                 ticket.sla_deadline = False
 

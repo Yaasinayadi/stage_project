@@ -43,11 +43,7 @@ class SupportTicketController(http.Controller):
                 return self._json_response({'status': 401, 'message': 'Identifiants incorrects.'}, 401)
 
             # Déterminer le rôle
-            role = 'user'
-            if user.has_group('base.group_system'):
-                role = 'admin'
-            elif user.has_group('base.group_user'):
-                role = 'agent'
+            x_support_role = user.x_support_role or 'user'
 
             # Générer un token simple
             token = secrets.token_hex(32)
@@ -58,7 +54,7 @@ class SupportTicketController(http.Controller):
                     'id': user.id,
                     'name': user.name,
                     'email': user.email or user.login,
-                    'role': role,
+                    'x_support_role': x_support_role,
                     'token': token,
                 }
             })
@@ -130,11 +126,7 @@ class SupportTicketController(http.Controller):
             if not user.exists():
                 return self._json_response({'status': 404, 'message': 'Utilisateur non trouvé.'}, 404)
 
-            role = 'user'
-            if user.has_group('base.group_system'):
-                role = 'admin'
-            elif user.has_group('base.group_user'):
-                role = 'agent'
+            x_support_role = user.x_support_role or 'user'
 
             return self._json_response({
                 'status': 200,
@@ -142,7 +134,7 @@ class SupportTicketController(http.Controller):
                     'id': user.id,
                     'name': user.name,
                     'email': user.email or user.login,
-                    'role': role,
+                    'x_support_role': x_support_role,
                 }
             })
 
@@ -172,8 +164,8 @@ class SupportTicketController(http.Controller):
             'category': t.ai_classification,
             'user_id': t.user_id.id if t.user_id else None,
             'user_name': t.user_id.name if t.user_id else None,
-            'assigned_to_id': t.assigned_to.id if t.assigned_to else None,
-            'assigned_to': t.assigned_to.name if t.assigned_to else None,
+            'assigned_to_id': t.assigned_to_id.id if t.assigned_to_id else None,
+            'assigned_to': t.assigned_to_id.name if t.assigned_to_id else None,
             'sla_deadline': str(t.sla_deadline) if t.sla_deadline else None,
             'sla_status': t.sla_status or None,
             'create_date': str(t.create_date) if t.create_date else None,
@@ -254,8 +246,8 @@ class SupportTicketController(http.Controller):
         if 'priority' in post: vals['priority'] = post['priority']
         if 'category' in post: vals['ai_classification'] = post['category']
         if 'state' in post: vals['state'] = post['state']
-        if 'assigned_to' in post:
-            vals['assigned_to'] = int(post['assigned_to']) if post['assigned_to'] else False
+        if 'assigned_to_id' in post:
+            vals['assigned_to_id'] = int(post['assigned_to_id']) if post['assigned_to_id'] else False
 
         ticket.write(vals)
         return request.make_response(
@@ -346,12 +338,14 @@ class SupportTicketController(http.Controller):
                 author_name = c.author_id.name if c.author_id else 'Inconnu'
                 _logger.info("DEBUG_VALEUR_NOM: %s", author_name)
                 
-                role = 'admin' if c.author_id and c.author_id.id == 1 else 'user'
+                x_support_role = c.author_id.x_support_role if c.author_id else 'user'
+                if not x_support_role:
+                    x_support_role = 'user'
                 
                 data.append({
                     'id': c.id,
                     'author_name': author_name,
-                    'role': role,
+                    'x_support_role': x_support_role,
                     'date': str(c.create_date) if c.create_date else None,
                     'body': c.body,
                 })

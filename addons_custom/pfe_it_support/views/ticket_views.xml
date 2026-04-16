@@ -8,7 +8,7 @@
             <list decoration-danger="sla_status=='breached'" decoration-warning="sla_status=='at_risk'" decoration-success="state=='resolved'">
                 <field name="name"/>
                 <field name="user_id"/>
-                <field name="assigned_to" optional="show"/>
+                <field name="assigned_to_id" optional="show"/>
                 <field name="priority" widget="badge"/>
                 <field name="ai_classification"/>
                 <field name="state" widget="badge" decoration-info="state=='new'" decoration-success="state=='resolved'"/>
@@ -36,7 +36,7 @@
                     <group>
                         <group>
                             <field name="user_id"/>
-                            <field name="assigned_to"/>
+                            <field name="assigned_to_id"/>
                             <field name="priority"/>
                         </group>
                         <group>

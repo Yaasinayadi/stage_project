@@ -13,6 +13,9 @@ import {
   Sparkles,
   Headphones,
   LogOut,
+  Inbox,
+  ClipboardList,
+  BookOpen,
 } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { useAuth } from "@/lib/auth";
@@ -33,11 +36,19 @@ export default function Sidebar() {
   // Navigation Items by role
   let navItems: NavItem[] = [];
 
-  if (user?.role === "admin" || user?.role === "agent") {
+  if (user?.x_support_role === "admin") {
     navItems = [
       { id: "analytics", label: "Analytiques", href: "/analytics", icon: <BarChart3 size={20} /> },
-      { id: "tickets", label: "Tickets", href: "/tickets", icon: <Ticket size={20} /> },
+      { id: "tickets", label: "Tous les Tickets", href: "/tickets", icon: <Ticket size={20} /> },
+      { id: "queue", label: "File d'attente", href: "/tech/queue", icon: <Inbox size={20} /> },
+      { id: "knowledge", label: "Base de connaissances", href: "/tech/knowledge", icon: <BookOpen size={20} /> },
       { id: "settings", label: "Paramètres", href: "#", icon: <Settings size={20} />, disabled: true },
+    ];
+  } else if (user?.x_support_role === "tech") {
+    navItems = [
+      { id: "queue", label: "File d'attente", href: "/tech/queue", icon: <Inbox size={20} /> },
+      { id: "my-tickets", label: "Mes Tickets", href: "/tech/tickets", icon: <ClipboardList size={20} /> },
+      { id: "knowledge", label: "Base de connaissances", href: "/tech/knowledge", icon: <BookOpen size={20} /> },
     ];
   } else {
     // Regular User
@@ -144,7 +155,7 @@ export default function Sidebar() {
               <div className="overflow-hidden animate-fade-in flex-1 min-w-0">
                 <p className="text-xs font-semibold truncate">{user.name}</p>
                 <p className="text-[0.6rem] text-[hsl(var(--muted-foreground))] truncate">
-                  {roleLabels[user.role] || user.role}
+                  {roleLabels[user.x_support_role] || user.x_support_role}
                 </p>
               </div>
             )}

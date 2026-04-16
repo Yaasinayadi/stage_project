@@ -72,7 +72,7 @@ function Dashboard() {
 
   const fetchTickets = async () => {
     try {
-      const url = user?.role === "user"
+      const url = user?.x_support_role === "user"
         ? `http://localhost:8069/api/tickets?user_id=${user.id}`
         : "http://localhost:8069/api/tickets";
       const res = await axios.get(url);
@@ -94,7 +94,7 @@ function Dashboard() {
   useEffect(() => {
     const poll = async () => {
       try {
-        const url = user?.role === "user"
+        const url = user?.x_support_role === "user"
           ? `http://localhost:8069/api/tickets?user_id=${user.id}`
           : "http://localhost:8069/api/tickets";
         const res = await axios.get(url);

@@ -163,7 +163,7 @@ export default function ActivityFeed() {
       if (!user) return;
       try {
         const url =
-          user.role === "user"
+          user.x_support_role === "user"
             ? `http://localhost:8069/api/tickets?user_id=${user.id}`
             : "http://localhost:8069/api/tickets";
         const res = await axios.get(url);
