@@ -13,7 +13,6 @@
         'security/ir.model.access.csv',
         'views/ticket_views.xml',
         'views/sla_views.xml',
-        'views/res_users_views.xml',
     ],
     'installable': True,
     'application': True,

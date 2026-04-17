@@ -710,18 +710,15 @@ class SupportTicketController(http.Controller):
                 system_group = request.env.ref('base.group_system')
                 agent_group = request.env.ref('base.group_user')
                 portal_group = request.env.ref('base.group_portal')
-                
+                tech_group = request.env.ref('pfe_it_support.group_support_technician')
                 # (3, id) = remove, (4, id) = add
                 groups_cmds = []
                 if role == 'admin':
-                    groups_cmds.extend([(4, agent_group.id), (4, system_group.id), (3, portal_group.id)])
-                    vals['x_support_role'] = 'admin'
+                    groups_cmds.extend([(4, agent_group.id), (4, system_group.id), (3, portal_group.id), (3, tech_group.id)])
                 elif role == 'agent':
-                    groups_cmds.extend([(4, agent_group.id), (3, system_group.id), (3, portal_group.id)])
-                    vals['x_support_role'] = 'tech'
+                    groups_cmds.extend([(4, agent_group.id), (4, tech_group.id), (3, system_group.id), (3, portal_group.id)])
                 else: # user
-                    groups_cmds.extend([(3, agent_group.id), (3, system_group.id), (4, portal_group.id)])
-                    vals['x_support_role'] = 'user'
+                    groups_cmds.extend([(3, agent_group.id), (3, system_group.id), (3, tech_group.id), (4, portal_group.id)])
                 
                 vals['group_ids'] = groups_cmds
             
