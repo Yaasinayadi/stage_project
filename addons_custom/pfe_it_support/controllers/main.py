@@ -17,6 +17,8 @@ class SupportTicketController(http.Controller):
     @http.route('/api/auth/login', type='http', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
     def login(self, **kw):
         """Authentifie un utilisateur via email + mot de passe."""
+        if request.httprequest.method == 'OPTIONS':
+            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'POST, OPTIONS'), ('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Odoo-Database')])
         try:
             post = json.loads(request.httprequest.data.decode('utf-8'))
             email = post.get('email', '').strip()
@@ -65,6 +67,8 @@ class SupportTicketController(http.Controller):
     @http.route('/api/auth/register', type='http', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
     def register(self, **kw):
         """Crée un nouvel utilisateur (portail)."""
+        if request.httprequest.method == 'OPTIONS':
+            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'POST, OPTIONS'), ('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Odoo-Database')])
         try:
             post = json.loads(request.httprequest.data.decode('utf-8'))
             name = post.get('name', '').strip()
@@ -85,9 +89,11 @@ class SupportTicketController(http.Controller):
             if existing:
                 return self._json_response({'status': 409, 'message': 'Cet email est déjà utilisé.'}, 409)
 
-            # Assigner le groupe portail par défaut pour autoriser la connexion
-            portal_group = request.env.ref('base.group_portal', raise_if_not_found=False)
-            groups = [(4, portal_group.id)] if portal_group else []
+            # Assigner le groupe "utilisateur interne" pour que l'utilisateur soit
+            # gérable comme tous les autres dans Odoo (Internal User, non Portal).
+            # Cela évite le "mur Portal vs Internal" et permet l'assignation des rôles.
+            internal_group = request.env.ref('base.group_user', raise_if_not_found=False)
+            groups = [(4, internal_group.id)] if internal_group else []
 
             # Créer l'utilisateur
             new_user = request.env['res.users'].sudo().with_context(no_reset_password=True).create({
@@ -115,6 +121,8 @@ class SupportTicketController(http.Controller):
     @http.route('/api/auth/me', type='http', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
     def get_me(self, **kw):
         """Récupère les infos de l'utilisateur connecté par son ID."""
+        if request.httprequest.method == 'OPTIONS':
+            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'POST, OPTIONS'), ('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Odoo-Database')])
         try:
             post = json.loads(request.httprequest.data.decode('utf-8'))
             user_id = post.get('user_id')
@@ -718,7 +726,7 @@ class SupportTicketController(http.Controller):
                 elif role == 'agent':
                     groups_cmds.extend([(4, agent_group.id), (4, tech_group.id), (3, system_group.id), (3, portal_group.id)])
                 else: # user
-                    groups_cmds.extend([(3, agent_group.id), (3, system_group.id), (3, tech_group.id), (4, portal_group.id)])
+                    groups_cmds.extend([(4, agent_group.id), (3, system_group.id), (3, tech_group.id), (3, portal_group.id)])
                 
                 vals['group_ids'] = groups_cmds
             
