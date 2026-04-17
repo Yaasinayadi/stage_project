@@ -72,13 +72,6 @@ function Dashboard() {
 
   const fetchTickets = async () => {
     try {
-      let url = "http://localhost:8069/api/tickets";
-      if (user?.role === "user") {
-        url += `?user_id=${user.id}`;
-      } else if (user?.role === "agent") {
-        url += `?assigned_to=${user.id}`;
-      }
-
       const url = user?.x_support_role === "user"
         ? `http://localhost:8069/api/tickets?user_id=${user.id}`
         : "http://localhost:8069/api/tickets";

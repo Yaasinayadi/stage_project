@@ -715,12 +715,15 @@ class SupportTicketController(http.Controller):
                 groups_cmds = []
                 if role == 'admin':
                     groups_cmds.extend([(4, agent_group.id), (4, system_group.id), (3, portal_group.id)])
+                    vals['x_support_role'] = 'admin'
                 elif role == 'agent':
                     groups_cmds.extend([(4, agent_group.id), (3, system_group.id), (3, portal_group.id)])
+                    vals['x_support_role'] = 'tech'
                 else: # user
                     groups_cmds.extend([(3, agent_group.id), (3, system_group.id), (4, portal_group.id)])
+                    vals['x_support_role'] = 'user'
                 
-                vals['groups_id'] = groups_cmds
+                vals['group_ids'] = groups_cmds
             
             user.write(vals)
             

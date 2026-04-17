@@ -20,7 +20,7 @@ function Welcome() {
             Bonjour, {user ? user.name.split(" ")[0].charAt(0).toUpperCase() + user.name.split(" ")[0].slice(1) : "Utilisateur"} 
           </h1>
           <p className="text-[hsl(var(--muted-foreground))] text-base sm:text-lg">
-            Voici un aperçu de votre espace de support IT propulsé par l'IA.
+            Voici un aperçu de votre espace de support IT propulsé par l&apos;IA.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -60,7 +60,7 @@ function Welcome() {
               </div>
               <div>
                 <h3 className="font-semibold text-lg mb-1 group-hover:text-[hsl(var(--primary))] transition-colors">Gérer mes tickets</h3>
-                <p className="text-sm text-[hsl(var(--muted-foreground))] leading-relaxed">Consultez l'état de vos demandes d'assistance en cours et accédez à vos archives.</p>
+                <p className="text-sm text-[hsl(var(--muted-foreground))] leading-relaxed">Consultez l&apos;état de vos demandes d&apos;assistance en cours et accédez à vos archives.</p>
               </div>
             </Link>
 
@@ -71,7 +71,7 @@ function Welcome() {
               </div>
               <div>
                 <h3 className="font-semibold text-lg mb-1 group-hover:text-[#10b981] transition-colors">Base de connaissances</h3>
-                <p className="text-sm text-[hsl(var(--muted-foreground))] leading-relaxed">Trouvez des solutions instantanées grâce à notre documentation indexée par l'IA.</p>
+                <p className="text-sm text-[hsl(var(--muted-foreground))] leading-relaxed">Trouvez des solutions instantanées grâce à notre documentation indexée par l&apos;IA.</p>
               </div>
             </div>
 
@@ -82,7 +82,7 @@ function Welcome() {
               </div>
               <div>
                 <h3 className="font-semibold text-lg mb-1 group-hover:text-[#f59e0b] transition-colors">Demandes en attente</h3>
-                <p className="text-sm text-[hsl(var(--muted-foreground))] leading-relaxed">Suivez l'avancement des tickets nécessitant une action de votre part.</p>
+                <p className="text-sm text-[hsl(var(--muted-foreground))] leading-relaxed">Suivez l&apos;avancement des tickets nécessitant une action de votre part.</p>
               </div>
             </div>
 
@@ -93,7 +93,7 @@ function Welcome() {
               </div>
               <div>
                 <h3 className="font-semibold text-lg mb-1 group-hover:text-[#8b5cf6] transition-colors">Contacter le support</h3>
-                <p className="text-sm text-[hsl(var(--muted-foreground))] leading-relaxed">Entrez en contact direct avec un expert IT si l'assistant virtuel ne suffit pas.</p>
+                <p className="text-sm text-[hsl(var(--muted-foreground))] leading-relaxed">Entrez en contact direct avec un expert IT si l&apos;assistant virtuel ne suffit pas.</p>
               </div>
             </div>
 

@@ -36,26 +36,14 @@ export default function Sidebar() {
   // Navigation Items by role
   let navItems: NavItem[] = [];
 
-<<<<<<< HEAD
   if (user?.x_support_role === "admin") {
     navItems = [
       { id: "analytics", label: "Analytiques", href: "/analytics", icon: <BarChart3 size={20} /> },
       { id: "tickets", label: "Tous les Tickets", href: "/tickets", icon: <Ticket size={20} /> },
       { id: "queue", label: "File d'attente", href: "/tech/queue", icon: <Inbox size={20} /> },
       { id: "knowledge", label: "Base de connaissances", href: "/tech/knowledge", icon: <BookOpen size={20} /> },
-      { id: "settings", label: "Paramètres", href: "#", icon: <Settings size={20} />, disabled: true },
-=======
-  if (user?.role === "admin") {
-    navItems = [
-      { id: "analytics", label: "Analytiques", href: "/analytics", icon: <BarChart3 size={20} /> },
-      { id: "tickets", label: "Tickets", href: "/tickets", icon: <Ticket size={20} /> },
       { id: "users", label: "Équipe & Rôles", href: "/users", icon: <Settings size={20} /> },
-    ];
-  } else if (user?.role === "agent") {
-    navItems = [
-      { id: "analytics", label: "Analytiques", href: "/analytics", icon: <BarChart3 size={20} /> },
-      { id: "tickets", label: "Mes Tickets", href: "/tickets", icon: <Ticket size={20} /> },
->>>>>>> dfe14c44c38ce42cc82d717696767fa25ac07508
+      { id: "settings", label: "Paramètres", href: "#", icon: <Settings size={20} />, disabled: true },
     ];
   } else if (user?.x_support_role === "tech") {
     navItems = [
@@ -104,7 +92,7 @@ export default function Sidebar() {
             </h1>
             <p className="text-[0.65rem] text-[hsl(var(--muted-foreground))] font-medium flex items-center gap-1">
               <Sparkles size={10} className="text-[hsl(var(--primary))]" />
-              Propulsé par l'IA
+              Propulsé par l&apos;IA
             </p>
           </div>
         )}

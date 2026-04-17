@@ -57,4 +57,9 @@ infos/
 
 ia_service/uploads
 
+#remove underline red
+.vscode
+
+#-----
+project_for_ai.txt
 

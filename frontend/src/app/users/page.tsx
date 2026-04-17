@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { useAuth } from "@/lib/auth";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import { User, Shield, Briefcase, Ban, CheckCircle2, Search, Loader2 } from "lucide-react";
+import { User, Shield, Briefcase, Ban, CheckCircle2, Search, Loader2, Filter, ChevronDown, XCircle } from "lucide-react";
 
 type UserData = {
   id: number;
@@ -29,8 +29,53 @@ function UsersManagement() {
   const { user } = useAuth();
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
   const [updating, setUpdating] = useState<number | null>(null);
+
+  const [activeFilters, setActiveFilters] = useState<{
+    search: string;
+    roles: string[];
+    statuses: string[];
+    domains: string[];
+  }>({
+    search: "",
+    roles: [],
+    statuses: [],
+    domains: [],
+  });
+
+  const [openDropdown, setOpenDropdown] = useState<"role" | "status" | null>(null);
+
+  const roles = [
+    { value: "user", label: "Utilisateur" },
+    { value: "agent", label: "Agent (Tech)" },
+    { value: "admin", label: "Administrateur" }
+  ];
+  
+  const statuses = [
+    { value: "active", label: "Actif" },
+    { value: "banned", label: "Banni" }
+  ];
+
+  const toggleFilter = (key: "roles" | "statuses" | "domains", value: string) => {
+    setActiveFilters((prev) => {
+      const current = prev[key];
+      const updated = current.includes(value)
+        ? current.filter((v) => v !== value)
+        : [...current, value];
+      return { ...prev, [key]: updated };
+    });
+  };
+
+  const resetFilters = () => {
+    setActiveFilters({ search: "", roles: [], statuses: [], domains: [] });
+    setOpenDropdown(null);
+  };
+  
+  const hasActiveFilters =
+    activeFilters.search !== "" ||
+    activeFilters.roles.length > 0 ||
+    activeFilters.statuses.length > 0 ||
+    activeFilters.domains.length > 0;
 
   const fetchUsers = async () => {
     try {
@@ -46,7 +91,7 @@ function UsersManagement() {
   };
 
   useEffect(() => {
-    if (user?.role === "admin") {
+    if (user?.x_support_role === "admin") {
       fetchUsers();
     }
   }, [user]);
@@ -65,12 +110,24 @@ function UsersManagement() {
     }
   };
 
-  const filteredUsers = users.filter((u) =>
-    (u.name?.toLowerCase().includes(search.toLowerCase()) || 
-     u.email?.toLowerCase().includes(search.toLowerCase()))
-  );
+  const filteredUsers = users.filter((u) => {
+    const safeSearch = activeFilters.search.toLowerCase();
+    const matchesSearch = !safeSearch || 
+      (u.name || "").toLowerCase().includes(safeSearch) || 
+      (u.email || "").toLowerCase().includes(safeSearch);
+      
+    const matchesRole = activeFilters.roles.length === 0 || activeFilters.roles.includes(u.role);
+    
+    const statusVal = u.active ? "active" : "banned";
+    const matchesStatus = activeFilters.statuses.length === 0 || activeFilters.statuses.includes(statusVal);
+    
+    const domainVal = u.it_domain || "none";
+    const matchesDomain = activeFilters.domains.length === 0 || activeFilters.domains.includes(domainVal);
+    
+    return matchesSearch && matchesRole && matchesStatus && matchesDomain;
+  });
 
-  if (user?.role !== "admin") {
+  if (user?.x_support_role !== "admin") {
     return (
       <div className="p-8 flex items-center justify-center h-full">
         <p className="text-red-500 font-bold">Accès non autorisé.</p>
@@ -79,7 +136,7 @@ function UsersManagement() {
   }
 
   return (
-    <div className="p-6 lg:p-8 max-w-[1400px] mx-auto space-y-6">
+    <div className="p-6 lg:p-8 max-w-[1400px] mx-auto space-y-6" onClick={() => setOpenDropdown(null)}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-in">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Gestion de l'Équipe & Utilisateurs</h1>
@@ -89,15 +146,118 @@ function UsersManagement() {
         </div>
       </div>
 
-      <div className="glass-card p-4 flex items-center gap-3 animate-fade-in" style={{ animationDelay: "0.1s" }}>
-        <Search className="text-[hsl(var(--muted-foreground))]" size={18} />
-        <input
-          type="text"
-          placeholder="Rechercher par nom ou email..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="bg-transparent border-none outline-none flex-1 font-medium"
-        />
+      <div className="glass-card relative z-50 p-4 space-y-4 shadow-sm animate-fade-in" style={{ animationDelay: "0.1s" }}>
+        <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+          <div className="relative flex-1 w-full lg:max-w-md">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" size={16} />
+            <input
+              type="text"
+              value={activeFilters.search}
+              onChange={(e) => setActiveFilters({ ...activeFilters, search: e.target.value })}
+              placeholder="Rechercher par nom ou email..."
+              className="w-full bg-[hsl(var(--background)/0.5)] border border-[hsl(var(--border))] focus:border-[hsl(var(--primary)/0.5)] rounded-lg text-sm pl-11 pr-4 h-10 outline-none transition-all"
+            />
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="flex flex-wrap gap-2 items-center">
+              <div className="relative" onClick={(e) => e.stopPropagation()}>
+                <button
+                  onClick={() => setOpenDropdown(openDropdown === "role" ? null : "role")}
+                  className={`flex items-center gap-1.5 h-10 px-3.5 rounded-lg text-sm font-semibold transition-all duration-200 border ${activeFilters.roles.length > 0 || openDropdown === "role"
+                      ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
+                      : "bg-transparent border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)] hover:text-[hsl(var(--foreground))]"
+                    }`}
+                >
+                  <Shield size={14} />
+                  Rôle {activeFilters.roles.length > 0 && `(${activeFilters.roles.length})`}
+                  <ChevronDown size={14} className={`transition-transform ${openDropdown === "role" ? "rotate-180" : ""}`} />
+                </button>
+                {openDropdown === "role" && (
+                  <div className="absolute top-11 right-0 sm:left-0 sm:right-auto mt-1 w-56 bg-white dark:bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl shadow-xl z-[100] animate-fade-in flex flex-col gap-1 p-2">
+                    {roles.map(r => (
+                      <label key={r.value} className="flex items-center gap-2.5 p-2 hover:bg-[hsl(var(--muted))] rounded-md cursor-pointer text-sm font-medium transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={activeFilters.roles.includes(r.value)}
+                          onChange={() => toggleFilter("roles", r.value)}
+                          className="accent-[hsl(var(--primary))] w-4 h-4 cursor-pointer"
+                        />
+                        {r.label}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="relative" onClick={(e) => e.stopPropagation()}>
+                <button
+                  onClick={() => setOpenDropdown(openDropdown === "status" ? null : "status")}
+                  className={`flex items-center gap-1.5 h-10 px-3.5 rounded-lg text-sm font-semibold transition-all duration-200 border ${activeFilters.statuses.length > 0 || openDropdown === "status"
+                      ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
+                      : "bg-transparent border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)] hover:text-[hsl(var(--foreground))]"
+                    }`}
+                >
+                  <Filter size={14} />
+                  Statut {activeFilters.statuses.length > 0 && `(${activeFilters.statuses.length})`}
+                  <ChevronDown size={14} className={`transition-transform ${openDropdown === "status" ? "rotate-180" : ""}`} />
+                </button>
+                {openDropdown === "status" && (
+                  <div className="absolute top-11 right-0 w-56 bg-white dark:bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl shadow-xl z-[100] animate-fade-in flex flex-col gap-1 p-2">
+                    {statuses.map(st => (
+                      <label key={st.value} className="flex items-center gap-2.5 p-2 hover:bg-[hsl(var(--muted))] rounded-md cursor-pointer text-sm font-medium transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={activeFilters.statuses.includes(st.value)}
+                          onChange={() => toggleFilter("statuses", st.value)}
+                          className="accent-[hsl(var(--primary))] w-4 h-4 cursor-pointer"
+                        />
+                        {st.label}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[hsl(var(--border)/0.5)]">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[hsl(var(--muted-foreground))] text-xs font-semibold mr-1">Domaines:</span>
+            {["none", ...DOMAINS].map((cat) => {
+              const isSelected = activeFilters.domains.includes(cat);
+              return (
+                <button
+                  key={cat}
+                  onClick={() => toggleFilter("domains", cat)}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 cursor-pointer border ${isSelected
+                      ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
+                      : "bg-[hsl(var(--background)/0.5)] border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)] hover:text-[hsl(var(--foreground))]"
+                    }`}
+                >
+                  {cat === "none" ? "Aucun" : cat}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center gap-4 w-full sm:w-auto">
+            <span className="text-xs font-medium text-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted)/0.5)] px-3 py-1.5 rounded-md">
+              <span className="text-[hsl(var(--foreground))] font-bold">{filteredUsers.length}</span> util.{filteredUsers.length !== 1 ? 's' : ''} {hasActiveFilters && "trouvé(s)"}
+            </span>
+
+            {hasActiveFilters && (
+              <button
+                onClick={resetFilters}
+                className="flex items-center gap-1.5 text-xs font-semibold text-red-500 hover:text-red-600 bg-red-500/10 hover:bg-red-500/20 px-3 py-1.5 rounded-md transition-colors ml-auto sm:ml-0"
+              >
+                <XCircle size={14} />
+                Réinitialiser
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="glass-card overflow-hidden animate-fade-in" style={{ animationDelay: "0.2s" }}>
@@ -134,31 +294,45 @@ function UsersManagement() {
                     </td>
 
                     <td className="p-4">
-                      <select
-                        value={u.role}
-                        disabled={updating === u.id || u.id === user.id} // User cannot change own role easily here
-                        onChange={(e) => updateUser(u.id, { role: e.target.value })}
-                        className="bg-[hsl(var(--background))] border border-[hsl(var(--border))] rounded-md px-2 py-1 text-xs font-semibold select-none cursor-pointer outline-none focus:ring-2 focus:ring-[hsl(var(--primary)/0.3)] transition-all"
-                      >
-                        <option value="user">Utilisateur</option>
-                        <option value="agent">Agent (Technicien)</option>
-                        <option value="admin">Administrateur</option>
-                      </select>
+                      <div className="relative w-max">
+                        <select
+                          value={u.role}
+                          disabled={updating === u.id || u.id === user.id} // User cannot change own role easily here
+                          onChange={(e) => updateUser(u.id, { role: e.target.value })}
+                          className={`appearance-none outline-none cursor-pointer transition-all rounded-lg pl-3 pr-8 py-1.5 text-xs font-bold border ${
+                            u.role === 'admin' ? 'border-purple-500/30 text-purple-600 bg-purple-500/5 hover:bg-purple-500/10 focus:ring-2 focus:ring-purple-500/20' : 
+                            u.role === 'agent' ? 'border-blue-500/30 text-blue-600 bg-blue-500/5 hover:bg-blue-500/10 focus:ring-2 focus:ring-blue-500/20' : 
+                            'border-[hsl(var(--border))] text-[hsl(var(--foreground))] bg-[hsl(var(--background))] hover:bg-[hsl(var(--muted)/0.5)] focus:ring-2 focus:ring-[hsl(var(--primary)/0.2)]'
+                          }`}
+                        >
+                          <option value="user" className="bg-[hsl(var(--background))] text-[hsl(var(--foreground))] font-semibold">Utilisateur</option>
+                          <option value="agent" className="bg-[hsl(var(--background))] text-[hsl(var(--foreground))] font-semibold">Agent (Tech)</option>
+                          <option value="admin" className="bg-[hsl(var(--background))] text-[hsl(var(--foreground))] font-semibold">Administrateur</option>
+                        </select>
+                        <div className="absolute inset-y-0 right-2 flex items-center pointer-events-none">
+                          <svg className={`w-3.5 h-3.5 ${u.role === 'admin' ? 'text-purple-500' : u.role === 'agent' ? 'text-blue-500' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                        </div>
+                      </div>
                     </td>
 
                     <td className="p-4">
                       {u.role === "agent" ? (
-                        <select
-                          value={u.it_domain || ""}
-                          disabled={updating === u.id}
-                          onChange={(e) => updateUser(u.id, { it_domain: e.target.value })}
-                          className="bg-[hsl(var(--primary)/0.05)] border border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))] rounded-md px-2 py-1 text-xs font-semibold cursor-pointer outline-none focus:ring-2 focus:ring-[hsl(var(--primary)/0.3)] transition-all"
-                        >
-                          <option value="">-- Non Spécifié --</option>
-                          {DOMAINS.map(domain => (
-                            <option key={domain} value={domain}>{domain}</option>
-                          ))}
-                        </select>
+                        <div className="relative w-max">
+                          <select
+                            value={u.it_domain || ""}
+                            disabled={updating === u.id}
+                            onChange={(e) => updateUser(u.id, { it_domain: e.target.value })}
+                            className="appearance-none outline-none cursor-pointer transition-all rounded-lg pl-3 pr-8 py-1.5 text-xs font-bold border border-[hsl(var(--primary)/0.3)] bg-[hsl(var(--primary)/0.05)] text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.1)] focus:ring-2 focus:ring-[hsl(var(--primary)/0.3)] shadow-sm"
+                          >
+                            <option value="" className="bg-[hsl(var(--background))] text-[hsl(var(--foreground))] font-semibold">-- Non Spécifié --</option>
+                            {DOMAINS.map(domain => (
+                              <option key={domain} value={domain} className="bg-[hsl(var(--background))] text-[hsl(var(--foreground))] font-semibold">{domain}</option>
+                            ))}
+                          </select>
+                          <div className="absolute inset-y-0 right-2 flex items-center pointer-events-none">
+                            <svg className="w-3.5 h-3.5 text-[hsl(var(--primary)/0.6)]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                          </div>
+                        </div>
                       ) : (
                         <span className="text-[0.65rem] text-[hsl(var(--muted-foreground))] uppercase font-semibold pl-2">
                           N/A
@@ -188,7 +362,7 @@ function UsersManagement() {
                         }`}
                         title={u.active ? "Bannir cet utilisateur" : "Réactiver cet utilisateur"}
                       >
-                        {updating === u.id ? <Loader2 size={14} className="animate-spin" /> : (u.active ? "Archiver/Bannir" : "Réactiver")}
+                        {updating === u.id ? <Loader2 size={14} className="animate-spin" /> : (u.active ? "Bannir" : "Réactiver")}
                       </button>
                     </td>
 
