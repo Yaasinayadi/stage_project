@@ -325,6 +325,7 @@ class SupportTicketController(http.Controller):
                     'id': u.id,
                     'name': u.name,
                     'email': u.email or u.login,
+                    'it_domain': getattr(u, 'it_domain', False),
                 })
 
             return self._json_response({'status': 200, 'data': agents})
@@ -591,14 +592,28 @@ class SupportTicketController(http.Controller):
 
             # Répartition par catégorie
             cats_group = env.read_group(domain, ['ai_classification'], ['ai_classification'])
-            category_stats = []
+            cat_map = {}
             for cg in cats_group:
                 cat_name = cg.get('ai_classification')
                 count = cg.get('ai_classification_count', cg.get('__count', 0))
-                category_stats.append({
-                    'name': cat_name if cat_name else "Non classé",
-                    'value': count
-                })
+                
+                if not cat_name:
+                    norm_name = "Non classé"
+                else:
+                    import unicodedata
+                    base = cat_name.strip()
+                    n = ''.join(c for c in unicodedata.normalize('NFD', base) if unicodedata.category(c) != 'Mn').lower()
+                    if 'reseau' in n: norm_name = "Réseau"
+                    elif 'materiel' in n: norm_name = "Matériel"
+                    elif 'logiciel' in n: norm_name = "Logiciel"
+                    elif 'acces' in n: norm_name = "Accès"
+                    elif 'messagerie' in n: norm_name = "Messagerie"
+                    elif 'infrastructure' in n or 'infra' in n: norm_name = "Infrastructure"
+                    else: norm_name = base.capitalize()
+                    
+                cat_map[norm_name] = cat_map.get(norm_name, 0) + count
+
+            category_stats = [{'name': k, 'value': v} for k, v in cat_map.items()]
 
             # Evolution 7 derniers jours
             trend_stats = []
@@ -653,6 +668,115 @@ class SupportTicketController(http.Controller):
         except Exception as e:
             import traceback
             _logger.error("Error in admin stats: %s", traceback.format_exc())
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
+
+    @http.route('/api/tech/stats', type='http', auth='public', methods=['GET', 'OPTIONS'], cors='*', csrf=False)
+    def tech_stats(self, **kw):
+        """Récupère les statistiques pour le dashboard agent."""
+        if request.httprequest.method == 'OPTIONS':
+            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'GET, OPTIONS')])
+
+        try:
+            env = request.env['support.ticket'].sudo()
+            period = kw.get('period', 'all')
+            tech_id = kw.get('tech_id')
+            
+            if not tech_id:
+               return self._json_response({'status': 400, 'message': 'tech_id requis'}, 400)
+               
+            domain = [('assigned_to_id', '=', int(tech_id))]
+            now = datetime.utcnow()
+            
+            if period == 'today':
+                domain.append(('create_date', '>=', now - timedelta(days=1)))
+            elif period == 'week':
+                domain.append(('create_date', '>=', now - timedelta(days=7)))
+            elif period == 'month':
+                domain.append(('create_date', '>=', now - timedelta(days=30)))
+
+            total_count = env.search_count(domain)
+            open_count = env.search_count(domain + [('state', '=', 'new')])
+            in_progress_count = env.search_count(domain + [('state', 'in', ('in_progress', 'waiting'))])
+            resolved_count = env.search_count(domain + [('state', 'in', ('resolved', 'closed'))])
+
+            # Répartition par catégorie
+            cats_group = env.read_group(domain, ['ai_classification'], ['ai_classification'])
+            cat_map = {}
+            for cg in cats_group:
+                cat_name = cg.get('ai_classification')
+                count = cg.get('ai_classification_count', cg.get('__count', 0))
+                
+                if not cat_name:
+                    norm_name = "Non classé"
+                else:
+                    import unicodedata
+                    base = cat_name.strip()
+                    n = ''.join(c for c in unicodedata.normalize('NFD', base) if unicodedata.category(c) != 'Mn').lower()
+                    if 'reseau' in n: norm_name = "Réseau"
+                    elif 'materiel' in n: norm_name = "Matériel"
+                    elif 'logiciel' in n: norm_name = "Logiciel"
+                    elif 'acces' in n: norm_name = "Accès"
+                    elif 'messagerie' in n: norm_name = "Messagerie"
+                    elif 'infrastructure' in n or 'infra' in n: norm_name = "Infrastructure"
+                    else: norm_name = base.capitalize()
+                    
+                cat_map[norm_name] = cat_map.get(norm_name, 0) + count
+
+            category_stats = [{'name': k, 'value': v} for k, v in cat_map.items()]
+
+            # Evolution 7 derniers jours
+            trend_stats = []
+            today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            jour_mapping = {'Mon': 'Lun', 'Tue': 'Mar', 'Wed': 'Mer', 'Thu': 'Jeu', 'Fri': 'Ven', 'Sat': 'Sam', 'Sun': 'Dim'}
+            for i in range(6, -1, -1):
+                day_start = today - timedelta(days=i)
+                day_end = day_start + timedelta(days=1)
+                cnt = env.search_count(domain + [('create_date', '>=', day_start), ('create_date', '<', day_end)])
+                en_day = day_start.strftime("%a")
+                trend_stats.append({
+                    'name': jour_mapping.get(en_day, en_day),
+                    'date': day_start.strftime("%Y-%m-%d"),
+                    'tickets': cnt
+                })
+                
+            # MTTR & SLA
+            resolved_tickets = env.search(domain + [('state', 'in', ('resolved', 'closed'))])
+            total_duration_hours = 0
+            sla_ok_count = 0
+            
+            for rt in resolved_tickets:
+                if rt.create_date and rt.write_date:
+                    diff = rt.write_date - rt.create_date
+                    total_duration_hours += diff.total_seconds() / 3600.0
+                if rt.sla_status in (False, 'on_track'):
+                    sla_ok_count += 1
+            
+            mttr = 0
+            sla_compliance = 100
+            resolved_t_count = len(resolved_tickets)
+            
+            if resolved_t_count > 0:
+                mttr = round(total_duration_hours / resolved_t_count, 1)
+                sla_compliance = round((sla_ok_count / resolved_t_count) * 100, 1)
+            
+            data = {
+                'counters': {
+                    'total': total_count,
+                    'open': open_count,
+                    'in_progress': in_progress_count,
+                    'resolved': resolved_count,
+                },
+                'categories': category_stats,
+                'trend': trend_stats,
+                'kpis': {
+                    'mttr_hours': mttr,
+                    'sla_compliance': sla_compliance
+                }
+            }
+            return self._json_response({'status': 200, 'data': data})
+        except Exception as e:
+            import traceback
+            _logger.error("Error in tech stats: %s", traceback.format_exc())
             return self._json_response({'status': 500, 'message': str(e)}, 500)
 
     # ─────────────────────────────────────────────

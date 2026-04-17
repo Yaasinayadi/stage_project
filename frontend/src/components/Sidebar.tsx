@@ -47,6 +47,7 @@ export default function Sidebar() {
     ];
   } else if (user?.x_support_role === "tech") {
     navItems = [
+      { id: "analytics", label: "Analytiques", href: "/analytics", icon: <BarChart3 size={20} /> },
       { id: "queue", label: "File d'attente", href: "/tech/queue", icon: <Inbox size={20} /> },
       { id: "my-tickets", label: "Mes Tickets", href: "/tech/tickets", icon: <ClipboardList size={20} /> },
       { id: "knowledge", label: "Base de connaissances", href: "/tech/knowledge", icon: <BookOpen size={20} /> },

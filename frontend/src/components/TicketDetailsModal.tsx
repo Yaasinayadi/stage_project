@@ -219,7 +219,7 @@ export default function TicketDetailsModal({
   });
   
   // Agents
-  const [agents, setAgents] = useState<{id: number, name: string}[]>([]);
+  const [agents, setAgents] = useState<{id: number, name: string, it_domain?: string}[]>([]);
 
   // Attachments
   const [attachments,   setAttachments]   = useState<Attachment[]>([]);
@@ -363,7 +363,7 @@ export default function TicketDetailsModal({
       await axios.put(`${ODOO_BASE}/api/ticket/update/${ticket.id}`, {
         name:        editForm.name,
         description: editForm.description,
-        assigned_to: editForm.assigned_to,
+        assigned_to_id: editForm.assigned_to,
         category,
         priority,
       });
@@ -770,7 +770,18 @@ export default function TicketDetailsModal({
                         className="input-field focus-ring disabled:opacity-50 text-xs w-full mt-1 px-2 py-1"
                       >
                         <option value="">Non assigné</option>
-                        {agents.map(agent => (
+                        {agents
+                          .filter(agent => {
+                             // Si le ticket n'a pas de catégorie, on montre tout le monde
+                             if (!ticket.category || ticket.category.toLowerCase() === "autre") return true;
+                             // Sinon, on filtre strictement si l'agent a la même compétence
+                             if (agent.it_domain) {
+                               return agent.it_domain.toLowerCase() === ticket.category.toLowerCase();
+                             }
+                             // Si l'agent n'a pas de domaine, on peut choisir de ne pas le montrer
+                             return false;
+                          })
+                          .map(agent => (
                           <option key={agent.id} value={agent.id}>{agent.name}</option>
                         ))}
                       </select>

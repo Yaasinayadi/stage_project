@@ -26,9 +26,15 @@ function AnalyticsDashboard() {
   });
 
   const fetchStats = async (selectedPeriod: string) => {
+    if (!user) return;
     setLoading(true);
     try {
-      const res = await axios.get(`http://localhost:8069/api/admin/stats?period=${selectedPeriod}`);
+      const isTech = user?.x_support_role === 'tech';
+      const endpoint = isTech 
+        ? `http://localhost:8069/api/tech/stats?period=${selectedPeriod}&tech_id=${user.id}`
+        : `http://localhost:8069/api/admin/stats?period=${selectedPeriod}`;
+
+      const res = await axios.get(endpoint);
       if (res.data.status === 200) {
         setData(res.data.data);
       }
@@ -41,7 +47,7 @@ function AnalyticsDashboard() {
 
   useEffect(() => {
     fetchStats(period);
-  }, [period]);
+  }, [period, user]);
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -56,6 +62,15 @@ function AnalyticsDashboard() {
     }
     return null;
   };
+
+  const isTechUser = user?.x_support_role === 'tech';
+  const pieData = isTechUser 
+    ? [
+        { name: "Résolus", value: data.counters.resolved },
+        { name: "À résoudre", value: data.counters.open + data.counters.in_progress }
+      ].filter(d => d.value > 0) 
+    : data.categories;
+  const pieTitle = isTechUser ? "Progression des Tickets" : "Répartition IA (Catégories)";
 
   return (
     <div className="p-6 lg:p-8 max-w-[1400px] mx-auto space-y-6">
@@ -145,14 +160,14 @@ function AnalyticsDashboard() {
         {/* PIE CHART */}
         <div className="glass-card p-6 flex flex-col rounded-2xl shadow-sm border border-[hsl(var(--border)/0.5)]">
           <h3 className="text-sm font-bold uppercase tracking-wider text-[hsl(var(--muted-foreground))] flex items-center gap-2 mb-6">
-            <Target size={16} /> Répartition IA (Catégories)
+            <Target size={16} /> {pieTitle}
           </h3>
           <div className="flex-1 min-h-[300px] relative flex flex-col justify-center">
             {loading ? (
               <div className="w-full h-full flex items-center justify-center">
                  <span className="text-xs font-bold text-[hsl(var(--muted-foreground))] animate-pulse">Chargement Analytics...</span>
               </div>
-            ) : data.categories.length === 0 ? (
+            ) : pieData.length === 0 ? (
               <div className="w-full h-full flex items-center justify-center flex-col text-[hsl(var(--muted-foreground))]">
                 <BarChart3 opacity={0.3} size={40} className="mb-2" />
                 <span className="text-xs font-medium">Aucune donnée</span>
@@ -162,7 +177,7 @@ function AnalyticsDashboard() {
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={data.categories}
+                      data={pieData}
                       cx="50%"
                       cy="50%"
                       innerRadius={65}
@@ -172,8 +187,8 @@ function AnalyticsDashboard() {
                       stroke="none"
                       cornerRadius={4}
                     >
-                      {data.categories.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      {pieData.map((entry: any, index: number) => (
+                        <Cell key={`cell-${index}`} fill={isTechUser ? (entry.name === "Résolus" ? '#10b981' : '#f59e0b') : COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
                     <RechartsTooltip content={<CustomTooltip />} />
@@ -182,18 +197,20 @@ function AnalyticsDashboard() {
                 
                 {/* Center Label */}
                 <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
-                  <span className="text-3xl font-black text-[hsl(var(--foreground))]">{data.counters.total}</span>
+                  <span className="text-3xl font-black text-[hsl(var(--foreground))]">
+                    {isTechUser ? (data.counters.resolved + data.counters.open + data.counters.in_progress) : data.counters.total}
+                  </span>
                   <p className="text-[0.65rem] font-bold uppercase tracking-widest text-[hsl(var(--muted-foreground))]">Total</p>
                 </div>
               </div>
             )}
             
             {/* Legend */}
-            {!loading && data.categories.length > 0 && (
+            {!loading && pieData.length > 0 && (
               <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 mt-4 max-h-[80px] overflow-y-auto custom-scrollbar">
-                {data.categories.map((c: any, i: number) => (
+                {pieData.map((c: any, i: number) => (
                   <div key={i} className="flex items-center gap-2 text-xs font-medium">
-                    <div className="w-3 h-3 rounded-md shadow-sm" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                    <div className="w-3 h-3 rounded-md shadow-sm" style={{ backgroundColor: isTechUser ? (c.name === "Résolus" ? '#10b981' : '#f59e0b') : COLORS[i % COLORS.length] }} />
                     <span className="text-[hsl(var(--foreground))] opacity-80">{c.name} <span className="opacity-60 ml-1">({c.value})</span></span>
                   </div>
                 ))}

@@ -93,7 +93,7 @@ function Welcome() {
               </div>
               <div>
                 <h3 className="font-semibold text-lg mb-1 group-hover:text-[#8b5cf6] transition-colors">Contacter le support</h3>
-                <p className="text-sm text-[hsl(var(--muted-foreground))] leading-relaxed">Entrez en contact direct avec un expert IT si l&apos;assistant virtuel ne suffit pas.</p>
+                <p className="text-sm text-[hsl(var(--muted-foreground))] leading-relaxed">Entrez en contact direct avec un expert IT si l'assistant virtuel ne suffit pas.</p>
               </div>
             </div>
 
