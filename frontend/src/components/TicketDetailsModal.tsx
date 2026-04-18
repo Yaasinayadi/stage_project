@@ -219,7 +219,7 @@ export default function TicketDetailsModal({
   });
   
   // Agents
-  const [agents, setAgents] = useState<{id: number, name: string, it_domain?: string}[]>([]);
+  const [agents, setAgents] = useState<{id: number, name: string, it_domains: string[]}[]>([]);
 
   // Attachments
   const [attachments,   setAttachments]   = useState<Attachment[]>([]);
@@ -774,11 +774,10 @@ export default function TicketDetailsModal({
                           .filter(agent => {
                              // Si le ticket n'a pas de catégorie, on montre tout le monde
                              if (!ticket.category || ticket.category.toLowerCase() === "autre") return true;
-                             // Sinon, on filtre strictement si l'agent a la même compétence
-                             if (agent.it_domain) {
-                               return agent.it_domain.toLowerCase() === ticket.category.toLowerCase();
+                             // Filter: match if ANY of the agent's domains matches the ticket category
+                             if (agent.it_domains && agent.it_domains.length > 0) {
+                               return agent.it_domains.some(d => d.toLowerCase() === ticket.category.toLowerCase());
                              }
-                             // Si l'agent n'a pas de domaine, on peut choisir de ne pas le montrer
                              return false;
                           })
                           .map(agent => (

@@ -1,3 +1,4 @@
+from . import it_domain
 from . import res_users
 from . import ticket
 from . import sla

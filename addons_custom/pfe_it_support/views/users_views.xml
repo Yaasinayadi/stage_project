@@ -4,7 +4,7 @@
         <!--
             Inherit the standard res.users form view to expose:
             - x_support_role : read-only computed badge showing IT support role
-            - it_domain      : IT expertise domain (visible only for Technicians)
+            - it_domain_ids  : IT expertise domains (Many2many, visible only for Technicians)
         -->
         <record id="view_users_form_it_support" model="ir.ui.view">
             <field name="name">res.users.form.it_support</field>
@@ -16,8 +16,9 @@
                     <field name="x_support_role"
                            string="IT Support Role (computed)"
                            readonly="1"/>
-                    <field name="it_domain"
-                           string="Domaine d'expertise IT"
+                    <field name="it_domain_ids"
+                           string="Domaines d'expertise IT"
+                           widget="many2many_tags"
                            invisible="x_support_role != 'tech'"/>
                 </xpath>
             </field>

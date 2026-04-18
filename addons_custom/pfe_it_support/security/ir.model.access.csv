@@ -8,6 +8,11 @@ access_support_ticket_comment_manager,support.ticket.comment.manager,model_suppo
 access_support_knowledge_user,support.knowledge.user,model_support_knowledge,base.group_user,1,0,0,0
 access_support_knowledge_technician,support.knowledge.technician,model_support_knowledge,pfe_it_support.group_support_technician,1,1,1,0
 access_support_knowledge_manager,support.knowledge.manager,model_support_knowledge,base.group_system,1,1,1,1
+<<<<<<< HEAD
 access_support_knowledge_tag_user,support.knowledge.tag.user,model_support_knowledge_tag,base.group_user,1,0,0,0
 access_support_knowledge_tag_technician,support.knowledge.tag.technician,model_support_knowledge_tag,pfe_it_support.group_support_technician,1,1,1,0
 access_support_knowledge_tag_manager,support.knowledge.tag.manager,model_support_knowledge_tag,base.group_system,1,1,1,1
+=======
+access_pfe_it_domain_user,pfe.it.domain.user,model_pfe_it_domain,base.group_user,1,0,0,0
+access_pfe_it_domain_manager,pfe.it.domain.manager,model_pfe_it_domain,base.group_system,1,1,1,1
+>>>>>>> 95ce550e8966eac76c82df0e891ccf15612cc784
