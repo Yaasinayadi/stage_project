@@ -55,8 +55,9 @@ export default function Sidebar() {
   } else {
     // Regular User
     navItems = [
-      { id: "welcome", label: "Accueil", href: "/welcome", icon: <Home size={20} /> },
-      { id: "tickets", label: "Mes Tickets", href: "/tickets", icon: <Ticket size={20} /> },
+      { id: "welcome",   label: "Accueil",               href: "/welcome",         icon: <Home size={20} /> },
+      { id: "tickets",   label: "Mes Tickets",            href: "/tickets",         icon: <Ticket size={20} /> },
+      { id: "knowledge", label: "Base de connaissances",  href: "/tech/knowledge",  icon: <BookOpen size={20} /> },
     ];
   }
 

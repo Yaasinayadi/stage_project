@@ -7,6 +7,8 @@
     Gestion des tickets de support IT.
     Intégration prévue avec un microservice IA (FastAPI).
     """,
+    'author': 'PFE IT Support',
+    'website': 'https://example.com',
     'depends': ['base', 'web'],
     'data': [
         'security/security.xml',

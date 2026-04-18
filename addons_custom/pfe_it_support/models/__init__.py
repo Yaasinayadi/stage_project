@@ -2,5 +2,5 @@ from . import res_users
 from . import ticket
 from . import sla
 from . import comment
+from . import knowledge_tag  # doit être importé AVANT knowledge (relation Many2many)
 from . import knowledge
-from . import res_users

@@ -1,274 +1,305 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import axios from "axios";
-import { BookOpen, Search, RefreshCw, Tag, ExternalLink, Plus, X } from "lucide-react";
+import {
+  BookOpen, Search, RefreshCw, Plus, ChevronLeft, ChevronRight,
+  Filter, X,
+} from "lucide-react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAuth } from "@/lib/auth";
+import KnowledgeCard, { type KbArticle } from "@/components/KnowledgeCard";
+import KnowledgeReadModal from "@/components/KnowledgeReadModal";
+import KnowledgeModal from "@/components/KnowledgeModal";
 
 const ODOO_URL = "http://localhost:8069";
 
-type KbEntry = {
-  id: number;
-  title: string;
-  solution: string;
-  category: string | null;
-  source_ticket_id: number | null;
-};
+const CATEGORIES = [
+  "Réseau", "Logiciel", "Matériel", "Accès",
+  "Messagerie", "Infrastructure", "Autre",
+];
 
+type Pagination = { page: number; limit: number; total: number; pages: number };
+
+// ─── Page ────────────────────────────────────────────────────────────────────
 function KnowledgePage() {
   const { user } = useAuth();
-  const [entries, setEntries] = useState<KbEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [catFilter, setCatFilter] = useState<string | null>(null);
+  const role = user?.x_support_role ?? "user";
+  const canWrite = role === "admin" || role === "tech";
 
-  // Modal states
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newTitle, setNewTitle] = useState("");
-  const [newCategory, setNewCategory] = useState("");
-  const [newSolution, setNewSolution] = useState("");
-  const [isCreating, setIsCreating] = useState(false);
+  // ── Data ──────────────────────────────────────────────────────────────────
+  const [articles, setArticles]       = useState<KbArticle[]>([]);
+  const [pagination, setPagination]   = useState<Pagination>({ page: 1, limit: 12, total: 0, pages: 1 });
+  const [loading, setLoading]         = useState(true);
 
-  const fetch = useCallback(async () => {
+  // ── Filters ───────────────────────────────────────────────────────────────
+  const [search, setSearch]           = useState("");
+  const [catFilter, setCatFilter]     = useState<string | null>(null);
+  const [page, setPage]               = useState(1);
+  const searchTimer                   = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Modals ────────────────────────────────────────────────────────────────
+  const [readArticle, setReadArticle]     = useState<KbArticle | null>(null);
+  const [editArticle, setEditArticle]     = useState<KbArticle | null | undefined>(undefined);
+  // undefined = modal fermé, null = création, KbArticle = édition
+
+  // ── Fetch ─────────────────────────────────────────────────────────────────
+  const fetchArticles = useCallback(async (
+    p = 1,
+    q = search,
+    cat = catFilter
+  ) => {
+    setLoading(true);
     try {
-      const res = await axios.get(`${ODOO_URL}/api/knowledge`, { withCredentials: true });
-      if (res.data.status === "success") setEntries(res.data.data);
-    } catch {
-      console.error("Erreur KB");
+      const params = new URLSearchParams({
+        page: String(p),
+        limit: "12",
+        ...(q   ? { search: q }         : {}),
+        ...(cat  ? { category: cat }     : {}),
+        // Regular users only see published articles
+        ...(role === "user" ? { published_only: "1" } : {}),
+      });
+      const res = await axios.get(`${ODOO_URL}/api/knowledge?${params}`);
+      if (res.data.status === 200) {
+        setArticles(res.data.data);
+        setPagination(res.data.pagination);
+      }
+    } catch (err) {
+      console.error("Erreur KB:", err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [search, catFilter, role]);
 
-  useEffect(() => {
-    fetch();
-  }, [fetch]);
+  useEffect(() => { fetchArticles(1); }, [catFilter]); // eslint-disable-line
+  useEffect(() => { fetchArticles(page); }, [page]);    // eslint-disable-line
 
-  const categories = [...new Set(entries.map((e) => e.category).filter(Boolean))] as string[];
-
-  const filtered = entries.filter((e) => {
-    const q = search.toLowerCase();
-    const matchSearch = !q || e.title.toLowerCase().includes(q) || e.solution.toLowerCase().includes(q);
-    const matchCat = !catFilter || e.category === catFilter;
-    return matchSearch && matchCat;
-  });
-
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTitle || !newSolution) return;
-    setIsCreating(true);
-    try {
-      const res = await axios.post(
-        `${ODOO_URL}/api/knowledge/create`,
-        { title: newTitle, category: newCategory, solution: newSolution },
-        { headers: { "Content-Type": "application/json" } }
-      );
-      if (res.data.status === "success") {
-        setNewTitle("");
-        setNewCategory("");
-        setNewSolution("");
-        setIsModalOpen(false);
-        fetch(); // Refresh list
-      }
-    } catch (err) {
-      console.error("Erreur création KB:", err);
-    } finally {
-      setIsCreating(false);
-    }
+  // Debounced search
+  const handleSearchChange = (val: string) => {
+    setSearch(val);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => {
+      setPage(1);
+      fetchArticles(1, val, catFilter);
+    }, 400);
   };
 
+  // ── Delete handler ────────────────────────────────────────────────────────
+  const handleDelete = useCallback(async (art: KbArticle) => {
+    if (!confirm(`Supprimer l'article "${art.title}" ? Cette action est irréversible.`)) return;
+    try {
+      await axios.delete(`${ODOO_URL}/api/knowledge/${art.id}`, {
+        data: { requester_role: role },
+        headers: { "Content-Type": "application/json" },
+      });
+      fetchArticles(page);
+    } catch {
+      alert("Erreur lors de la suppression.");
+    }
+  }, [role, page, fetchArticles]);
+
+  const resetFilters = () => {
+    setSearch("");
+    setCatFilter(null);
+    setPage(1);
+    fetchArticles(1, "", null);
+  };
+  const hasFilters = search !== "" || catFilter !== null;
+
+  // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+
+      {/* ── Header ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <BookOpen size={24} className="text-[hsl(var(--primary))]" />
             Base de Connaissances
           </h1>
           <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">
-            Solutions documentées par l&apos;équipe IT — {entries.length} article{entries.length !== 1 ? "s" : ""}
+            Solutions documentées par l&apos;équipe IT —{" "}
+            <span className="font-semibold">{pagination.total}</span> article{pagination.total !== 1 ? "s" : ""}
           </p>
         </div>
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mt-4 sm:mt-0">
-          <button onClick={fetch} className="btn-ghost text-sm flex items-center justify-center gap-2">
-            <RefreshCw size={14} /> Actualiser
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => fetchArticles(page)}
+            className="btn-ghost flex items-center gap-2 text-sm"
+          >
+            <RefreshCw size={14} />
+            Actualiser
           </button>
-          {user?.x_support_role === "admin" && (
+          {canWrite && (
             <button
-              onClick={() => setIsModalOpen(true)}
-              className="btn-primary flex items-center justify-center gap-2 text-sm px-4 py-2 rounded-lg"
+              onClick={() => setEditArticle(null)}
+              className="btn-primary flex items-center gap-2 text-sm"
             >
-              <Plus size={16} /> Nouvel Article
+              <Plus size={16} />
+              Nouvel article
             </button>
           )}
         </div>
       </div>
 
-      {/* Search + Category filters */}
+      {/* ── Search + Filters ── */}
       <div className="glass-card p-4 space-y-3">
+        {/* Search bar */}
         <div className="relative">
-          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
+          <Search
+            size={15}
+            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]"
+          />
           <input
             type="text"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Rechercher un problème ou une solution…"
+            onChange={(e) => handleSearchChange(e.target.value)}
+            placeholder="Rechercher par titre ou contenu…"
             className="input-field w-full !pl-10 h-10"
           />
-        </div>
-        {categories.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          {search && (
             <button
-              onClick={() => setCatFilter(null)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all
-                ${!catFilter ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
-                  : "border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)]"}`}
+              onClick={() => handleSearchChange("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
             >
-              Tout
+              <X size={14} />
             </button>
-            {categories.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setCatFilter(catFilter === cat ? null : cat)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all flex items-center gap-1
-                  ${catFilter === cat ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
-                    : "border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)]"}`}
-              >
-                <Tag size={10} /> {cat}
-              </button>
-            ))}
-          </div>
-        )}
+          )}
+        </div>
+
+        {/* Category pills */}
+        <div className="flex flex-wrap items-center gap-2">
+          <Filter size={13} className="text-[hsl(var(--muted-foreground))]" />
+          <button
+            onClick={() => { setCatFilter(null); setPage(1); }}
+            className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${
+              !catFilter
+                ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
+                : "border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.3)]"
+            }`}
+          >
+            Toutes
+          </button>
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => { setCatFilter(catFilter === cat ? null : cat); setPage(1); }}
+              className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${
+                catFilter === cat
+                  ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
+                  : "border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.3)]"
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+          {hasFilters && (
+            <button
+              onClick={resetFilters}
+              className="flex items-center gap-1 text-xs text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] ml-auto"
+            >
+              <X size={12} /> Réinitialiser
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* List */}
+      {/* ── Grid ── */}
       {loading ? (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => <div key={i} className="glass-card h-28 animate-pulse opacity-50" />)}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="glass-card h-52 animate-pulse opacity-50" />
+          ))}
         </div>
-      ) : filtered.length === 0 ? (
+      ) : articles.length === 0 ? (
         <div className="glass-card flex flex-col items-center justify-center py-20 text-center">
           <BookOpen size={40} className="text-[hsl(var(--muted-foreground)/0.3)] mb-3" />
           <h3 className="text-lg font-semibold">Aucun article trouvé</h3>
-          <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">
-            {entries.length === 0
-              ? "La base de connaissances est vide. Résolvez des tickets et publiez-les pour les voir ici."
-              : "Essayez de modifier votre recherche ou vos filtres."}
+          <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1 max-w-xs">
+            {pagination.total === 0
+              ? "La base de connaissances est vide. Commencez par créer un article."
+              : "Modifiez votre recherche ou supprimez les filtres actifs."}
           </p>
+          {canWrite && pagination.total === 0 && (
+            <button
+              onClick={() => setEditArticle(null)}
+              className="btn-primary mt-4 flex items-center gap-2"
+            >
+              <Plus size={16} /> Créer le premier article
+            </button>
+          )}
         </div>
       ) : (
-        <div className="space-y-3">
-          {filtered.map((entry) => (
-            <div key={entry.id} className="glass-card p-5 hover:shadow-md transition-all duration-200 group space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-sm group-hover:text-[hsl(var(--primary))] transition-colors">
-                    {entry.title}
-                  </h3>
-                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    {entry.category && (
-                      <span className="inline-flex items-center gap-1 text-[0.65rem] font-semibold px-2 py-0.5 rounded-full bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))] border border-[hsl(var(--primary)/0.2)]">
-                        <Tag size={9} /> {entry.category}
-                      </span>
-                    )}
-                    {entry.source_ticket_id && (
-                      <span className="text-[0.65rem] text-[hsl(var(--muted-foreground))] flex items-center gap-1">
-                        <ExternalLink size={9} /> Ticket #{entry.source_ticket_id}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div className="bg-[hsl(var(--muted)/0.4)] rounded-xl p-3 text-sm leading-relaxed border border-[hsl(var(--border)/0.5)]">
-                {entry.solution}
-              </div>
-            </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {articles.map((art, i) => (
+            <KnowledgeCard
+              key={art.id}
+              article={art}
+              index={i}
+              currentUserId={user?.id}
+              currentUserRole={role}
+              onRead={setReadArticle}
+              onEdit={canWrite ? (a) => setEditArticle(a) : undefined}
+              onDelete={role === "admin" ? handleDelete : undefined}
+            />
           ))}
         </div>
       )}
 
-      {/* Modal Création Article */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-          <div
-            className="glass-card w-full max-w-xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden scale-in"
-            onClick={(e) => e.stopPropagation()}
+      {/* ── Pagination ── */}
+      {pagination.pages > 1 && (
+        <div className="flex items-center justify-center gap-3 pt-2">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="btn-ghost disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 text-sm"
           >
-            <div className="flex items-center justify-between p-4 border-b border-[hsl(var(--border)/0.5)]">
-              <h2 className="text-lg font-bold">Nouvel Article KB</h2>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="p-1 rounded-md hover:bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            
-            <form onSubmit={handleCreate} className="p-5 overflow-y-auto space-y-4">
-              <div>
-                <label className="block text-sm font-semibold mb-1">Titre de l'article *</label>
-                <input
-                  type="text"
-                  required
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  className="input-field w-full"
-                  placeholder="Ex: Configuration du VPN client..."
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-semibold mb-1">Catégorie</label>
-                <input
-                  type="text"
-                  value={newCategory}
-                  onChange={(e) => setNewCategory(e.target.value)}
-                  className="input-field w-full"
-                  placeholder="Ex: Réseau, Matériel, Logiciel..."
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-semibold mb-1">Solution / Contenu *</label>
-                <textarea
-                  required
-                  value={newSolution}
-                  onChange={(e) => setNewSolution(e.target.value)}
-                  className="input-field w-full min-h-[150px] resize-y"
-                  placeholder="Décrivez les étapes de résolution..."
-                />
-              </div>
-
-              <div className="pt-2 flex gap-3 justify-end">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="btn-ghost"
-                  disabled={isCreating}
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  disabled={isCreating || !newTitle || !newSolution}
-                  className="btn-primary"
-                >
-                  {isCreating ? "Création..." : "Publier l'article"}
-                </button>
-              </div>
-            </form>
-          </div>
+            <ChevronLeft size={16} /> Précédent
+          </button>
+          <span className="text-sm text-[hsl(var(--muted-foreground))]">
+            Page <span className="font-semibold text-[hsl(var(--foreground))]">{page}</span>{" "}
+            sur <span className="font-semibold">{pagination.pages}</span>
+          </span>
+          <button
+            onClick={() => setPage((p) => Math.min(pagination.pages, p + 1))}
+            disabled={page === pagination.pages}
+            className="btn-ghost disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 text-sm"
+          >
+            Suivant <ChevronRight size={16} />
+          </button>
         </div>
+      )}
+
+      {/* ── Modals ── */}
+      {readArticle && (
+        <KnowledgeReadModal
+          article={readArticle}
+          currentUserId={user?.id}
+          currentUserRole={role}
+          onClose={() => setReadArticle(null)}
+          onEdit={canWrite ? (a) => { setReadArticle(null); setEditArticle(a); } : undefined}
+          onDelete={role === "admin" ? (a) => { setReadArticle(null); handleDelete(a); } : undefined}
+        />
+      )}
+
+      {editArticle !== undefined && (
+        <KnowledgeModal
+          article={editArticle}
+          userId={user?.id}
+          userRole={role}
+          onClose={() => setEditArticle(undefined)}
+          onSaved={() => { setEditArticle(undefined); fetchArticles(page); }}
+        />
       )}
     </div>
   );
 }
 
-export default function TechKnowledgePage() {
+// ─── Route Guard ──────────────────────────────────────────────────────────────
+export default function KnowledgePageRoute() {
   return (
-    <ProtectedRoute roles={["tech", "admin"]}>
+    <ProtectedRoute>   {/* accessible à TOUS les rôles */}
       <KnowledgePage />
     </ProtectedRoute>
   );

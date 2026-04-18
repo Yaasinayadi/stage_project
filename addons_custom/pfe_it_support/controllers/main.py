@@ -14,11 +14,17 @@ class SupportTicketController(http.Controller):
     # AUTHENTIFICATION API
     # ─────────────────────────────────────────────
 
-    @http.route('/api/auth/login', type='http', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    @http.route('/api/auth/login', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
     def login(self, **kw):
         """Authentifie un utilisateur via email + mot de passe."""
+        _logger.info(">>> REQUÊTE REÇUE : %s %s", request.httprequest.method, request.httprequest.path)
         if request.httprequest.method == 'OPTIONS':
-            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'POST, OPTIONS'), ('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Odoo-Database')])
+            return request.make_response('', [
+                ('Access-Control-Allow-Origin', 'http://localhost:3000'),
+                ('Access-Control-Allow-Credentials', 'true'),
+                ('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS'),
+                ('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization'),
+            ])
         try:
             post = json.loads(request.httprequest.data.decode('utf-8'))
             email = post.get('email', '').strip()
@@ -64,11 +70,11 @@ class SupportTicketController(http.Controller):
         except Exception as e:
             return self._json_response({'status': 500, 'message': str(e)}, 500)
 
-    @http.route('/api/auth/register', type='http', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    @http.route('/api/auth/register', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
     def register(self, **kw):
         """Crée un nouvel utilisateur (portail)."""
         if request.httprequest.method == 'OPTIONS':
-            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'POST, OPTIONS'), ('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Odoo-Database')])
+            return self._cors_response()
         try:
             post = json.loads(request.httprequest.data.decode('utf-8'))
             name = post.get('name', '').strip()
@@ -118,11 +124,11 @@ class SupportTicketController(http.Controller):
         except Exception as e:
             return self._json_response({'status': 500, 'message': str(e)}, 500)
 
-    @http.route('/api/auth/me', type='http', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    @http.route('/api/auth/me', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
     def get_me(self, **kw):
         """Récupère les infos de l'utilisateur connecté par son ID."""
         if request.httprequest.method == 'OPTIONS':
-            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'POST, OPTIONS'), ('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Odoo-Database')])
+            return self._cors_response()
         try:
             post = json.loads(request.httprequest.data.decode('utf-8'))
             user_id = post.get('user_id')
@@ -153,7 +159,7 @@ class SupportTicketController(http.Controller):
     # TICKETS API
     # ─────────────────────────────────────────────
 
-    @http.route('/api/tickets', type='http', auth='public', methods=['GET', 'OPTIONS'], cors='*', csrf=False)
+    @http.route('/api/tickets', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
     def get_tickets(self, **kw):
         """Récupère la liste de tous les tickets de support."""
         env = request.env['support.ticket'].sudo()
@@ -193,7 +199,7 @@ class SupportTicketController(http.Controller):
             headers=[('Content-Type', 'application/json')]
         )
 
-    @http.route('/api/ticket/create', type='http', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    @http.route('/api/ticket/create', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
     def create_ticket(self, **kw):
         """Crée un nouveau ticket de support via l'API."""
         post = json.loads(request.httprequest.data.decode('utf-8'))
@@ -231,21 +237,32 @@ class SupportTicketController(http.Controller):
     # UTILS
     # ─────────────────────────────────────────────
 
-    def _json_response(self, data, status_code=200):
-        """Helper pour retourner une réponse JSON propre."""
-        return request.make_response(
-            json.dumps(data),
-            headers=[
-                ('Content-Type', 'application/json'),
-            ],
-            status=status_code
-        )
+    def _cors_response(self, data=None, status_code=200):
+        """Helper CORS ultra-permissif pour débloquer le Frontend (OPTIONS et réponses normales)."""
+        headers = [
+            ('Access-Control-Allow-Origin', 'http://localhost:3000'),
+            ('Access-Control-Allow-Credentials', 'true'),
+            ('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS'),
+            ('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization'),
+            ('Content-Type', 'application/json')
+        ]
+        if request.httprequest.method == 'OPTIONS':
+            return request.make_response('', headers)
+            
+        body = json.dumps(data) if data is not None else ''
+        response = request.make_response(body, headers)
+        response.status_code = status_code
+        return response
 
-    @http.route('/api/ticket/update/<int:ticket_id>', type='http', auth='public', methods=['PUT', 'OPTIONS'], cors='*', csrf=False)
+    def _json_response(self, data, status_code=200):
+        """Rétrocompatibilité : utilise _cors_response."""
+        return self._cors_response(data, status_code)
+
+    @http.route('/api/ticket/update/<int:ticket_id>', type='http', auth='public', methods=['PUT', 'OPTIONS'], csrf=False)
     def update_ticket(self, ticket_id, **kw):
         """Met à jour un ticket de support via l'API."""
         if request.httprequest.method == 'OPTIONS':
-            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'PUT, OPTIONS')])
+            return self._cors_response()
             
         post = json.loads(request.httprequest.data.decode('utf-8'))
         env = request.env['support.ticket'].sudo()
@@ -272,11 +289,11 @@ class SupportTicketController(http.Controller):
             headers=[('Content-Type', 'application/json')]
         )
 
-    @http.route('/api/ticket/<int:ticket_id>', type='http', auth='public', methods=['DELETE', 'OPTIONS'], cors='*', csrf=False)
+    @http.route('/api/ticket/<int:ticket_id>', type='http', auth='public', methods=['DELETE', 'OPTIONS'], csrf=False)
     def delete_ticket(self, ticket_id, **kw):
         """Supprime un ticket de support."""
         if request.httprequest.method == 'OPTIONS':
-            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'DELETE, OPTIONS')])
+            return self._cors_response()
             
         env = request.env['support.ticket'].sudo()
         ticket = env.browse(ticket_id)
@@ -298,7 +315,7 @@ class SupportTicketController(http.Controller):
     # AGENTS API
     # ─────────────────────────────────────────────
 
-    @http.route('/api/agents', type='http', auth='public', methods=['GET', 'OPTIONS'], cors='*', csrf=False)
+    @http.route('/api/agents', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
     def get_agents(self, **kw):
         """Récupère la liste des techniciens (utilisateurs internes)."""
         try:
@@ -337,11 +354,11 @@ class SupportTicketController(http.Controller):
     # COMMENTS API
     # ─────────────────────────────────────────────
 
-    @http.route('/api/ticket/<int:ticket_id>/comments', type='http', auth='public', methods=['GET', 'OPTIONS'], cors='*', csrf=False)
+    @http.route('/api/ticket/<int:ticket_id>/comments', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
     def get_comments(self, ticket_id, **kw):
         """Récupère les commentaires d'un ticket"""
         if request.httprequest.method == 'OPTIONS':
-            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'GET, OPTIONS')])
+            return self._cors_response()
 
         try:
             ticket = request.env['support.ticket'].sudo().browse(ticket_id)
@@ -373,7 +390,7 @@ class SupportTicketController(http.Controller):
         except Exception as e:
             return self._json_response({'status': 500, 'message': str(e)}, 500)
 
-    @http.route('/api/ticket/<int:ticket_id>/comment', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    @http.route('/api/ticket/<int:ticket_id>/comment', type='jsonrpc', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
     def post_comment(self, ticket_id, **kw):
         """Ajoute un commentaire à un ticket (Format JSON-RPC)"""
         _logger.info(f"==> POST /api/ticket/{ticket_id}/comment - Appel reçu")
@@ -425,15 +442,11 @@ class SupportTicketController(http.Controller):
     # ATTACHMENTS API
     # ─────────────────────────────────────────────
 
-    @http.route('/api/ticket/<int:ticket_id>/upload', type='http', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    @http.route('/api/ticket/<int:ticket_id>/upload', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
     def upload_attachment(self, ticket_id, **kw):
         """Upload une ou plusieurs pièces jointes pour un ticket."""
         if request.httprequest.method == 'OPTIONS':
-            return request.make_response('', headers=[
-                ('Access-Control-Allow-Origin', '*'),
-                ('Access-Control-Allow-Methods', 'POST, OPTIONS'),
-                ('Access-Control-Allow-Headers', 'Content-Type'),
-            ])
+            return self._cors_response()
 
         try:
             ticket = request.env['support.ticket'].sudo().browse(ticket_id)
@@ -509,14 +522,11 @@ class SupportTicketController(http.Controller):
             import traceback
             return self._json_response({'status': 500, 'message': str(e), 'trace': traceback.format_exc()}, 500)
 
-    @http.route('/api/ticket/<int:ticket_id>/attachments', type='http', auth='public', methods=['GET', 'OPTIONS'], cors='*', csrf=False)
+    @http.route('/api/ticket/<int:ticket_id>/attachments', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
     def get_attachments(self, ticket_id, **kw):
         """Récupère la liste des pièces jointes d'un ticket."""
         if request.httprequest.method == 'OPTIONS':
-            return request.make_response('', headers=[
-                ('Access-Control-Allow-Origin', '*'),
-                ('Access-Control-Allow-Methods', 'GET, OPTIONS'),
-            ])
+            return self._cors_response()
 
         try:
             ticket = request.env['support.ticket'].sudo().browse(ticket_id)
@@ -542,14 +552,11 @@ class SupportTicketController(http.Controller):
         except Exception as e:
             return self._json_response({'status': 500, 'message': str(e)}, 500)
 
-    @http.route('/api/attachment/<int:attachment_id>', type='http', auth='public', methods=['DELETE', 'OPTIONS'], cors='*', csrf=False)
+    @http.route('/api/attachment/<int:attachment_id>', type='http', auth='public', methods=['DELETE', 'OPTIONS'], csrf=False)
     def delete_attachment(self, attachment_id, **kw):
         """Supprime une pièce jointe."""
         if request.httprequest.method == 'OPTIONS':
-            return request.make_response('', headers=[
-                ('Access-Control-Allow-Origin', '*'),
-                ('Access-Control-Allow-Methods', 'DELETE, OPTIONS'),
-            ])
+            return self._cors_response()
 
         try:
             attachment = request.env['ir.attachment'].sudo().browse(attachment_id)
@@ -566,11 +573,11 @@ class SupportTicketController(http.Controller):
     # DASHBOARD & KPIS API
     # ─────────────────────────────────────────────
     
-    @http.route('/api/admin/stats', type='http', auth='public', methods=['GET', 'OPTIONS'], cors='*', csrf=False)
+    @http.route('/api/admin/stats', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
     def admin_stats(self, **kw):
         """Récupère les statistiques pour le dashboard administrateur."""
         if request.httprequest.method == 'OPTIONS':
-            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'GET, OPTIONS')])
+            return self._cors_response()
 
         try:
             env = request.env['support.ticket'].sudo()
@@ -670,11 +677,11 @@ class SupportTicketController(http.Controller):
             _logger.error("Error in admin stats: %s", traceback.format_exc())
             return self._json_response({'status': 500, 'message': str(e)}, 500)
 
-    @http.route('/api/tech/stats', type='http', auth='public', methods=['GET', 'OPTIONS'], cors='*', csrf=False)
+    @http.route('/api/tech/stats', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
     def tech_stats(self, **kw):
         """Récupère les statistiques pour le dashboard agent."""
         if request.httprequest.method == 'OPTIONS':
-            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'GET, OPTIONS')])
+            return self._cors_response()
 
         try:
             env = request.env['support.ticket'].sudo()
@@ -783,11 +790,11 @@ class SupportTicketController(http.Controller):
     # USERS ADMINISTRATION API
     # ─────────────────────────────────────────────
 
-    @http.route('/api/admin/users', type='http', auth='public', methods=['GET', 'OPTIONS'], cors='*', csrf=False)
+    @http.route('/api/admin/users', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
     def admin_get_users(self, **kw):
         """Récupère la liste de tous les utilisateurs (pour le dashboard Admin)."""
         if request.httprequest.method == 'OPTIONS':
-            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'GET, OPTIONS')])
+            return self._cors_response()
 
         try:
             # active_test=False permet de voir aussi les utilisateurs archivés/bannis
@@ -818,11 +825,11 @@ class SupportTicketController(http.Controller):
             import traceback
             return self._json_response({'status': 500, 'message': str(e), 'trace': traceback.format_exc()}, 500)
 
-    @http.route('/api/admin/users/<int:user_id>', type='http', auth='public', methods=['PUT', 'OPTIONS'], cors='*', csrf=False)
+    @http.route('/api/admin/users/<int:user_id>', type='http', auth='public', methods=['PUT', 'OPTIONS'], csrf=False)
     def admin_update_user(self, user_id, **kw):
         """Met à jour un utilisateur (rôle, domaine, statut actif)."""
         if request.httprequest.method == 'OPTIONS':
-            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'PUT, OPTIONS')])
+            return self._cors_response()
 
         try:
             post = json.loads(request.httprequest.data.decode('utf-8'))
