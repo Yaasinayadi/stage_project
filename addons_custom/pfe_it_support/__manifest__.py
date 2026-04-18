@@ -11,6 +11,7 @@
     'data': [
         'security/security.xml',
         'security/ir.model.access.csv',
+        'data/it_domain_data.xml',
         'views/ticket_views.xml',
         'views/sla_views.xml',
         'views/users_views.xml',

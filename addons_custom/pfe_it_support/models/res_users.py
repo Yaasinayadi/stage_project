@@ -4,15 +4,12 @@ from odoo import models, fields, api
 class ResUsers(models.Model):
     _inherit = 'res.users'
 
-    it_domain = fields.Selection([
-        ('Réseau', 'Réseau'),
-        ('Logiciel', 'Logiciel'),
-        ('Matériel', 'Matériel'),
-        ('Accès', 'Accès'),
-        ('Messagerie', 'Messagerie'),
-        ('Infrastructure', 'Infrastructure'),
-        ('Autre', 'Autre')
-    ], string="Domaine d'expertise IT")
+    it_domain_ids = fields.Many2many(
+        'pfe.it.domain',
+        'res_users_it_domain_rel',
+        'user_id', 'domain_id',
+        string="Domaines d'expertise IT",
+    )
 
     # ─── Extend native Odoo 19 role field to add Technician ───────────────────
     # We add 'group_technician' to the native Selection without calling super()

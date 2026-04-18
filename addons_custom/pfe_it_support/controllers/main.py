@@ -325,7 +325,7 @@ class SupportTicketController(http.Controller):
                     'id': u.id,
                     'name': u.name,
                     'email': u.email or u.login,
-                    'it_domain': getattr(u, 'it_domain', False),
+                    'it_domains': [d.name for d in u.it_domain_ids],
                 })
 
             return self._json_response({'status': 200, 'data': agents})
@@ -792,27 +792,29 @@ class SupportTicketController(http.Controller):
         try:
             # active_test=False permet de voir aussi les utilisateurs archivés/bannis
             users = request.env['res.users'].sudo().with_context(active_test=False).search([('id', '>', 2)], order='create_date desc')
-            
+
             data = []
             system_group = request.env.ref('base.group_system', raise_if_not_found=False)
-            agent_group = request.env.ref('base.group_user', raise_if_not_found=False)
-            
+            tech_group   = request.env.ref('pfe_it_support.group_support_technician', raise_if_not_found=False)
+
             for u in users:
-                role = 'user'
-                if system_group and u.has_group('base.group_system'):
+                # Compute role LIVE from groups (mirrors the write logic in admin_update_user)
+                if system_group and system_group in u.group_ids:
                     role = 'admin'
-                elif agent_group and u.has_group('base.group_user'):
-                    role = 'agent'
-                
+                elif tech_group and tech_group in u.group_ids:
+                    role = 'agent'   # 'agent' = technicien in the frontend select
+                else:
+                    role = 'user'
+
                 data.append({
                     'id': u.id,
                     'name': u.name,
                     'email': u.email or u.login,
                     'role': role,
-                    'it_domain': getattr(u, 'it_domain', False),
+                    'it_domains': [d.name for d in u.it_domain_ids],
                     'active': u.active
                 })
-                
+
             return self._json_response({'status': 200, 'data': data})
         except Exception as e:
             import traceback
@@ -826,38 +828,107 @@ class SupportTicketController(http.Controller):
 
         try:
             post = json.loads(request.httprequest.data.decode('utf-8'))
-            user = request.env['res.users'].sudo().with_context(active_test=False).browse(user_id)
             
+            # 1. Vérification de sécurité (Middleware)
+            caller_id = post.get('caller_user_id')
+            if not caller_id:
+                return self._json_response({'status': 403, 'message': 'Non autorisé. ID appelant manquant.'}, 403)
+                
+            caller = request.env['res.users'].sudo().browse(int(caller_id))
+            if not caller.exists() or not caller.has_group('base.group_system'):
+                return self._json_response({'status': 403, 'message': 'Accès refusé. Droits administrateur (Settings) requis.'}, 403)
+
+            user = request.env['res.users'].sudo().with_context(active_test=False).browse(user_id)
+
             if not user.exists():
                 return self._json_response({'status': 404, 'message': 'Utilisateur introuvable'}, 404)
-            
+
+            cr = request.env.cr
+
+            # active / it_domain_ids
             vals = {}
             if 'active' in post:
                 vals['active'] = post['active']
-            if 'it_domain' in post:
-                vals['it_domain'] = post['it_domain']
-                
+            if vals:
+                user.write(vals)
+
+            # domains (list of names → find/create pfe.it.domain records, then link via SQL)
+            if 'it_domains' in post:
+                domain_names = post['it_domains']  # list of strings e.g. ['Réseau', 'Matériel']
+                DomainModel = request.env['pfe.it.domain'].sudo()
+                domain_records = []
+                for dname in domain_names:
+                    rec = DomainModel.search([('name', '=', dname)], limit=1)
+                    if rec:
+                        domain_records.append(rec.id)
+                # Rewrite the Many2many via SQL
+                cr.execute(
+                    "DELETE FROM res_users_it_domain_rel WHERE user_id = %s",
+                    (user_id,)
+                )
+                for did in domain_records:
+                    cr.execute(
+                        "INSERT INTO res_users_it_domain_rel (user_id, domain_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                        (user_id, did)
+                    )
+
+            # role
+            computed_role = None
             if 'role' in post:
                 role = post['role']
-                system_group = request.env.ref('base.group_system')
-                agent_group = request.env.ref('base.group_user')
-                portal_group = request.env.ref('base.group_portal')
-                tech_group = request.env.ref('pfe_it_support.group_support_technician')
-                # (3, id) = remove, (4, id) = add
-                groups_cmds = []
+                system_group = request.env.ref('base.group_system', raise_if_not_found=False)
+                erp_mgr_group= request.env.ref('base.group_erp_manager', raise_if_not_found=False)
+                agent_group  = request.env.ref('base.group_user',   raise_if_not_found=False)
+                portal_group = request.env.ref('base.group_portal', raise_if_not_found=False)
+                tech_group   = request.env.ref('pfe_it_support.group_support_technician', raise_if_not_found=False)
+
+                if not all([system_group, agent_group, portal_group, tech_group, erp_mgr_group]):
+                    return self._json_response({'status': 500, 'message': 'Groupes Odoo introuvables'}, 500)
+
                 if role == 'admin':
-                    groups_cmds.extend([(4, agent_group.id), (4, system_group.id), (3, portal_group.id), (3, tech_group.id)])
-                elif role == 'agent':
-                    groups_cmds.extend([(4, agent_group.id), (4, tech_group.id), (3, system_group.id), (3, portal_group.id)])
-                else: # user
-                    groups_cmds.extend([(4, agent_group.id), (3, system_group.id), (3, tech_group.id), (3, portal_group.id)])
-                
-                vals['group_ids'] = groups_cmds
-            
-            user.write(vals)
-            
-            return self._json_response({'status': 200, 'message': 'Utilisateur mis à jour avec succès'})
+                    # L'admin reçoit System (Administration) et ERP Manager (Access Rights)
+                    new_gids = [agent_group.id, system_group.id, erp_mgr_group.id]
+                    computed_role = 'admin'
+                elif role in ('agent', 'tech'):
+                    new_gids = [agent_group.id, tech_group.id]
+                    computed_role = 'tech'
+                else:
+                    new_gids = [agent_group.id]
+                    computed_role = 'user'
+
+                all_role_gids = [system_group.id, erp_mgr_group.id, tech_group.id, portal_group.id, agent_group.id]
+
+                # Direct SQL – bypasses ORM constraints that silently block group writes
+                cr.execute(
+                    "DELETE FROM res_groups_users_rel WHERE uid = %s AND gid = ANY(%s)",
+                    (user_id, all_role_gids)
+                )
+                for gid in new_gids:
+                    cr.execute(
+                        "INSERT INTO res_groups_users_rel (uid, gid) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                        (user_id, gid)
+                    )
+
+                # Update stored computed field directly
+                cr.execute(
+                    "UPDATE res_users SET x_support_role = %s WHERE id = %s",
+                    (computed_role, user_id)
+                )
+
+                try:
+                    request.env.registry.clear_cache()
+                except Exception:
+                    pass
+
+            return self._json_response({
+                'status': 200,
+                'message': 'Utilisateur mis à jour avec succès',
+                'x_support_role': computed_role,
+            })
+
         except Exception as e:
             import traceback
             return self._json_response({'status': 500, 'message': str(e), 'trace': traceback.format_exc()}, 500)
+
+
 
