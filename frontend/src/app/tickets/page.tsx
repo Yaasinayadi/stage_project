@@ -59,7 +59,7 @@ function Dashboard() {
     priorities: [],
   });
 
-  const [openDropdown, setOpenDropdown] = useState<"status" | "priority" | "category" | null>(null);
+  const [openDropdown, setOpenDropdown] = useState<"status" | "priority" | null>(null);
 
   const [categories, setCategories] = useState<string[]>([]);
   const statuses = ["Nouveau", "En cours", "En attente", "Résolu"];
@@ -74,10 +74,6 @@ function Dashboard() {
     try {
       const params: Record<string, any> = {};
       if (user?.x_support_role === "user") params.user_id = user.id;
-      // Send the first selected category to the backend if any
-      if (activeFilters.categories.length > 0) {
-        params.category = activeFilters.categories[0];
-      }
 
       const res = await axios.get("http://localhost:8069/api/tickets", { params });
       if (res.data.status === 200) {
@@ -93,11 +89,18 @@ function Dashboard() {
   useEffect(() => {
     // Fetch categories dynamically
     axios.get("http://localhost:8069/api/categories").then(res => {
-      if (res.data.status === 200) setCategories(res.data.data);
-    }).catch(console.error);
+      if (res.data.status === 200) {
+        setCategories(res.data.data);
+      } else {
+        setCategories(["Logiciel", "Matériel", "Accès", "Réseau", "Messagerie", "Infrastructure", "Autre"]);
+      }
+    }).catch((e) => {
+      console.error(e);
+      setCategories(["Logiciel", "Matériel", "Accès", "Réseau", "Messagerie", "Infrastructure", "Autre"]);
+    });
     
     fetchTickets();
-  }, [activeFilters.categories]);
+  }, [user]);
 
   // ── Polling automatique toutes les 30s (sans loading spinner) ──
   useEffect(() => {
@@ -297,40 +300,7 @@ function Dashboard() {
                 )}
               </div>
 
-              {/* Category Dropdown */}
-              <div className="relative" onClick={(e) => e.stopPropagation()}>
-                <button
-                  onClick={() => setOpenDropdown(openDropdown === "category" ? null : "category")}
-                  className={`flex items-center gap-1.5 h-10 px-3.5 rounded-lg text-sm font-semibold transition-all duration-200 border ${activeFilters.categories.length > 0 || openDropdown === "category"
-                      ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
-                      : "bg-transparent border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)] hover:text-[hsl(var(--foreground))]"
-                    }`}
-                >
-                  <Filter size={14} />
-                  Catégorie {activeFilters.categories.length > 0 && `(${activeFilters.categories.length})`}
-                  <ChevronDown size={14} className={`transition-transform ${openDropdown === "category" ? "rotate-180" : ""}`} />
-                </button>
-                {openDropdown === "category" && (
-                  <div className="absolute top-11 right-0 w-56 bg-white dark:bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl shadow-xl z-[100] animate-fade-in flex flex-col gap-1 p-2 max-h-60 overflow-y-auto custom-scrollbar">
-                    {categories.map(cat => (
-                      <label key={cat} className="flex items-center gap-2.5 p-2 hover:bg-[hsl(var(--muted))] rounded-md cursor-pointer text-sm font-medium transition-colors">
-                        <input
-                          type="checkbox"
-                          checked={activeFilters.categories.includes(cat)}
-                          onChange={() => {
-                            setActiveFilters(prev => ({
-                              ...prev,
-                              categories: prev.categories.includes(cat) ? [] : [cat]
-                            }));
-                          }}
-                          className="accent-[hsl(var(--primary))] w-4 h-4 cursor-pointer"
-                        />
-                        {cat}
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
+
             </div>
 
             {/* View Toggle */}
@@ -353,8 +323,26 @@ function Dashboard() {
           </div>
         </div>
 
-        {/* Active Filters Summary & Reset */}
+        {/* Category Range (Multi-Select) & Reset */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[hsl(var(--border)/0.5)]">
+          <div className="flex flex-wrap gap-2">
+            {categories.map((cat) => {
+              const isSelected = activeFilters.categories.includes(cat);
+              return (
+                <button
+                  key={cat}
+                  onClick={() => toggleFilter("categories", cat)}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 cursor-pointer border ${isSelected
+                      ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
+                      : "bg-[hsl(var(--background)/0.5)] border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)] hover:text-[hsl(var(--foreground))]"
+                    }`}
+                >
+                  {cat}
+                </button>
+              );
+            })}
+          </div>
+
           {/* Reset Button & Dynamic Counter */}
           <div className="flex items-center gap-4 w-full sm:w-auto ml-auto">
             <span className="text-xs font-medium text-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted)/0.5)] px-3 py-1.5 rounded-md">
