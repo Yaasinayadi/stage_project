@@ -14,7 +14,8 @@ import {
   Inbox,
   Filter,
   ChevronDown,
-  XCircle
+  XCircle,
+  Activity
 } from "lucide-react";
 import StatsCard from "@/components/StatsCard";
 import TicketCard, { getStatusInfo } from "@/components/TicketCard";
@@ -173,18 +174,10 @@ function Dashboard() {
 
   // KPI calculations
   const totalTickets = tickets.length;
-  const openCount = tickets.filter((t) => {
-    const s = (t.state || "").toLowerCase();
-    return s.includes("nouveau") || s.includes("new") || s.includes("ouvert");
-  }).length;
-  const inProgressCount = tickets.filter((t) => {
-    const s = (t.state || "").toLowerCase();
-    return s.includes("cours") || s.includes("progress") || s.includes("attente");
-  }).length;
-  const resolvedCount = tickets.filter((t) => {
-    const s = (t.state || "").toLowerCase();
-    return s.includes("résolu") || s.includes("resolved") || s.includes("done") || s.includes("fermé");
-  }).length;
+  const resolvedCount = tickets.filter((t) => ["resolved", "closed"].includes(t.state)).length;
+  const breachedCount = tickets.filter((t) => !["resolved", "closed"].includes(t.state) && t.sla_status === "breached").length;
+  const atRiskCount   = tickets.filter((t) => !["resolved", "closed"].includes(t.state) && t.sla_status === "at_risk").length;
+  const inProgressCount = tickets.filter((t) => !["resolved", "closed"].includes(t.state) && t.sla_status !== "breached" && t.sla_status !== "at_risk").length;
 
   return (
     <div className="p-6 lg:p-8 max-w-[1400px] mx-auto space-y-6" onClick={() => setOpenDropdown(null)}>
@@ -213,11 +206,12 @@ function Dashboard() {
       </div>
 
       {/* ─── KPI Stats Row ─── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <StatsCard title="Total Tickets" value={totalTickets} icon={<Ticket size={20} />} color="#6366f1" loading={loading} delay={0} />
-        <StatsCard title="Ouverts" value={openCount} icon={<AlertTriangle size={20} />} color="#f59e0b" loading={loading} delay={80} />
-        <StatsCard title="En Cours" value={inProgressCount} icon={<Clock size={20} />} color="#ff6d5a" loading={loading} delay={160} />
-        <StatsCard title="Résolus" value={resolvedCount} icon={<CheckCircle2 size={20} />} color="#10b981" loading={loading} delay={240} />
+        <StatsCard title="Dépassé" value={breachedCount} icon={<AlertTriangle size={20} />} color="#ef4444" loading={loading} delay={80} />
+        <StatsCard title="À Risque" value={atRiskCount} icon={<Clock size={20} />} color="#f59e0b" loading={loading} delay={160} />
+        <StatsCard title="En Cours" value={inProgressCount} icon={<Activity size={20} />} color="#3b82f6" loading={loading} delay={240} />
+        <StatsCard title="Résolus" value={resolvedCount} icon={<CheckCircle2 size={20} />} color="#10b981" loading={loading} delay={320} />
       </div>
 
       {/* ─── Filters Bar ─── */}

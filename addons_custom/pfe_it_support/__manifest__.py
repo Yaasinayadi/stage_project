@@ -17,6 +17,7 @@
         'views/ticket_views.xml',
         'views/sla_views.xml',
         'views/users_views.xml',
+        'views/knowledge_views.xml',
     ],
     'installable': True,
     'application': True,

@@ -19,7 +19,7 @@ function AnalyticsDashboard() {
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState("all");
   const [data, setData] = useState({
-    counters: { total: 0, open: 0, in_progress: 0, resolved: 0 },
+    counters: { total: 0, overdue: 0, at_risk: 0, in_progress: 0, resolved: 0 },
     categories: [],
     trend: [],
     kpis: { mttr_hours: 0, sla_compliance: 100 }
@@ -67,7 +67,7 @@ function AnalyticsDashboard() {
   const pieData = isTechUser 
     ? [
         { name: "Résolus", value: data.counters.resolved },
-        { name: "À résoudre", value: data.counters.open + data.counters.in_progress }
+        { name: "À résoudre", value: data.counters.overdue + data.counters.at_risk + data.counters.in_progress }
       ].filter(d => d.value > 0) 
     : data.categories;
   const pieTitle = isTechUser ? "Progression des Tickets" : "Répartition IA (Catégories)";
@@ -114,9 +114,9 @@ function AnalyticsDashboard() {
       {/* KPI CARDS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
         <StatsCard title="Total Tickets" value={data.counters.total} icon={<Ticket size={20} />} color="#6366f1" loading={loading} delay={0} />
-        <StatsCard title="En Traitement" value={data.counters.open + data.counters.in_progress} icon={<Activity size={20} />} color="#f59e0b" loading={loading} delay={80} />
-        <StatsCard title="MTTR (Heures)" value={data.kpis.mttr_hours} icon={<Clock size={20} />} color="#ff6d5a" loading={loading} delay={160} />
-        <StatsCard title="SLA Respecté" value={`${data.kpis.sla_compliance}%`} icon={<Shield size={20} />} color="#10b981" loading={loading} delay={240} />
+        <StatsCard title="En Traitement" value={(data.counters.overdue || 0) + (data.counters.at_risk || 0) + (data.counters.in_progress || 0)} icon={<Activity size={20} />} color="#f59e0b" loading={loading} delay={80} />
+        <StatsCard title="MTTR (Heures)" value={data.kpis.mttr_hours || 0} icon={<Clock size={20} />} color="#ff6d5a" loading={loading} delay={160} />
+        <StatsCard title="SLA Respecté" value={`${data.kpis.sla_compliance || 0}%`} icon={<Shield size={20} />} color="#10b981" loading={loading} delay={240} />
       </div>
 
       {/* CHARTS ROW 1 */}
@@ -125,7 +125,7 @@ function AnalyticsDashboard() {
         {/* LINE CHART */}
         <div className="lg:col-span-2 glass-card p-6 flex flex-col rounded-2xl shadow-sm border border-[hsl(var(--border)/0.5)]">
           <h3 className="text-sm font-bold uppercase tracking-wider text-[hsl(var(--muted-foreground))] flex items-center gap-2 mb-6">
-            <TrendingUp size={16} /> Évolution des tickets (7 Jours)
+            <TrendingUp size={16} /> Évolution des tickets
           </h3>
           <div className="flex-1 min-h-[300px]">
             {loading ? (
@@ -198,7 +198,7 @@ function AnalyticsDashboard() {
                 {/* Center Label */}
                 <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
                   <span className="text-3xl font-black text-[hsl(var(--foreground))]">
-                    {isTechUser ? (data.counters.resolved + data.counters.open + data.counters.in_progress) : data.counters.total}
+                    {isTechUser ? (data.counters.resolved + data.counters.overdue + data.counters.at_risk + data.counters.in_progress) : data.counters.total}
                   </span>
                   <p className="text-[0.65rem] font-bold uppercase tracking-widest text-[hsl(var(--muted-foreground))]">Total</p>
                 </div>

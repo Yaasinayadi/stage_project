@@ -42,6 +42,8 @@ class SupportTicket(models.Model):
         ('breached', 'Dépassé'),
     ], string='Statut SLA', compute='_compute_sla_status', store=True)
     
+    date_done = fields.Datetime(string='Date de Résolution')
+    
     # Le microservice IA remplira ces champs via l'API
     ai_classification = fields.Char(string='Catégorie (par IA)')
     ai_confidence = fields.Float(string='Confiance IA (%)')
@@ -85,17 +87,22 @@ class SupportTicket(models.Model):
             else:
                 ticket.sla_deadline = False
 
-    @api.depends('sla_deadline', 'state')
+    @api.depends('sla_deadline', 'state', 'date_done')
     def _compute_sla_status(self):
         now = fields.Datetime.now()
         for ticket in self:
-            if ticket.state in ('resolved', 'closed'):
-                ticket.sla_status = 'on_track'
-            elif not ticket.sla_deadline:
+            target_date = ticket.date_done or now
+            if not ticket.sla_deadline:
                 ticket.sla_status = False
-            elif now > ticket.sla_deadline:
+            elif target_date > ticket.sla_deadline:
                 ticket.sla_status = 'breached'
-            elif now > ticket.sla_deadline - timedelta(hours=1):
+            elif ticket.state not in ('resolved', 'closed') and target_date > ticket.sla_deadline - timedelta(hours=1):
                 ticket.sla_status = 'at_risk'
             else:
                 ticket.sla_status = 'on_track'
+
+    @api.model
+    def write(self, vals):
+        if 'state' in vals and vals['state'] in ('resolved', 'closed'):
+            vals['date_done'] = fields.Datetime.now()
+        return super(SupportTicket, self).write(vals)

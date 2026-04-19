@@ -218,6 +218,9 @@ class SupportTicketController(http.Controller):
     @http.route('/api/ticket/create', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
     def create_ticket(self, **kw):
         """Crée un nouveau ticket de support via l'API."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+            
         post = json.loads(request.httprequest.data.decode('utf-8'))
         name = post.get('name')
         description = post.get('description')
@@ -226,10 +229,7 @@ class SupportTicketController(http.Controller):
         user_id = post.get('user_id')
 
         if not name or not description:
-            return request.make_response(
-                json.dumps({'status': 400, 'message': 'Missing name or description'}),
-                headers=[('Content-Type', 'application/json')]
-            )
+            return self._json_response({'status': 400, 'message': 'Missing name or description'}, status_code=400)
 
         vals = {
             'name': name,
@@ -244,10 +244,7 @@ class SupportTicketController(http.Controller):
 
         env = request.env['support.ticket'].sudo()
         new_ticket = env.create(vals)
-        return request.make_response(
-            json.dumps({'status': 201, 'message': 'Success', 'ticket_id': new_ticket.id}),
-            headers=[('Content-Type', 'application/json')]
-        )
+        return self._json_response({'status': 201, 'message': 'Success', 'ticket_id': new_ticket.id}, status_code=201)
 
     # ─────────────────────────────────────────────
     # UTILS
@@ -285,10 +282,7 @@ class SupportTicketController(http.Controller):
         ticket = env.browse(ticket_id)
         
         if not ticket.exists():
-            return request.make_response(
-                json.dumps({'status': 404, 'message': 'Ticket not found'}),
-                headers=[('Content-Type', 'application/json')]
-            )
+            return self._json_response({'status': 404, 'message': 'Ticket not found'}, status_code=404)
 
         vals = {}
         if 'name' in post: vals['name'] = post['name']
@@ -300,10 +294,7 @@ class SupportTicketController(http.Controller):
             vals['assigned_to_id'] = int(post['assigned_to_id']) if post['assigned_to_id'] else False
 
         ticket.write(vals)
-        return request.make_response(
-            json.dumps({'status': 200, 'message': 'Success updated'}),
-            headers=[('Content-Type', 'application/json')]
-        )
+        return self._json_response({'status': 200, 'message': 'Success updated'})
 
     @http.route('/api/ticket/<int:ticket_id>', type='http', auth='public', methods=['DELETE', 'OPTIONS'], csrf=False)
     def delete_ticket(self, ticket_id, **kw):
@@ -315,17 +306,10 @@ class SupportTicketController(http.Controller):
         ticket = env.browse(ticket_id)
         
         if not ticket.exists():
-            return request.make_response(
-                json.dumps({'status': 404, 'message': 'Ticket not found'}),
-                headers=[('Content-Type', 'application/json')]
-            )
+            return self._json_response({'status': 404, 'message': 'Ticket not found'}, status_code=404)
             
         ticket.unlink()
-        return request.make_response(
-            json.dumps({'status': 200, 'message': 'Ticket deleted successfully'}),
-            headers=[('Content-Type', 'application/json')]
-
-        )
+        return self._json_response({'status': 200, 'message': 'Ticket deleted successfully'})
 
     # ─────────────────────────────────────────────
     # CATEGORIES API
@@ -352,6 +336,8 @@ class SupportTicketController(http.Controller):
     @http.route('/api/agents', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
     def get_agents(self, **kw):
         """Récupère la liste des techniciens (utilisateurs internes)."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
         try:
             # Les agents/techniciens sont les utilisateurs internes (base.group_user)
             # mais pas les administrateurs système (base.group_system)
@@ -382,7 +368,62 @@ class SupportTicketController(http.Controller):
             return self._json_response({'status': 200, 'data': agents})
 
         except Exception as e:
-            return self._json_response({'status': 500, 'message': str(e)}, 500)
+            return self._json_response({'status': 500, 'message': str(e)}, status_code=500)
+
+    @http.route('/api/agents/suggest', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
+    def get_suggested_agents(self, **kw):
+        """Récupère une liste d'agents triée par pertinence pour une catégorie."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+            
+        try:
+            category = kw.get('category', '').strip()
+            # Strictly filter for role 'tech' only
+            domain = [('share', '=', False), ('active', '=', True), ('x_support_role', '=', 'tech')]
+            users = request.env['res.users'].sudo().search(domain)
+            system_group = request.env.ref('base.group_system', raise_if_not_found=False)
+            
+            all_agents = []
+            for u in users:
+                if system_group and u.has_group('base.group_system'):
+                    continue
+                if u.id <= 2:
+                    continue
+                
+                user_domains = [d.name for d in u.it_domain_ids]
+                is_expert = bool(category) and category in user_domains
+                
+                # Compter les tickets actifs
+                active_tickets_count = request.env['support.ticket'].sudo().search_count([
+                    ('assigned_to_id', '=', u.id),
+                    ('state', 'in', ['new', 'in_progress', 'assigned'])
+                ])
+                
+                all_agents.append({
+                    'id': u.id,
+                    'name': u.name,
+                    'email': u.email or u.login,
+                    'it_domains': user_domains,
+                    'active_tickets': active_tickets_count,
+                    'is_expert': is_expert
+                })
+            
+            # Si une catégorie est fournie, filtrer STRICTEMENT par domaine correspondant
+            # Fallback : si aucun tech ne correspond, retourner tous les techs
+            if category:
+                experts = [a for a in all_agents if a['is_expert']]
+                agents = experts if experts else all_agents
+            else:
+                agents = all_agents
+            
+            # Trier : d'abord les experts, puis le moins de charge de travail
+            agents.sort(key=lambda x: (not x['is_expert'], x['active_tickets']))
+            
+            return self._json_response({'status': 'success', 'data': agents})
+
+
+        except Exception as e:
+            return self._json_response({'status': 'error', 'message': str(e)}, status_code=500)
 
     # ─────────────────────────────────────────────
     # COMMENTS API
@@ -627,9 +668,13 @@ class SupportTicketController(http.Controller):
                 domain.append(('create_date', '>=', now - timedelta(days=30)))
 
             total_count = env.search_count(domain)
-            open_count = env.search_count(domain + [('state', '=', 'new')])
-            in_progress_count = env.search_count(domain + [('state', 'in', ('in_progress', 'waiting'))])
             resolved_count = env.search_count(domain + [('state', 'in', ('resolved', 'closed'))])
+            
+            # Non-resolved context for partition
+            open_domain = domain + [('state', 'not in', ('resolved', 'closed'))]
+            overdue_count = env.search_count(open_domain + [('sla_status', '=', 'breached')])
+            at_risk_count = env.search_count(open_domain + [('sla_status', '=', 'at_risk')])
+            in_progress_count = env.search_count(open_domain + [('sla_status', 'not in', ('breached', 'at_risk'))])
 
             # Répartition par catégorie
             cats_group = env.read_group(domain, ['ai_classification'], ['ai_classification'])
@@ -656,47 +701,62 @@ class SupportTicketController(http.Controller):
 
             category_stats = [{'name': k, 'value': v} for k, v in cat_map.items()]
 
-            # Evolution 7 derniers jours
+            # Trend calculation (Volume réel par jour)
             trend_stats = []
-            today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            
+            if period == 'today':
+                days_to_show = 1
+            elif period == 'week':
+                days_to_show = 7
+            elif period == 'month':
+                days_to_show = 30
+            else: # 'all'
+                days_to_show = 30 # For chart clarity, keep last 30 days
+            
             jour_mapping = {'Mon': 'Lun', 'Tue': 'Mar', 'Wed': 'Mer', 'Thu': 'Jeu', 'Fri': 'Ven', 'Sat': 'Sam', 'Sun': 'Dim'}
-            for i in range(6, -1, -1):
-                day_start = today - timedelta(days=i)
+            for i in range(days_to_show - 1, -1, -1):
+                day_start = today_start - timedelta(days=i)
                 day_end = day_start + timedelta(days=1)
                 cnt = env.search_count([('create_date', '>=', day_start), ('create_date', '<', day_end)])
-                en_day = day_start.strftime("%a")
+                day_name = day_start.strftime("%a")
                 trend_stats.append({
-                    'name': jour_mapping.get(en_day, en_day),
+                    'name': jour_mapping.get(day_name, day_name) if days_to_show <= 7 else day_start.strftime("%d/%m"),
                     'date': day_start.strftime("%Y-%m-%d"),
                     'tickets': cnt
                 })
                 
-            # MTTR & SLA
+            # MTTR & SLA (Basé sur la période sélectionnée)
             resolved_tickets = env.search(domain + [('state', 'in', ('resolved', 'closed'))])
             total_duration_hours = 0
             sla_ok_count = 0
             
             for rt in resolved_tickets:
-                if rt.create_date and rt.write_date:
-                    diff = rt.write_date - rt.create_date
+                # Priorité à date_done pour le MTTR réel
+                final_date = rt.date_done or rt.write_date
+                if rt.create_date and final_date:
+                    diff = final_date - rt.create_date
                     total_duration_hours += diff.total_seconds() / 3600.0
-                if rt.sla_status in (False, 'on_track'):
+                if rt.sla_status == 'on_track':
                     sla_ok_count += 1
             
             mttr = 0
-            sla_compliance = 100
+            sla_compliance = 0
             resolved_t_count = len(resolved_tickets)
             
             if resolved_t_count > 0:
                 mttr = round(total_duration_hours / resolved_t_count, 1)
                 sla_compliance = round((sla_ok_count / resolved_t_count) * 100, 1)
+            else:
+                sla_compliance = 0 # Par défaut si aucun ticket résolu
             
             data = {
                 'counters': {
                     'total': total_count,
-                    'open': open_count,
-                    'in_progress': in_progress_count,
                     'resolved': resolved_count,
+                    'overdue': overdue_count,
+                    'at_risk': at_risk_count,
+                    'in_progress': in_progress_count,
                 },
                 'categories': category_stats,
                 'trend': trend_stats,
@@ -736,9 +796,13 @@ class SupportTicketController(http.Controller):
                 domain.append(('create_date', '>=', now - timedelta(days=30)))
 
             total_count = env.search_count(domain)
-            open_count = env.search_count(domain + [('state', '=', 'new')])
-            in_progress_count = env.search_count(domain + [('state', 'in', ('in_progress', 'waiting'))])
             resolved_count = env.search_count(domain + [('state', 'in', ('resolved', 'closed'))])
+            
+            # Non-resolved context for partition
+            open_domain = domain + [('state', 'not in', ('resolved', 'closed'))]
+            overdue_count = env.search_count(open_domain + [('sla_status', '=', 'breached')])
+            at_risk_count = env.search_count(open_domain + [('sla_status', '=', 'at_risk')])
+            in_progress_count = env.search_count(open_domain + [('sla_status', 'not in', ('breached', 'at_risk'))])
 
             # Répartition par catégorie
             cats_group = env.read_group(domain, ['ai_classification'], ['ai_classification'])
@@ -765,47 +829,62 @@ class SupportTicketController(http.Controller):
 
             category_stats = [{'name': k, 'value': v} for k, v in cat_map.items()]
 
-            # Evolution 7 derniers jours
+            # Trend calculation (Volume réel par jour)
             trend_stats = []
-            today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            
+            if period == 'today':
+                days_to_show = 1
+            elif period == 'week':
+                days_to_show = 7
+            elif period == 'month':
+                days_to_show = 30
+            else: # 'all'
+                days_to_show = 30 # For chart clarity, keep last 30 days
+            
             jour_mapping = {'Mon': 'Lun', 'Tue': 'Mar', 'Wed': 'Mer', 'Thu': 'Jeu', 'Fri': 'Ven', 'Sat': 'Sam', 'Sun': 'Dim'}
-            for i in range(6, -1, -1):
-                day_start = today - timedelta(days=i)
+            for i in range(days_to_show - 1, -1, -1):
+                day_start = today_start - timedelta(days=i)
                 day_end = day_start + timedelta(days=1)
                 cnt = env.search_count(domain + [('create_date', '>=', day_start), ('create_date', '<', day_end)])
-                en_day = day_start.strftime("%a")
+                day_name = day_start.strftime("%a")
                 trend_stats.append({
-                    'name': jour_mapping.get(en_day, en_day),
+                    'name': jour_mapping.get(day_name, day_name) if days_to_show <= 7 else day_start.strftime("%d/%m"),
                     'date': day_start.strftime("%Y-%m-%d"),
                     'tickets': cnt
                 })
                 
-            # MTTR & SLA
+            # MTTR & SLA (Basé sur la période sélectionnée)
             resolved_tickets = env.search(domain + [('state', 'in', ('resolved', 'closed'))])
             total_duration_hours = 0
             sla_ok_count = 0
             
             for rt in resolved_tickets:
-                if rt.create_date and rt.write_date:
-                    diff = rt.write_date - rt.create_date
+                # Priorité à date_done pour le MTTR réel
+                final_date = rt.date_done or rt.write_date
+                if rt.create_date and final_date:
+                    diff = final_date - rt.create_date
                     total_duration_hours += diff.total_seconds() / 3600.0
-                if rt.sla_status in (False, 'on_track'):
+                if rt.sla_status == 'on_track':
                     sla_ok_count += 1
             
             mttr = 0
-            sla_compliance = 100
+            sla_compliance = 0
             resolved_t_count = len(resolved_tickets)
             
             if resolved_t_count > 0:
                 mttr = round(total_duration_hours / resolved_t_count, 1)
                 sla_compliance = round((sla_ok_count / resolved_t_count) * 100, 1)
+            else:
+                sla_compliance = 0 # Par défaut si aucun ticket résolu
             
             data = {
                 'counters': {
                     'total': total_count,
-                    'open': open_count,
-                    'in_progress': in_progress_count,
                     'resolved': resolved_count,
+                    'overdue': overdue_count,
+                    'at_risk': at_risk_count,
+                    'in_progress': in_progress_count,
                 },
                 'categories': category_stats,
                 'trend': trend_stats,

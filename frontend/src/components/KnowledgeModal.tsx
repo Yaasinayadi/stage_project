@@ -7,40 +7,63 @@ import type { KbArticle, KbTag } from "./KnowledgeCard";
 
 const ODOO_URL = "http://localhost:8069";
 
-const CATEGORIES = [
-  "Réseau", "Logiciel", "Matériel", "Accès",
-  "Messagerie", "Infrastructure", "Autre",
-];
-
 type Props = {
-  article?: KbArticle | null;  // null/undefined = création
+  article?: KbArticle | null;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (toastMsg?: string) => void;
   userId?: number | null;
   userRole?: string;
 };
 
 type Step = "form" | "saving" | "success";
 
-export default function KnowledgeModal({ article, onClose, onSaved, userId, userRole }: Props) {
+export default function KnowledgeModal({
+  article,
+  onClose,
+  onSaved,
+  userId,
+  userRole,
+}: Props) {
   const isEditing = !!article;
 
   // ─── State ────────────────────────────────────────────────────────────────
-  const [step, setStep]               = useState<Step>("form");
-  const [title, setTitle]             = useState(article?.title ?? "");
-  const [category, setCategory]       = useState(article?.category ?? "");
-  const [tagInput, setTagInput]       = useState(
-    article?.tags.map((t) => t.name).join(", ") ?? ""
+  const [step, setStep] = useState<Step>("form");
+  const [title, setTitle] = useState(article?.title ?? "");
+  const [category, setCategory] = useState(article?.category ?? "");
+  const [tagInput, setTagInput] = useState(
+    article?.tags.map((t) => t.name).join(", ") ?? "",
   );
-  const [content, setContent]         = useState("");
-  const [isPublished, setIsPublished] = useState(article?.is_published ?? false);
+  const [content, setContent] = useState("");
+  const [isPublished, setIsPublished] = useState(
+    article?.is_published ?? false,
+  );
   const [availableTags, setAvailableTags] = useState<KbTag[]>([]);
-  const [error, setError]             = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [categories, setCategories] = useState<string[]>([
+    "Réseau",
+    "Logiciel",
+    "Matériel",
+    "Accès",
+    "Messagerie",
+    "Infrastructure",
+    "Autre",
+  ]);
+
+  // Charger les catégories depuis Odoo
+  useEffect(() => {
+    axios
+      .get(`${ODOO_URL}/api/categories`)
+      .then((res) => {
+        if (res.data?.data?.length) setCategories(res.data.data);
+      })
+      .catch(() => {}); // garde les catégories par défaut si erreur
+  }, []);
 
   // On édition, on charge le HTML complet via l'endpoint détail
   useEffect(() => {
     if (article) {
-      axios.get(`${ODOO_URL}/api/knowledge/${article.id}`)
+      axios
+        .get(`${ODOO_URL}/api/knowledge/${article.id}`)
         .then((res) => {
           if (res.data.status === 200) {
             setContent(res.data.data.solution ?? "");
@@ -63,69 +86,103 @@ export default function KnowledgeModal({ article, onClose, onSaved, userId, user
     onClose();
   }, [onClose]);
 
-  const handleSubmit = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      setError(null);
 
-    if (!title.trim() || !content.trim()) {
-      setError("Le titre et le contenu sont requis.");
-      return;
-    }
-
-    setStep("saving");
-    try {
-      const tagNames = tagInput.split(",").map((s) => s.trim()).filter(Boolean);
-
-      if (isEditing && article) {
-        // PUT — mise à jour
-        const res = await axios.put(
-          `${ODOO_URL}/api/knowledge/${article.id}`,
-          {
-            title,
-            solution: content,
-            category: category || undefined,
-            is_published: isPublished,
-            requester_id: userId,
-            requester_role: userRole,
-            tag_names: tagNames,
-          },
-          { headers: { "Content-Type": "application/json" } }
-        );
-        if (res.data.status !== 200) throw new Error(res.data.message);
-      } else {
-        // POST — création
-        const res = await axios.post(
-          `${ODOO_URL}/api/knowledge/create`,
-          {
-            title,
-            solution: content,
-            category: category || undefined,
-            is_published: isPublished,
-            author_id: userId,
-            tag_names: tagNames,
-          },
-          { headers: { "Content-Type": "application/json" } }
-        );
-        if (res.data.status !== 201) throw new Error(res.data.message);
+      if (!title.trim() || !content.trim()) {
+        setError("Le titre et le contenu sont requis.");
+        return;
       }
 
+      setStep("saving");
+      try {
+        const tagNames = tagInput
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
 
-      setStep("success");
-      setTimeout(() => {
-        onSaved();
-        handleClose();
-      }, 1400);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Erreur lors de l'enregistrement.";
-      setError(msg);
-      setStep("form");
-    }
-  }, [title, content, category, tagInput, isPublished, isEditing, article, userId, userRole, onSaved, handleClose]);
+        if (isEditing && article) {
+          // PUT — mise à jour
+          const res = await axios.put(
+            `${ODOO_URL}/api/knowledge/${article.id}`,
+            {
+              title,
+              solution: content,
+              category: category || undefined,
+              is_published: isPublished,
+              requester_id: userId,
+              requester_role: userRole,
+              tag_names: tagNames,
+            },
+            { headers: { "Content-Type": "application/json" } },
+          );
+          if (res.data.status !== 200 && res.data.status !== "200")
+            throw new Error(res.data.message || "Erreur mise à jour");
+        } else {
+          // POST — création
+          const res = await axios.post(
+            `${ODOO_URL}/api/knowledge/create`,
+            {
+              title,
+              solution: content,
+              category: category || undefined,
+              is_published: isPublished,
+              author_id: userId,
+              tag_names: tagNames,
+            },
+            { headers: { "Content-Type": "application/json" } },
+          );
+          if (res.data.status !== 201 && res.data.status !== "201")
+            throw new Error(res.data.message || "Erreur création");
+
+          const toastMsg =
+            res.data.message ||
+            `L'article "${title}" a été publié avec succès.`;
+          setStep("success");
+          setTimeout(() => {
+            onSaved(toastMsg);
+            handleClose();
+          }, 1400);
+          return;
+        }
+
+        setStep("success");
+        setTimeout(() => {
+          onSaved();
+          handleClose();
+        }, 1400);
+      } catch (err: unknown) {
+        const msg =
+          err instanceof Error
+            ? err.message
+            : "Erreur lors de l'enregistrement.";
+        setError(msg);
+        setStep("form");
+      }
+    },
+    [
+      title,
+      content,
+      category,
+      tagInput,
+      isPublished,
+      isEditing,
+      article,
+      userId,
+      userRole,
+      onSaved,
+      handleClose,
+    ],
+  );
 
   return (
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in"
-      onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) handleClose();
+      }}
     >
       <div
         className="glass-card w-full max-w-xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden scale-in"
@@ -142,7 +199,9 @@ export default function KnowledgeModal({ article, onClose, onSaved, userId, user
                 {isEditing ? "Modifier l'article" : "Nouvel article KB"}
               </h2>
               <p className="text-[0.65rem] text-[hsl(var(--muted-foreground))]">
-                {isEditing ? "Modifiez les informations ci-dessous" : "Documentez une solution pour l'équipe"}
+                {isEditing
+                  ? "Modifiez les informations ci-dessous"
+                  : "Documentez une solution pour l'équipe"}
               </p>
             </div>
           </div>
@@ -156,13 +215,16 @@ export default function KnowledgeModal({ article, onClose, onSaved, userId, user
 
         {/* ── Form ── */}
         {step === "form" && (
-          <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <form
+            onSubmit={handleSubmit}
+            className="flex flex-col flex-1 overflow-hidden"
+          >
             <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-4">
-
               {/* Titre */}
               <div>
                 <label className="block text-sm font-semibold mb-1.5">
-                  Titre de l&apos;article <span className="text-red-500">*</span>
+                  Titre de l&apos;article{" "}
+                  <span className="text-red-500">*</span>
                 </label>
                 <input
                   required
@@ -175,15 +237,19 @@ export default function KnowledgeModal({ article, onClose, onSaved, userId, user
 
               {/* Catégorie */}
               <div>
-                <label className="block text-sm font-semibold mb-1.5">Catégorie IT</label>
+                <label className="block text-sm font-semibold mb-1.5">
+                  Catégorie IT
+                </label>
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                   className="input-field focus-ring w-full"
                 >
                   <option value="">— Choisir une catégorie —</option>
-                  {CATEGORIES.map((c) => (
-                    <option key={c} value={c}>{c}</option>
+                  {categories.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -218,14 +284,17 @@ export default function KnowledgeModal({ article, onClose, onSaved, userId, user
                   placeholder="Décrivez les étapes de résolution, commandes, liens utiles..."
                 />
                 <p className="text-[0.65rem] text-[hsl(var(--muted-foreground))] mt-1">
-                  Vous pouvez utiliser du HTML basique : &lt;b&gt;, &lt;ul&gt;, &lt;li&gt;, &lt;p&gt;, &lt;h3&gt;
+                  Vous pouvez utiliser du HTML basique : &lt;b&gt;, &lt;ul&gt;,
+                  &lt;li&gt;, &lt;p&gt;, &lt;h3&gt;
                 </p>
               </div>
 
               {/* Toggle publication */}
               <div className="flex items-center justify-between p-3 rounded-xl bg-[hsl(var(--muted)/0.4)] border border-[hsl(var(--border)/0.5)]">
                 <div>
-                  <p className="text-sm font-semibold">Publier l&apos;article</p>
+                  <p className="text-sm font-semibold">
+                    Publier l&apos;article
+                  </p>
                   <p className="text-[0.65rem] text-[hsl(var(--muted-foreground))]">
                     Les articles publiés sont visibles par tous les utilisateurs
                   </p>
@@ -234,7 +303,9 @@ export default function KnowledgeModal({ article, onClose, onSaved, userId, user
                   type="button"
                   onClick={() => setIsPublished((v) => !v)}
                   className={`relative w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 ${
-                    isPublished ? "bg-[hsl(var(--primary))]" : "bg-[hsl(var(--muted-foreground)/0.3)]"
+                    isPublished
+                      ? "bg-[hsl(var(--primary))]"
+                      : "bg-[hsl(var(--muted-foreground)/0.3)]"
                   }`}
                 >
                   <span
@@ -258,7 +329,10 @@ export default function KnowledgeModal({ article, onClose, onSaved, userId, user
               <button type="button" onClick={handleClose} className="btn-ghost">
                 Annuler
               </button>
-              <button type="submit" className="btn-primary flex items-center gap-2">
+              <button
+                type="submit"
+                className="btn-primary flex items-center gap-2"
+              >
                 {isEditing ? "Enregistrer" : "Publier l'article"}
               </button>
             </div>
@@ -283,10 +357,14 @@ export default function KnowledgeModal({ article, onClose, onSaved, userId, user
             </div>
             <div className="text-center">
               <h3 className="font-bold text-base mb-1">
-                {isEditing ? "Article mis à jour !" : "Article créé avec succès !"}
+                {isEditing
+                  ? "Article mis à jour !"
+                  : "Article créé avec succès !"}
               </h3>
               <p className="text-sm text-[hsl(var(--muted-foreground))]">
-                {isPublished ? "L'article est maintenant visible par tous." : "L'article est enregistré en brouillon."}
+                {isPublished
+                  ? "L'article est maintenant visible par tous."
+                  : "L'article est enregistré en brouillon."}
               </p>
             </div>
           </div>

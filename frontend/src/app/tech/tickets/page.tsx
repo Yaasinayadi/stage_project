@@ -92,10 +92,10 @@ function MyTicketsPage() {
     .filter((t) => !stateFilter || t.state === stateFilter)
     .sort((a, b) => parseInt(b.priority) - parseInt(a.priority));
 
-  const atRisk   = filtered.filter((t) => t.sla_status === "at_risk").length;
-  const breached  = filtered.filter((t) => t.sla_status === "breached").length;
-  const inProgress = filtered.filter((t) => ["new", "assigned", "in_progress"].includes(t.state)).length;
-  const resolved  = filtered.filter((t) => ["resolved", "closed"].includes(t.state)).length;
+  const resolved   = filtered.filter((t) => ["resolved", "closed"].includes(t.state)).length;
+  const breached   = filtered.filter((t) => !["resolved", "closed"].includes(t.state) && t.sla_status === "breached").length;
+  const atRisk     = filtered.filter((t) => !["resolved", "closed"].includes(t.state) && t.sla_status === "at_risk").length;
+  const inProgress = filtered.filter((t) => !["resolved", "closed"].includes(t.state) && t.sla_status !== "breached" && t.sla_status !== "at_risk").length;
 
   return (
     <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-6" onClick={() => setOpenDropdown(null)}>

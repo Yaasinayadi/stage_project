@@ -135,9 +135,15 @@ class TicketController(http.Controller):
                 'state': 'in_progress'
             })
             
+            tech_name = request.env['res.users'].sudo().browse(user_id).name or 'Technicien'
+            formatted_ref = f"TK-{str(ticket.id).zfill(4)}"
+            
             headers.append(('Content-Type', 'application/json'))
             return request.make_response(
-                json.dumps({'status': 'success', 'message': f"Ticket {ticket.id} assigné avec succès"}),
+                json.dumps({
+                    'status': 'success', 
+                    'message': f"Le ticket {formatted_ref} a été attribué avec succès à {tech_name}."
+                }),
                 headers=headers
             )
         except Exception as e:
@@ -177,9 +183,72 @@ class TicketController(http.Controller):
                 'state': 'in_progress'
             })
             
+            tech_name = ticket.assigned_to_id.name if ticket.assigned_to_id else 'Technicien'
+            formatted_ref = f"TK-{str(ticket.id).zfill(4)}"
+            
             headers.append(('Content-Type', 'application/json'))
             return request.make_response(
-                json.dumps({'status': 'success', 'message': f"Ticket {ticket.id} accepté avec succès"}),
+                json.dumps({
+                    'status': 'success', 
+                    'message': f"Le ticket {formatted_ref} a été attribué avec succès à {tech_name}."
+                }),
+                headers=headers
+            )
+        except Exception as e:
+            headers.append(('Content-Type', 'application/json'))
+            return request.make_response(
+                json.dumps({'status': 'error', 'message': str(e)}),
+                headers=headers,
+                status=500
+            )
+
+    @http.route('/api/ticket/<int:ticket_id>/dispatch', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
+    def dispatch_ticket(self, ticket_id, **kwargs):
+        """
+        Assigne manuellement un ticket à un technicien cible (Admin).
+        """
+        origin = request.httprequest.headers.get('Origin', 'http://localhost:3000')
+        headers = [
+            ('Access-Control-Allow-Origin', origin),
+            ('Access-Control-Allow-Methods', 'POST, OPTIONS'),
+            ('Access-Control-Allow-Credentials', 'true'),
+            ('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization')
+        ]
+        
+        if request.httprequest.method == 'OPTIONS':
+            return request.make_response('', headers=headers)
+            
+        try:
+            ticket = request.env['support.ticket'].sudo().browse(ticket_id)
+            if not ticket.exists():
+                headers.append(('Content-Type', 'application/json'))
+                return request.make_response(json.dumps({'status': 'error', 'message': 'Ticket introuvable'}), headers=headers, status=404)
+            
+            body = json.loads(request.httprequest.data.decode('utf-8')) if request.httprequest.data else {}
+            target_user_id = int(body.get('target_user_id', 0))
+            if not target_user_id:
+                headers.append(('Content-Type', 'application/json'))
+                return request.make_response(
+                    json.dumps({'status': 'error', 'message': 'target_user_id requis pour assigner le ticket'}),
+                    headers=headers, status=400
+                )
+            
+            ticket.write({
+                'assigned_to_id': target_user_id,
+                'x_accepted': False,
+                'state': 'assigned'
+            })
+            
+            target_user = request.env['res.users'].sudo().browse(target_user_id)
+            tech_name = target_user.name or 'Technicien'
+            formatted_ref = f"TK-{str(ticket.id).zfill(4)}"
+            
+            headers.append(('Content-Type', 'application/json'))
+            return request.make_response(
+                json.dumps({
+                    'status': 'success', 
+                    'message': f"Le ticket {formatted_ref} a été attribué avec succès à {tech_name}."
+                }),
                 headers=headers
             )
         except Exception as e:
@@ -345,37 +414,56 @@ class TicketController(http.Controller):
         full=True : inclut le HTML complet (pour la vue détail).
         full=False : inclut uniquement le solution_preview (pour la liste/cartes).
         """
-        if request.httprequest.method == 'OPTIONS':
-            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'GET, OPTIONS')])
-        try:
-            env = request.env['support.knowledge'].sudo()
+        tags = [{'id': t.id, 'name': t.name} for t in kb.tag_ids]
+        data = {
+            'id': kb.id,
+            'title': kb.name,
+            'category': kb.category,
+            'author': kb.author_id.name or 'Inconnu',
+            'author_id': kb.author_id.id,
+            'date': kb.write_date.isoformat() if kb.write_date else None,
+            'is_published': kb.is_published,
+            'tags': tags,
+            'solution_preview': kb.solution_preview or ''
+        }
+        if full:
+            data['solution'] = kb.solution
+            data['source_ticket_id'] = kb.ticket_id.id if kb.ticket_id else None
+            data['source_ticket_ref'] = kb.ticket_id.name if kb.ticket_id else None
+        return data
 
-            # ── Filtres ──────────────────────────────────────────────────
+    @http.route('/api/knowledge', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
+    def get_knowledge_list(self, **kw):
+        """Récupère la liste paginée des articles KB."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+
+        try:
             domain = []
-            category      = kw.get('category')
-            search        = kw.get('search')
+            category       = kw.get('category')
+            search         = kw.get('search')
             published_only = kw.get('published_only')
 
             if category:
                 domain.append(('category', '=', category))
             if search:
-                domain += ['|', ('name', 'ilike', search),
-                                 ('solution_preview', 'ilike', search)]
+                domain += ['|', ('name', 'ilike', search), ('solution', 'ilike', search)]
             if published_only in ('1', 'true', 'True'):
                 domain.append(('is_published', '=', True))
 
-            # ── Pagination ───────────────────────────────────────────────
+            # ── Pagination ──
             try:
-                page  = max(1, int(kw.get('page',  1)))
+                page  = max(1, int(kw.get('page', 1)))
                 limit = max(1, int(kw.get('limit', 12)))
             except (ValueError, TypeError):
                 page, limit = 1, 12
 
-            total  = env.search_count(domain)
-            pages  = max(1, -(-total // limit))  # ceil division
+            KB = request.env['support.knowledge'].sudo()
+            total  = KB.search_count(domain)
+            pages  = max(1, -(-total // limit))
             offset = (page - 1) * limit
 
-            articles = env.search(domain, order='write_date desc', limit=limit, offset=offset)
+            articles = KB.search(domain, order='write_date desc', limit=limit, offset=offset)
             data = [self._kb_article_to_dict(a) for a in articles]
 
             return self._cors_response({
@@ -391,7 +479,7 @@ class TicketController(http.Controller):
         except Exception as e:
             import traceback
             _logger.error("Erreur GET /api/knowledge : %s\n%s", e, traceback.format_exc())
-            return self._cors_response({'status': 500, 'message': str(e), 'trace': traceback.format_exc()}, status=500)
+            return self._cors_response({'status': 500, 'message': str(e)}, status=500)
 
     # ─── GET / PUT / DELETE /api/knowledge/<id> ──────────────────────────────
     @http.route('/api/knowledge/<int:article_id>', type='http', auth='public', methods=['GET', 'PUT', 'DELETE', 'OPTIONS'], csrf=False)
@@ -463,20 +551,39 @@ class TicketController(http.Controller):
                 status=500
             )
 
-    @http.route('/api/knowledge/create', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
+    @http.route('/api/knowledge/create', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
     def create_knowledge_base(self, **kwargs):
         """
         Crée manuellement un article de la base de connaissances.
         """
+        origin = request.httprequest.headers.get('Origin', 'http://localhost:3000')
+        headers = [
+            ('Access-Control-Allow-Origin', origin),
+            ('Access-Control-Allow-Methods', 'POST, OPTIONS'),
+            ('Access-Control-Allow-Credentials', 'true'),
+            ('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization')
+        ]
         if request.httprequest.method == 'OPTIONS':
-            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'POST, OPTIONS'), ('Access-Control-Allow-Headers', 'Content-Type')])
+            return request.make_response('', headers=headers)
+
         try:
-            title = kwargs.get('title')
-            solution = kwargs.get('solution')
-            category = kwargs.get('category')
-            
+            # Parse JSON body
+            body = json.loads(request.httprequest.data.decode('utf-8')) if request.httprequest.data else {}
+
+            title        = body.get('title', '').strip()
+            solution     = body.get('solution', '').strip()
+            category     = body.get('category', '').strip() or None
+            is_published = bool(body.get('is_published', False))
+            author_id    = body.get('author_id')
+            ticket_id    = body.get('source_ticket_id')
+            tag_names    = body.get('tag_names', [])
+
             if not title or not solution:
-                return self._cors_response({'status': 400, 'message': 'Le titre et la solution sont requis.'}, status=400)
+                headers.append(('Content-Type', 'application/json'))
+                return request.make_response(
+                    json.dumps({'status': 400, 'message': 'Le titre et la solution sont requis.'}),
+                    headers=headers, status=400
+                )
 
             vals = {
                 'name':         title,
@@ -494,7 +601,8 @@ class TicketController(http.Controller):
                 TagModel = request.env['support.knowledge.tag'].sudo()
                 for name in tag_names:
                     name = str(name).strip()
-                    if not name: continue
+                    if not name:
+                        continue
                     tag = TagModel.search([('name', '=ilike', name)], limit=1)
                     if not tag:
                         tag = TagModel.create({'name': name})
@@ -503,15 +611,28 @@ class TicketController(http.Controller):
 
             new_kb = request.env['support.knowledge'].sudo().create(vals)
 
-            return self._cors_response({
-                'status': 201, 
-                'message': 'Article créé.', 
-                'data': self._kb_article_to_dict(new_kb)
-            }, status=201)
+            headers.append(('Content-Type', 'application/json'))
+            return request.make_response(
+                json.dumps({
+                    'status': 201,
+                    'message': f"L'article \"{title}\" a été publié avec succès dans la base de connaissances.",
+                    'data': {
+                        'id': new_kb.id,
+                        'title': new_kb.name,
+                        'category': new_kb.category,
+                        'is_published': new_kb.is_published,
+                    }
+                }),
+                headers=headers, status=201
+            )
         except Exception as e:
             import traceback
             _logger.error("Erreur create_knowledge : %s\n%s", e, traceback.format_exc())
-            return self._cors_response({'status': 500, 'message': str(e), 'trace': traceback.format_exc()}, status=500)
+            headers.append(('Content-Type', 'application/json'))
+            return request.make_response(
+                json.dumps({'status': 500, 'message': str(e)}),
+                headers=headers, status=500
+            )
 
     # ─── GET /api/knowledge/export  (export RAG) ────────────────────────────
     @http.route('/api/knowledge/export', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)

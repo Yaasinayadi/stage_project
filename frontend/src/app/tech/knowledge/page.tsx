@@ -3,8 +3,14 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import axios from "axios";
 import {
-  BookOpen, Search, RefreshCw, Plus, ChevronLeft, ChevronRight,
-  Filter, X,
+  BookOpen,
+  Search,
+  RefreshCw,
+  Plus,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+  X,
 } from "lucide-react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAuth } from "@/lib/auth";
@@ -15,8 +21,13 @@ import KnowledgeModal from "@/components/KnowledgeModal";
 const ODOO_URL = "http://localhost:8069";
 
 const CATEGORIES = [
-  "Réseau", "Logiciel", "Matériel", "Accès",
-  "Messagerie", "Infrastructure", "Autre",
+  "Réseau",
+  "Logiciel",
+  "Matériel",
+  "Accès",
+  "Messagerie",
+  "Infrastructure",
+  "Autre",
 ];
 
 type Pagination = { page: number; limit: number; total: number; pages: number };
@@ -28,51 +39,61 @@ function KnowledgePage() {
   const canWrite = role === "admin" || role === "tech";
 
   // ── Data ──────────────────────────────────────────────────────────────────
-  const [articles, setArticles]       = useState<KbArticle[]>([]);
-  const [pagination, setPagination]   = useState<Pagination>({ page: 1, limit: 12, total: 0, pages: 1 });
-  const [loading, setLoading]         = useState(true);
+  const [articles, setArticles] = useState<KbArticle[]>([]);
+  const [pagination, setPagination] = useState<Pagination>({
+    page: 1,
+    limit: 12,
+    total: 0,
+    pages: 1,
+  });
+  const [loading, setLoading] = useState(true);
 
   // ── Filters ───────────────────────────────────────────────────────────────
-  const [search, setSearch]           = useState("");
-  const [catFilter, setCatFilter]     = useState<string | null>(null);
-  const [page, setPage]               = useState(1);
-  const searchTimer                   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [search, setSearch] = useState("");
+  const [catFilter, setCatFilter] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Modals ────────────────────────────────────────────────────────────────
-  const [readArticle, setReadArticle]     = useState<KbArticle | null>(null);
-  const [editArticle, setEditArticle]     = useState<KbArticle | null | undefined>(undefined);
+  const [readArticle, setReadArticle] = useState<KbArticle | null>(null);
+  const [editArticle, setEditArticle] = useState<KbArticle | null | undefined>(
+    undefined,
+  );
   // undefined = modal fermé, null = création, KbArticle = édition
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
-  const fetchArticles = useCallback(async (
-    p = 1,
-    q = search,
-    cat = catFilter
-  ) => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        page: String(p),
-        limit: "12",
-        ...(q   ? { search: q }         : {}),
-        ...(cat  ? { category: cat }     : {}),
-        // Regular users only see published articles
-        ...(role === "user" ? { published_only: "1" } : {}),
-      });
-      const res = await axios.get(`${ODOO_URL}/api/knowledge?${params}`);
-      if (res.data.status === 200) {
-        setArticles(res.data.data);
-        setPagination(res.data.pagination);
+  const fetchArticles = useCallback(
+    async (p = 1, q = search, cat = catFilter) => {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams({
+          page: String(p),
+          limit: "12",
+          ...(q ? { search: q } : {}),
+          ...(cat ? { category: cat } : {}),
+          // Regular users only see published articles
+          ...(role === "user" ? { published_only: "1" } : {}),
+        });
+        const res = await axios.get(`${ODOO_URL}/api/knowledge?${params}`);
+        if (res.data.status === 200) {
+          setArticles(res.data.data);
+          setPagination(res.data.pagination);
+        }
+      } catch (err) {
+        console.error("Erreur KB:", err);
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      console.error("Erreur KB:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, [search, catFilter, role]);
+    },
+    [search, catFilter, role],
+  );
 
-  useEffect(() => { fetchArticles(1); }, [catFilter]); // eslint-disable-line
-  useEffect(() => { fetchArticles(page); }, [page]);    // eslint-disable-line
+  useEffect(() => {
+    fetchArticles(1);
+  }, [catFilter]); // eslint-disable-line
+  useEffect(() => {
+    fetchArticles(page);
+  }, [page]); // eslint-disable-line
 
   // Debounced search
   const handleSearchChange = (val: string) => {
@@ -85,18 +106,26 @@ function KnowledgePage() {
   };
 
   // ── Delete handler ────────────────────────────────────────────────────────
-  const handleDelete = useCallback(async (art: KbArticle) => {
-    if (!confirm(`Supprimer l'article "${art.title}" ? Cette action est irréversible.`)) return;
-    try {
-      await axios.delete(`${ODOO_URL}/api/knowledge/${art.id}`, {
-        data: { requester_role: role },
-        headers: { "Content-Type": "application/json" },
-      });
-      fetchArticles(page);
-    } catch {
-      alert("Erreur lors de la suppression.");
-    }
-  }, [role, page, fetchArticles]);
+  const handleDelete = useCallback(
+    async (art: KbArticle) => {
+      if (
+        !confirm(
+          `Supprimer l'article "${art.title}" ? Cette action est irréversible.`,
+        )
+      )
+        return;
+      try {
+        await axios.delete(`${ODOO_URL}/api/knowledge/${art.id}`, {
+          data: { requester_role: role },
+          headers: { "Content-Type": "application/json" },
+        });
+        fetchArticles(page);
+      } catch {
+        alert("Erreur lors de la suppression.");
+      }
+    },
+    [role, page, fetchArticles],
+  );
 
   const resetFilters = () => {
     setSearch("");
@@ -109,7 +138,6 @@ function KnowledgePage() {
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -119,7 +147,8 @@ function KnowledgePage() {
           </h1>
           <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">
             Solutions documentées par l&apos;équipe IT —{" "}
-            <span className="font-semibold">{pagination.total}</span> article{pagination.total !== 1 ? "s" : ""}
+            <span className="font-semibold">{pagination.total}</span> article
+            {pagination.total !== 1 ? "s" : ""}
           </p>
         </div>
 
@@ -172,7 +201,10 @@ function KnowledgePage() {
         <div className="flex flex-wrap items-center gap-2">
           <Filter size={13} className="text-[hsl(var(--muted-foreground))]" />
           <button
-            onClick={() => { setCatFilter(null); setPage(1); }}
+            onClick={() => {
+              setCatFilter(null);
+              setPage(1);
+            }}
             className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${
               !catFilter
                 ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
@@ -184,7 +216,10 @@ function KnowledgePage() {
           {CATEGORIES.map((cat) => (
             <button
               key={cat}
-              onClick={() => { setCatFilter(catFilter === cat ? null : cat); setPage(1); }}
+              onClick={() => {
+                setCatFilter(catFilter === cat ? null : cat);
+                setPage(1);
+              }}
               className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${
                 catFilter === cat
                   ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
@@ -214,7 +249,10 @@ function KnowledgePage() {
         </div>
       ) : articles.length === 0 ? (
         <div className="glass-card flex flex-col items-center justify-center py-20 text-center">
-          <BookOpen size={40} className="text-[hsl(var(--muted-foreground)/0.3)] mb-3" />
+          <BookOpen
+            size={40}
+            className="text-[hsl(var(--muted-foreground)/0.3)] mb-3"
+          />
           <h3 className="text-lg font-semibold">Aucun article trouvé</h3>
           <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1 max-w-xs">
             {pagination.total === 0
@@ -258,7 +296,10 @@ function KnowledgePage() {
             <ChevronLeft size={16} /> Précédent
           </button>
           <span className="text-sm text-[hsl(var(--muted-foreground))]">
-            Page <span className="font-semibold text-[hsl(var(--foreground))]">{page}</span>{" "}
+            Page{" "}
+            <span className="font-semibold text-[hsl(var(--foreground))]">
+              {page}
+            </span>{" "}
             sur <span className="font-semibold">{pagination.pages}</span>
           </span>
           <button
@@ -278,8 +319,22 @@ function KnowledgePage() {
           currentUserId={user?.id}
           currentUserRole={role}
           onClose={() => setReadArticle(null)}
-          onEdit={canWrite ? (a) => { setReadArticle(null); setEditArticle(a); } : undefined}
-          onDelete={role === "admin" ? (a) => { setReadArticle(null); handleDelete(a); } : undefined}
+          onEdit={
+            canWrite
+              ? (a) => {
+                  setReadArticle(null);
+                  setEditArticle(a);
+                }
+              : undefined
+          }
+          onDelete={
+            role === "admin"
+              ? (a) => {
+                  setReadArticle(null);
+                  handleDelete(a);
+                }
+              : undefined
+          }
         />
       )}
 
@@ -289,7 +344,10 @@ function KnowledgePage() {
           userId={user?.id}
           userRole={role}
           onClose={() => setEditArticle(undefined)}
-          onSaved={() => { setEditArticle(undefined); fetchArticles(page); }}
+          onSaved={() => {
+            setEditArticle(undefined);
+            fetchArticles(page);
+          }}
         />
       )}
     </div>
@@ -299,7 +357,9 @@ function KnowledgePage() {
 // ─── Route Guard ──────────────────────────────────────────────────────────────
 export default function KnowledgePageRoute() {
   return (
-    <ProtectedRoute>   {/* accessible à TOUS les rôles */}
+    <ProtectedRoute>
+      {" "}
+      {/* accessible à TOUS les rôles */}
       <KnowledgePage />
     </ProtectedRoute>
   );
