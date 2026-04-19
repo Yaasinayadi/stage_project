@@ -52,6 +52,9 @@ class SupportTicket(models.Model):
     # Résolution apportée par le technicien
     resolution = fields.Text(string='Résolution Appliquée')
 
+    # Acceptation explicite par le technicien
+    x_accepted = fields.Boolean(string='Accepté par le technicien', default=False)
+
     # Pièces jointes (logs, images, captures d'écran)
     attachment_ids = fields.Many2many(
         'ir.attachment',

@@ -162,20 +162,34 @@ class SupportTicketController(http.Controller):
     @http.route('/api/tickets', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
     def get_tickets(self, **kw):
         """Récupère la liste de tous les tickets de support."""
+        origin = request.httprequest.headers.get('Origin', 'http://localhost:3000')
+        headers = [
+            ('Access-Control-Allow-Origin', origin),
+            ('Access-Control-Allow-Methods', 'GET, OPTIONS'),
+            ('Access-Control-Allow-Credentials', 'true'),
+            ('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization')
+        ]
+        if request.httprequest.method == 'OPTIONS':
+            return request.make_response('', headers=headers)
+            
         env = request.env['support.ticket'].sudo()
 
         # Filtrer par user_id ou assigned_to si fourni
         user_id = kw.get('user_id')
         assigned_to = kw.get('assigned_to')
+        category = kw.get('category')
         domain = []
         
         if user_id:
             domain.append(('user_id', '=', int(user_id)))
             
         if assigned_to:
-            # L'agent voit aussi les tickets non assignés s'il le veut, ou que les siens ? 
-            # Pour l'instant, on limite strictement à ceux qui lui sont assignés
-            domain.append(('assigned_to', '=', int(assigned_to)))
+            # "Mes Tickets" : tickets assignés au technicien ET explicitement acceptés
+            domain.append(('assigned_to_id', '=', int(assigned_to)))
+            domain.append(('x_accepted', '=', True))
+            
+        if category:
+            domain.append(('ai_classification', '=', category))
 
         tickets = env.search(domain, order='create_date desc')
         data = [{
@@ -185,6 +199,7 @@ class SupportTicketController(http.Controller):
             'state': t.state,
             'priority': t.priority,
             'category': t.ai_classification,
+            'x_accepted': t.x_accepted,
             'user_id': t.user_id.id if t.user_id else None,
             'user_name': t.user_id.name if t.user_id else None,
             'assigned_to_id': t.assigned_to_id.id if t.assigned_to_id else None,
@@ -194,9 +209,10 @@ class SupportTicketController(http.Controller):
             'create_date': str(t.create_date) if t.create_date else None,
             'write_date': str(t.write_date) if t.write_date else None,
         } for t in tickets]
+        headers.append(('Content-Type', 'application/json'))
         return request.make_response(
             json.dumps({'status': 200, 'data': data}),
-            headers=[('Content-Type', 'application/json')]
+            headers=headers
         )
 
     @http.route('/api/ticket/create', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
@@ -310,6 +326,24 @@ class SupportTicketController(http.Controller):
             headers=[('Content-Type', 'application/json')]
 
         )
+
+    # ─────────────────────────────────────────────
+    # CATEGORIES API
+    # ─────────────────────────────────────────────
+
+    @http.route('/api/categories', type='http', auth='public', methods=['GET', 'OPTIONS'], cors='*', csrf=False)
+    def get_categories(self, **kw):
+        """Récupère la liste des catégories de tickets disponibles."""
+        try:
+            domain_recs = request.env['pfe.it.domain'].sudo().search([])
+            categories = [d.name for d in domain_recs]
+            
+            # Add fallback distinct ai_classification from tickets if we want
+            # but getting them from pfe.it.domain should be enough.
+            
+            return self._json_response({'status': 200, 'data': categories})
+        except Exception as e:
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
 
     # ─────────────────────────────────────────────
     # AGENTS API

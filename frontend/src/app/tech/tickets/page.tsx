@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import {
   ClipboardList, RefreshCw, AlertTriangle, Clock, User2,
-  CheckCircle2, Filter, ChevronDown
+  CheckCircle2, Filter, ChevronDown, Calendar, Tag
 } from "lucide-react";
 import SlaBadge from "@/components/SlaBadge";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -13,11 +13,11 @@ import Link from "next/link";
 
 const ODOO_URL = "http://localhost:8069";
 
-const PRIORITY_MAP: Record<string, { label: string; dot: string; badge: string }> = {
-  "3": { label: "Critique", dot: "bg-red-500",    badge: "bg-red-500/10 text-red-500 border-red-500/20" },
-  "2": { label: "Haute",    dot: "bg-orange-500", badge: "bg-orange-500/10 text-orange-500 border-orange-500/20" },
-  "1": { label: "Moyenne",  dot: "bg-amber-500",  badge: "bg-amber-500/10 text-amber-600 border-amber-500/20" },
-  "0": { label: "Basse",    dot: "bg-sky-400",    badge: "bg-sky-500/10 text-sky-600 border-sky-500/20" },
+const PRIORITY_MAP: Record<string, { label: string; dot: string; badge: string; border: string }> = {
+  "3": { label: "Critique", dot: "bg-rose-500",  badge: "bg-rose-500/10 text-rose-500 border-rose-500/20", border: "border-l-rose-500" },
+  "2": { label: "Haute",    dot: "bg-amber-500", badge: "bg-amber-500/10 text-amber-500 border-amber-500/20", border: "border-l-amber-500" },
+  "1": { label: "Moyenne",  dot: "bg-blue-500",  badge: "bg-blue-500/10 text-blue-500 border-blue-500/20", border: "border-l-blue-500" },
+  "0": { label: "Basse",    dot: "bg-slate-400", badge: "bg-slate-500/10 text-slate-500 border-slate-500/20", border: "border-l-slate-400" },
 };
 
 const STATE_MAP: Record<string, { label: string; color: string }> = {
@@ -42,6 +42,7 @@ type Ticket = {
   sla_status: string | null;
   user_id: string | null;
   assigned_to_id?: string | null;
+  category?: string | null;
 };
 
 function MyTicketsPage() {
@@ -50,25 +51,35 @@ function MyTicketsPage() {
   const [loading, setLoading] = useState(true);
   const [priorityFilter, setPriorityFilter] = useState<string | null>(null);
   const [stateFilter, setStateFilter] = useState<string | null>(null);
-  const [openDropdown, setOpenDropdown] = useState<"priority" | "state" | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [openDropdown, setOpenDropdown] = useState<"priority" | "state" | "category" | null>(null);
+
+  useEffect(() => {
+    axios.get(`${ODOO_URL}/api/categories`).then(res => {
+      if (res.data.status === 200) setCategories(res.data.data);
+    }).catch(console.error);
+  }, []);
 
   const fetchMyTickets = useCallback(async () => {
     try {
-      const res = await axios.get(`${ODOO_URL}/api/tickets`, { withCredentials: true });
+      if (!user?.id) return;
+      const params: Record<string, any> = { assigned_to: user.id };
+      if (categoryFilter) params.category = categoryFilter;
+
+      const res = await axios.get(`${ODOO_URL}/api/tickets`, { 
+        params,
+        withCredentials: true 
+      });
       if (res.data.status === 200) {
-        // Filter to tickets assigned to current user
-        const mine = res.data.data.filter(
-          (t: Ticket & { assigned_to?: string }) =>
-            t.assigned_to === user?.name || t.assigned_to_id === user?.name
-        );
-        setTickets(mine.length > 0 ? mine : res.data.data);
+        setTickets(res.data.data);
       }
     } catch {
       console.error("Erreur chargement");
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, categoryFilter]);
 
   useEffect(() => {
     fetchMyTickets();
@@ -81,10 +92,10 @@ function MyTicketsPage() {
     .filter((t) => !stateFilter || t.state === stateFilter)
     .sort((a, b) => parseInt(b.priority) - parseInt(a.priority));
 
-  const atRisk   = tickets.filter((t) => t.sla_status === "at_risk").length;
-  const breached  = tickets.filter((t) => t.sla_status === "breached").length;
-  const inProgress = tickets.filter((t) => ["assigned", "in_progress"].includes(t.state)).length;
-  const resolved  = tickets.filter((t) => ["resolved", "closed"].includes(t.state)).length;
+  const atRisk   = filtered.filter((t) => t.sla_status === "at_risk").length;
+  const breached  = filtered.filter((t) => t.sla_status === "breached").length;
+  const inProgress = filtered.filter((t) => ["new", "assigned", "in_progress"].includes(t.state)).length;
+  const resolved  = filtered.filter((t) => ["resolved", "closed"].includes(t.state)).length;
 
   return (
     <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-6" onClick={() => setOpenDropdown(null)}>
@@ -184,6 +195,35 @@ function MyTicketsPage() {
           )}
         </div>
 
+        {/* Category dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setOpenDropdown(openDropdown === "category" ? null : "category")}
+            className={`flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-semibold transition-all border
+              ${categoryFilter ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
+                : "border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)]"}`}
+          >
+            <Tag size={12} />
+            {categoryFilter ? categoryFilter : "Catégorie"}
+            <ChevronDown size={12} className={`transition-transform ${openDropdown === "category" ? "rotate-180" : ""}`} />
+          </button>
+          {openDropdown === "category" && (
+            <div className="absolute top-9 left-0 w-44 bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl shadow-xl z-50 p-1.5 space-y-0.5 animate-fade-in max-h-60 overflow-y-auto custom-scrollbar">
+              <button onClick={() => { setCategoryFilter(null); setOpenDropdown(null); }}
+                className="w-full text-left text-xs px-3 py-1.5 rounded-md hover:bg-[hsl(var(--muted))] font-medium">
+                Toutes
+              </button>
+              {categories.map((k) => (
+                <button key={k} onClick={() => { setCategoryFilter(k); setOpenDropdown(null); }}
+                  className={`w-full text-left text-xs px-3 py-1.5 rounded-md hover:bg-[hsl(var(--muted))] font-medium
+                    ${categoryFilter === k ? "text-[hsl(var(--primary))]" : ""}`}>
+                  {k}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         <span className="ml-auto text-xs text-[hsl(var(--muted-foreground))]">
           <b>{filtered.length}</b> ticket{filtered.length !== 1 ? "s" : ""}
         </span>
@@ -212,48 +252,75 @@ function MyTicketsPage() {
               <Link
                 key={ticket.id}
                 href={`/tech/tickets/${ticket.id}`}
-                className={`glass-card p-4 flex flex-col sm:flex-row sm:items-center gap-4 hover:shadow-md
-                  transition-all duration-200 group cursor-pointer block
-                  ${isUrgent ? "border-l-4 border-l-amber-500 pl-3" : ""}`}
+                className={`flex items-start justify-between p-4 bg-[hsl(var(--secondary)/0.2)] hover:bg-[hsl(var(--secondary)/0.4)] border border-[hsl(var(--border)/0.5)] rounded-xl transition-all duration-200 shadow-sm border-l-4 ${pCfg.border} group`}
               >
-                {/* Left: Priority dot + Info */}
-                <div className="flex items-start gap-3 flex-1 min-w-0">
-                  <div className="flex flex-col items-center gap-1 mt-1 flex-shrink-0">
-                    <span className={`w-2.5 h-2.5 rounded-full ${pCfg.dot} ${isUrgent ? "animate-pulse" : ""}`} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-sm group-hover:text-[hsl(var(--primary))] transition-colors">
-                        #{ticket.id} — {ticket.name}
-                      </span>
-                      <span className={`text-[0.65rem] font-semibold px-2 py-0.5 rounded-full border ${pCfg.badge}`}>
+                {/* Left: Info */}
+                <div className="flex-1 min-w-0 pr-4">
+                  {/* ID */}
+                  <span className="inline-block text-[10px] font-mono text-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted))] px-1.5 py-0.5 rounded uppercase mb-1">
+                    #{ticket.id}
+                  </span>
+                  
+                  {/* Title */}
+                  <h3 className="text-base font-bold text-[hsl(var(--foreground))] tracking-tight mt-1 line-clamp-1 group-hover:text-[hsl(var(--primary))] transition-colors">
+                    {ticket.name}
+                  </h3>
+
+                  {/* Description */}
+                  <p className="text-sm text-[hsl(var(--muted-foreground)/0.8)] line-clamp-1 mt-1">
+                    {ticket.description}
+                  </p>
+
+                  {/* Metadata Row */}
+                  <div className="flex items-center flex-wrap gap-4 mt-3 text-xs text-[hsl(var(--muted-foreground))]">
+                    {ticket.user_id && (
+                      <div className="flex items-center">
+                        <User2 className="w-3.5 h-3.5 mr-1" />
+                        <span className="truncate max-w-[120px]">{ticket.user_id}</span>
+                      </div>
+                    )}
+                    {ticket.create_date && (
+                      <div className="flex items-center">
+                        <Calendar className="w-3.5 h-3.5 mr-1" />
+                        {new Date(ticket.create_date).toLocaleDateString("fr-FR")}
+                      </div>
+                    )}
+                    <div className="flex items-center">
+                      {ticket.category && (
+                        <span className="inline-flex items-center bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2 py-0.5 rounded text-[10px] font-bold uppercase mr-2 tracking-wider">
+                          <Tag size={10} className="mr-1" />
+                          {ticket.category}
+                        </span>
+                      )}
+                      <Tag className="w-3.5 h-3.5 mr-1" />
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full border text-[10px] uppercase tracking-wider font-semibold mr-2 ${pCfg.badge}`}>
                         {pCfg.label}
                       </span>
-                      <span className={`text-[0.65rem] font-semibold ${sCfg.color}`}>
-                        ● {sCfg.label}
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full border text-[10px] uppercase tracking-wider font-semibold bg-[hsl(var(--muted)/0.3)] border-[hsl(var(--border))] ${sCfg.color}`}>
+                        {sCfg.label}
                       </span>
-                    </div>
-                    <p className="text-xs text-[hsl(var(--muted-foreground))] line-clamp-1 mt-1">
-                      {ticket.description}
-                    </p>
-                    <div className="flex flex-wrap gap-3 mt-2">
-                      {ticket.user_id && (
-                        <span className="inline-flex items-center gap-1 text-[0.65rem] text-[hsl(var(--muted-foreground))]">
-                          <User2 size={10} /> {ticket.user_id}
-                        </span>
-                      )}
-                      {ticket.create_date && (
-                        <span className="inline-flex items-center gap-1 text-[0.65rem] text-[hsl(var(--muted-foreground))]">
-                          <Clock size={10} /> {new Date(ticket.create_date).toLocaleDateString("fr-FR")}
-                        </span>
-                      )}
                     </div>
                   </div>
                 </div>
 
                 {/* Right: SLA Badge */}
-                <div className="flex-shrink-0">
-                  <SlaBadge slaDeadline={ticket.sla_deadline} slaStatus={ticket.sla_status} compact />
+                <div className="flex-shrink-0 flex flex-col items-end gap-2">
+                  {ticket.sla_status === "breached" ? (
+                    <div className="bg-rose-500/10 text-rose-500 border border-rose-500/20 px-2 py-1 rounded-full text-[11px] font-medium flex items-center gap-1">
+                      <AlertTriangle size={12} />
+                      SLA Dépassé
+                    </div>
+                  ) : ticket.sla_status === "at_risk" ? (
+                    <div className="bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2 py-1 rounded-full text-[11px] font-medium flex items-center gap-1">
+                      <Clock size={12} />
+                      À risque
+                    </div>
+                  ) : ticket.sla_status === "on_track" || ticket.sla_deadline ? (
+                    <div className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-2 py-1 rounded-full text-[11px] font-medium flex items-center gap-1">
+                      <CheckCircle2 size={12} />
+                      Dans les temps
+                    </div>
+                  ) : null}
                 </div>
               </Link>
             );

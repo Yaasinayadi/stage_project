@@ -11,36 +11,89 @@ class TicketController(http.Controller):
         """
         Récupère les tickets non assignés ou ceux qui requièrent une prise en charge rapide
         """
+        origin = request.httprequest.headers.get('Origin', 'http://localhost:3000')
+        headers = [
+            ('Access-Control-Allow-Origin', origin),
+            ('Access-Control-Allow-Methods', 'GET, OPTIONS'),
+            ('Access-Control-Allow-Credentials', 'true'),
+            ('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization')
+        ]
+        
         if request.httprequest.method == 'OPTIONS':
-            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'GET, OPTIONS')])
+            return request.make_response('', headers=headers)
+            
         try:
-            # Recherche des tickets non assignés
-            tickets = request.env['support.ticket'].sudo().search([
-                ('assigned_to_id', '=', False),
-                ('state', 'in', ['new', 'waiting'])
-            ])
+            priority_field = request.env['support.ticket'].fields_get(allfields=['priority'])['priority']['selection']
+            priority_dict = dict(priority_field)
+            
+            # Initialization
+            priority_counts = {p[0]: {'id': p[0], 'label': p[1], 'count': 0} for p in priority_field}
+            
+            # Identify the caller from query params (our login uses custom token, not Odoo session)
+            caller_id = kwargs.get('user_id')
+            caller_role = kwargs.get('role', '')
+            is_admin = caller_role == 'admin'
+
+            if caller_id:
+                caller_id = int(caller_id)
+                calling_user = request.env['res.users'].sudo().browse(caller_id)
+            else:
+                # Fallback: use session user
+                calling_user = request.env.user
+                is_admin = calling_user.has_group('base.group_system')
+
+            import logging
+            _logger = logging.getLogger(__name__)
+            _logger.info(f"QUEUE DEBUG: caller_id={caller_id} caller_role={caller_role} is_admin={is_admin}")
+
+            domain = [('state', 'not in', ['resolved', 'closed'])]
+            if not is_admin:
+                expertise_list = calling_user.it_domain_ids.mapped('name') if hasattr(calling_user, 'it_domain_ids') else []
+                _logger.info(f"QUEUE DEBUG: expertise={expertise_list}")
+                domain = [
+                    '|',
+                    '&', ('assigned_to_id', '=', calling_user.id), ('x_accepted', '=', False),
+                    '&', ('assigned_to_id', '=', False), ('ai_classification', 'in', expertise_list)
+                ] + domain
+            else:
+                domain = [('assigned_to_id', '=', False)] + domain
+
+            # Search
+            tickets = request.env['support.ticket'].sudo().search(domain, order='priority desc, create_date asc')
+            _logger.info(f"QUEUE DEBUG: found {len(tickets)} tickets ids={tickets.ids}")
             
             data = []
             for t in tickets:
+                if t.priority in priority_counts:
+                    priority_counts[t.priority]['count'] += 1
                 data.append({
                     'id': t.id,
                     'name': t.name,
                     'description': t.description,
                     'priority': t.priority,
+                    'priority_label': priority_dict.get(t.priority, t.priority),
                     'state': t.state,
+                    'x_accepted': t.x_accepted,
+                    'assigned_to_id': t.assigned_to_id.id if t.assigned_to_id else None,
                     'create_date': str(t.create_date) if t.create_date else None,
                     'sla_deadline': str(t.sla_deadline) if t.sla_deadline else None,
+                    'sla_status': t.sla_status or None,
                     'user_id': t.user_id.name if t.user_id else None,
+                    'ai_classification': t.ai_classification or None,
                 })
             
+            priorities_list = sorted(list(priority_counts.values()), key=lambda x: str(x['id']), reverse=True)
+            
+            headers.append(('Content-Type', 'application/json'))
             return request.make_response(
-                json.dumps({'status': 'success', 'data': data}),
-                headers=[('Content-Type', 'application/json')]
+                json.dumps({'status': 'success', 'data': data, 'priorities': priorities_list}),
+                headers=headers
             )
         except Exception as e:
+            headers.append(('Content-Type', 'application/json'))
             return request.make_response(
                 json.dumps({'status': 'error', 'message': str(e)}),
-                headers=[('Content-Type', 'application/json')],
+                headers=headers,
                 status=500
             )
 
@@ -49,37 +102,99 @@ class TicketController(http.Controller):
         """
         Assigne un ticket au technicien en cours de session.
         """
+        origin = request.httprequest.headers.get('Origin', 'http://localhost:3000')
+        headers = [
+            ('Access-Control-Allow-Origin', origin),
+            ('Access-Control-Allow-Methods', 'PATCH, OPTIONS'),
+            ('Access-Control-Allow-Credentials', 'true'),
+            ('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization')
+        ]
+        
         if request.httprequest.method == 'OPTIONS':
-            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'PATCH, OPTIONS')])
+            return request.make_response('', headers=headers)
+            
         try:
             ticket = request.env['support.ticket'].sudo().browse(ticket_id)
             if not ticket.exists():
-                return request.make_response(json.dumps({'status': 'error', 'message': 'Ticket introuvable'}), headers=[('Content-Type', 'application/json')], status=404)
+                headers.append(('Content-Type', 'application/json'))
+                return request.make_response(json.dumps({'status': 'error', 'message': 'Ticket introuvable'}), headers=headers, status=404)
             
-            # L'assigner à l'utilisateur courant
+            body = json.loads(request.httprequest.data.decode('utf-8')) if request.httprequest.data else {}
+            user_id = int(body.get('user_id', 0))
+            if not user_id:
+                headers.append(('Content-Type', 'application/json'))
+                return request.make_response(
+                    json.dumps({'status': 'error', 'message': 'user_id requis pour assigner le ticket'}),
+                    headers=headers, status=400
+                )
+            
+            # Tech takes an unassigned ticket themselves: assign + auto-accept
             ticket.write({
-                'assigned_to_id': request.env.user.id,
-                'state': 'assigned'
+                'assigned_to_id': user_id,
+                'x_accepted': True,
+                'state': 'in_progress'
             })
             
+            headers.append(('Content-Type', 'application/json'))
             return request.make_response(
                 json.dumps({'status': 'success', 'message': f"Ticket {ticket.id} assigné avec succès"}),
-                headers=[('Content-Type', 'application/json')]
+                headers=headers
             )
         except Exception as e:
+            headers.append(('Content-Type', 'application/json'))
             return request.make_response(
                 json.dumps({'status': 'error', 'message': str(e)}),
-                headers=[('Content-Type', 'application/json')],
+                headers=headers,
                 status=500
             )
 
-    @http.route('/api/ticket/<int:ticket_id>/transfer', type='http', auth='public', methods=['PATCH', 'OPTIONS'], csrf=False)
+    @http.route('/api/ticket/<int:ticket_id>/accept', type='http', auth='public', methods=['PATCH', 'OPTIONS'], csrf=False)
+    def accept_ticket(self, ticket_id, **kwargs):
+        """
+        Technicien accepte officiellement la mission : x_accepted = True, state = in_progress.
+        Le ticket disparaît de la File d'attente et rejoint 'Mes Tickets'.
+        """
+        origin = request.httprequest.headers.get('Origin', 'http://localhost:3000')
+        headers = [
+            ('Access-Control-Allow-Origin', origin),
+            ('Access-Control-Allow-Methods', 'PATCH, OPTIONS'),
+            ('Access-Control-Allow-Credentials', 'true'),
+            ('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization')
+        ]
+        
+        if request.httprequest.method == 'OPTIONS':
+            return request.make_response('', headers=headers)
+            
+        try:
+            ticket = request.env['support.ticket'].sudo().browse(ticket_id)
+            if not ticket.exists():
+                headers.append(('Content-Type', 'application/json'))
+                return request.make_response(json.dumps({'status': 'error', 'message': 'Ticket introuvable'}), headers=headers, status=404)
+            
+            # Accept the mission: mark as accepted and transition to in_progress
+            ticket.write({
+                'x_accepted': True,
+                'state': 'in_progress'
+            })
+            
+            headers.append(('Content-Type', 'application/json'))
+            return request.make_response(
+                json.dumps({'status': 'success', 'message': f"Ticket {ticket.id} accepté avec succès"}),
+                headers=headers
+            )
+        except Exception as e:
+            headers.append(('Content-Type', 'application/json'))
+            return request.make_response(
+                json.dumps({'status': 'error', 'message': str(e)}),
+                headers=headers,
+                status=500
+            )
+
+    @http.route('/api/ticket/<int:ticket_id>/transfer', type='http', auth='public', methods=['PATCH', 'OPTIONS'], csrf=False, cors='*')
     def transfer_ticket(self, ticket_id, **kwargs):
         """
         Transfère l'assignation du ticket ou l'escalade
         """
-        if request.httprequest.method == 'OPTIONS':
-            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'PATCH, OPTIONS')])
         try:
             data = request.httprequest.data
             payload = json.loads(data) if data else {}
@@ -125,8 +240,6 @@ class TicketController(http.Controller):
         """
         Interroge le microservice IA pour un diagnostic assisté basé sur la description.
         """
-        if request.httprequest.method == 'OPTIONS':
-            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'GET, OPTIONS')])
         import requests
         try:
             ticket = request.env['support.ticket'].sudo().browse(ticket_id)
@@ -166,8 +279,6 @@ class TicketController(http.Controller):
         """
         Marque le ticket comme résolu et publie Optionnellement la solution dans la KB
         """
-        if request.httprequest.method == 'OPTIONS':
-            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'PATCH, OPTIONS')])
         try:
             data = request.httprequest.data
             payload = json.loads(data) if data else {}
@@ -234,27 +345,8 @@ class TicketController(http.Controller):
         full=True : inclut le HTML complet (pour la vue détail).
         full=False : inclut uniquement le solution_preview (pour la liste/cartes).
         """
-        return {
-            'id':                  kb.id,
-            'title':               kb.name,
-            'solution':            kb.solution if full else None,
-            'solution_preview':    kb.solution_preview or '',
-            'category':            kb.category,
-            'tags':                [{'id': t.id, 'name': t.name} for t in kb.tag_ids],
-            'author':              kb.author_id.name if kb.author_id else None,
-            'author_id':           kb.author_id.id  if kb.author_id else None,
-            'is_published':        kb.is_published,
-            'source_ticket_id':    kb.ticket_id.id   if kb.ticket_id else None,
-            'source_ticket_name':  kb.ticket_id.name if kb.ticket_id else None,
-            'create_date':         str(kb.create_date)  if kb.create_date else None,
-            'write_date':          str(kb.write_date)   if kb.write_date else None,
-        }
-
-    # ─── GET /api/knowledge  (liste paginée) ────────────────────────────────
-    @http.route('/api/knowledge', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
-    def get_knowledge_list(self, **kw):
         if request.httprequest.method == 'OPTIONS':
-            return self._cors_response()
+            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'GET, OPTIONS')])
         try:
             env = request.env['support.knowledge'].sudo()
 
@@ -365,30 +457,24 @@ class TicketController(http.Controller):
                 return self._cors_response({'status': 200, 'message': 'Article supprimé.'})
 
         except Exception as e:
-            import traceback
-            _logger.error("Erreur manage_knowledge_detail : %s\n%s", e, traceback.format_exc())
-            return self._cors_response({'status': 500, 'message': str(e), 'trace': traceback.format_exc()}, status=500)
+            return request.make_response(
+                json.dumps({'status': 'error', 'message': str(e)}),
+                headers=[('Content-Type', 'application/json')],
+                status=500
+            )
 
-    # ─── POST /api/knowledge/create ──────────────────────────────────────────
-    @http.route('/api/knowledge/create', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
-    def create_knowledge(self, **kw):
-        """Crée un nouvel article KB. Accessible aux Tech et Admin."""
+    @http.route('/api/knowledge/create', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
+    def create_knowledge_base(self, **kwargs):
+        """
+        Crée manuellement un article de la base de connaissances.
+        """
         if request.httprequest.method == 'OPTIONS':
-            return self._cors_response()
+            return request.make_response('', headers=[('Access-Control-Allow-Origin', '*'), ('Access-Control-Allow-Methods', 'POST, OPTIONS'), ('Access-Control-Allow-Headers', 'Content-Type')])
         try:
-            if request.httprequest.data:
-                _logger.info("Données reçues sur create_knowledge : %s", request.httprequest.data)
-
-            post = json.loads(request.httprequest.data.decode('utf-8'))
-
-            title        = post.get('title', '').strip()
-            solution     = post.get('solution', '').strip()
-            category     = post.get('category')
-            tag_names    = post.get('tag_names', [])   # liste de chaînes (ex: ['VPN', 'Windows'])
-            is_published = bool(post.get('is_published', False))
-            author_id    = post.get('author_id')
-            ticket_id    = post.get('source_ticket_id')
-
+            title = kwargs.get('title')
+            solution = kwargs.get('solution')
+            category = kwargs.get('category')
+            
             if not title or not solution:
                 return self._cors_response({'status': 400, 'message': 'Le titre et la solution sont requis.'}, status=400)
 

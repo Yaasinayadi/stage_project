@@ -7,7 +7,7 @@ import {
   ArrowLeft, Sparkles, User2, Clock, AlertTriangle, CheckCircle2,
   ArrowUpCircle, UserCheck, RefreshCw, Send, BookOpen, Loader2, ChevronRight,
   MessageSquare, Paperclip, Download, FileText, Image as ImageIcon, File,
-  Upload, X
+  Upload, X, Tag
 } from "lucide-react";
 import SlaBadge from "@/components/SlaBadge";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -231,7 +231,7 @@ function TicketDetailPage() {
   const handleAssign = async () => {
     setActionLoading("assign");
     try {
-      await axios.patch(`${ODOO_URL}/api/ticket/${id}/assign`, {}, { withCredentials: true });
+      await axios.patch(`${ODOO_URL}/api/ticket/${id}/assign`, { user_id: user?.id }, { withCredentials: true });
       showToast("✅ Ticket pris en charge !", "ok");
       fetchTicket();
     } catch {
@@ -335,10 +335,18 @@ function TicketDetailPage() {
                 <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">Ticket #{ticket.id}</p>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
+                {ticket.ai_classification && (
+                  <span className="flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full border bg-blue-500/10 text-blue-500 border-blue-500/20 uppercase tracking-wider">
+                    <Tag size={12} />
+                    {ticket.ai_classification}
+                  </span>
+                )}
                 <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${pCfg.badge}`}>
                   {pCfg.label}
                 </span>
-                <span className={`text-xs font-semibold ${sCfg.color}`}>● {sCfg.label}</span>
+                <span className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full border border-transparent bg-gray-500/5 ${sCfg.color}`}>
+                  ● {sCfg.label}
+                </span>
               </div>
             </div>
 

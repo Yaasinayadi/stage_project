@@ -4,7 +4,6 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
 import Chatbot from "@/components/Chatbot";
-import SlaAlertBanner from "@/components/SlaAlertBanner";
 
 /**
  * AppShell conditionally renders the sidebar and chatbot
@@ -27,8 +26,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-screen">
         <Sidebar />
         <div className="flex-1 flex flex-col min-h-screen overflow-x-hidden">
-          {/* SLA Alert Banner — only visible to agents/admins with urgent tickets */}
-          <SlaAlertBanner />
           <main className="flex-1">
             {children}
           </main>
