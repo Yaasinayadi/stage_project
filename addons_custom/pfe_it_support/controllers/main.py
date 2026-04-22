@@ -18,9 +18,10 @@ class SupportTicketController(http.Controller):
     def login(self, **kw):
         """Authentifie un utilisateur via email + mot de passe."""
         _logger.info(">>> REQUÊTE REÇUE : %s %s", request.httprequest.method, request.httprequest.path)
+        origin = request.httprequest.headers.get('Origin', 'http://localhost:3000')
         if request.httprequest.method == 'OPTIONS':
             return request.make_response('', [
-                ('Access-Control-Allow-Origin', 'http://localhost:3000'),
+                ('Access-Control-Allow-Origin', origin),
                 ('Access-Control-Allow-Credentials', 'true'),
                 ('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS'),
                 ('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization'),
@@ -181,7 +182,9 @@ class SupportTicketController(http.Controller):
         domain = []
         
         if user_id:
-            domain.append(('user_id', '=', int(user_id)))
+            user = request.env['res.users'].sudo().browse(int(user_id))
+            if user.exists() and getattr(user, 'x_support_role', '') != 'admin':
+                domain.append(('user_id', '=', int(user_id)))
             
         if assigned_to:
             # "Mes Tickets" : tickets assignés au technicien ET explicitement acceptés
@@ -221,30 +224,38 @@ class SupportTicketController(http.Controller):
         if request.httprequest.method == 'OPTIONS':
             return self._cors_response()
             
-        post = json.loads(request.httprequest.data.decode('utf-8'))
-        name = post.get('name')
-        description = post.get('description')
-        ai_category = post.get('category')
-        priority = post.get('priority', '1')
-        user_id = post.get('user_id')
+        try:
+            post = json.loads(request.httprequest.data.decode('utf-8'))
+            name = post.get('name')
+            description = post.get('description')
+            ai_category = post.get('category')
+            priority = str(post.get('priority', '1'))
+            if priority not in ['0', '1', '2', '3']:
+                priority = '1'
+            user_id = post.get('user_id')
 
-        if not name or not description:
-            return self._json_response({'status': 400, 'message': 'Missing name or description'}, status_code=400)
+            if not name or not description:
+                return self._json_response({'status': 400, 'message': 'Missing name or description'}, 400)
 
-        vals = {
-            'name': name,
-            'description': description,
-            'ai_classification': ai_category,
-            'priority': priority
-        }
+            vals = {
+                'name': name,
+                'description': description,
+                'ai_classification': ai_category,
+                'priority': priority
+            }
 
-        # Associer le ticket à l'utilisateur connecté
-        if user_id:
-            vals['user_id'] = int(user_id)
+            # Associer le ticket à l'utilisateur connecté
+            if user_id and str(user_id).isdigit():
+                vals['user_id'] = int(user_id)
 
-        env = request.env['support.ticket'].sudo()
-        new_ticket = env.create(vals)
-        return self._json_response({'status': 201, 'message': 'Success', 'ticket_id': new_ticket.id}, status_code=201)
+            env = request.env['support.ticket'].sudo()
+            new_ticket = env.create(vals)
+            return self._json_response({'status': 201, 'message': 'Success', 'ticket_id': new_ticket.id}, 201)
+            
+        except Exception as e:
+            import traceback
+            _logger.error("Error in create_ticket: %s", traceback.format_exc())
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
 
     # ─────────────────────────────────────────────
     # UTILS
@@ -252,8 +263,9 @@ class SupportTicketController(http.Controller):
 
     def _cors_response(self, data=None, status_code=200):
         """Helper CORS ultra-permissif pour débloquer le Frontend (OPTIONS et réponses normales)."""
+        origin = request.httprequest.headers.get('Origin', 'http://localhost:3000')
         headers = [
-            ('Access-Control-Allow-Origin', 'http://localhost:3000'),
+            ('Access-Control-Allow-Origin', origin),
             ('Access-Control-Allow-Credentials', 'true'),
             ('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS'),
             ('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization'),
@@ -282,7 +294,7 @@ class SupportTicketController(http.Controller):
         ticket = env.browse(ticket_id)
         
         if not ticket.exists():
-            return self._json_response({'status': 404, 'message': 'Ticket not found'}, status_code=404)
+            return self._json_response({'status': 404, 'message': 'Ticket not found'}, 404)
 
         vals = {}
         if 'name' in post: vals['name'] = post['name']
@@ -294,7 +306,7 @@ class SupportTicketController(http.Controller):
             vals['assigned_to_id'] = int(post['assigned_to_id']) if post['assigned_to_id'] else False
 
         ticket.write(vals)
-        return self._json_response({'status': 200, 'message': 'Success updated'})
+        return self._json_response({'status': 200, 'message': 'Success updated'}, 200)
 
     @http.route('/api/ticket/<int:ticket_id>', type='http', auth='public', methods=['DELETE', 'OPTIONS'], csrf=False)
     def delete_ticket(self, ticket_id, **kw):
@@ -306,10 +318,10 @@ class SupportTicketController(http.Controller):
         ticket = env.browse(ticket_id)
         
         if not ticket.exists():
-            return self._json_response({'status': 404, 'message': 'Ticket not found'}, status_code=404)
+            return self._json_response({'status': 404, 'message': 'Ticket not found'}, 404)
             
         ticket.unlink()
-        return self._json_response({'status': 200, 'message': 'Ticket deleted successfully'})
+        return self._json_response({'status': 200, 'message': 'Ticket deleted successfully'}, 200)
 
     # ─────────────────────────────────────────────
     # CATEGORIES API
@@ -732,8 +744,8 @@ class SupportTicketController(http.Controller):
             sla_ok_count = 0
             
             for rt in resolved_tickets:
-                # Priorité à date_done pour le MTTR réel
-                final_date = rt.date_done or rt.write_date
+                # Utilise write_date par defaut car date_done n'est pas encore dans la BDD
+                final_date = getattr(rt, 'date_done', rt.write_date) if hasattr(rt, 'date_done') else rt.write_date
                 if rt.create_date and final_date:
                     diff = final_date - rt.create_date
                     total_duration_hours += diff.total_seconds() / 3600.0
@@ -860,8 +872,8 @@ class SupportTicketController(http.Controller):
             sla_ok_count = 0
             
             for rt in resolved_tickets:
-                # Priorité à date_done pour le MTTR réel
-                final_date = rt.date_done or rt.write_date
+                # Utilise write_date par defaut car date_done n'est pas encore dans la BDD
+                final_date = getattr(rt, 'date_done', rt.write_date) if hasattr(rt, 'date_done') else rt.write_date
                 if rt.create_date and final_date:
                     diff = final_date - rt.create_date
                     total_duration_hours += diff.total_seconds() / 3600.0

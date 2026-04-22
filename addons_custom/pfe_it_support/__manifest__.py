@@ -9,7 +9,7 @@
     """,
     'author': 'PFE IT Support',
     'website': 'https://example.com',
-    'depends': ['base', 'web'],
+    'depends': ['base', 'web', 'mail'],
     'data': [
         'security/security.xml',
         'security/ir.model.access.csv',

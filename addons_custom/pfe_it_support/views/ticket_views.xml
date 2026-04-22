@@ -71,7 +71,7 @@
     </record>
 
     <!-- Menu Principal -->
-    <menuitem id="menu_support_root" name="IT Support IA" sequence="10" web_icon="pfe_it_support,static/description/icon.png"/>
-    <menuitem id="menu_support_tickets" name="Tickets" parent="menu_support_root" action="action_support_ticket" sequence="10"/>
+    <menuitem id="menu_root" name="IT Support IA" sequence="10" web_icon="pfe_it_support,static/description/icon.png"/>
+    <menuitem id="menu_support_tickets" name="Tickets" parent="menu_root" action="action_support_ticket" sequence="10"/>
 
 </odoo>

@@ -3,6 +3,7 @@ from datetime import timedelta
 
 class SupportTicket(models.Model):
     _name = 'support.ticket'
+    _inherit = ['mail.thread']
     _description = 'Ticket de Support IT'
     _order = 'create_date desc'
 

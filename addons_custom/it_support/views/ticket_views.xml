@@ -2,15 +2,15 @@
 <odoo>
     <!-- Vue Liste -->
     <record id="view_ticket_tree" model="ir.ui.view">
-        <field name="name">it.support.ticket.tree</field>
+        <field name="name">it.support.ticket.list</field>
         <field name="model">it.support.ticket</field>
         <field name="arch" type="xml">
-            <tree>
+            <list>
                 <field name="name"/>
                 <field name="ai_category"/>
                 <field name="ai_priority"/>
                 <field name="state"/>
-            </tree>
+            </list>
         </field>
     </record>
 
@@ -78,9 +78,8 @@
     <record id="action_tickets" model="ir.actions.act_window">
         <field name="name">Tickets de Support</field>
         <field name="res_model">it.support.ticket</field>
-        <field name="view_mode">tree,form,form</field>
+        <field name="view_mode">list,form,kanban</field>
     </record>
 
-    <menuitem id="menu_it_root" name="IT Support IA" sequence="10"/>
-    <menuitem id="menu_it_tickets" name="Tickets" parent="menu_it_root" action="action_tickets"/>
+    <menuitem id="menu_it_tickets" name="Tickets (V1)" parent="pfe_it_support.menu_root" action="action_tickets"/>
 </odoo>

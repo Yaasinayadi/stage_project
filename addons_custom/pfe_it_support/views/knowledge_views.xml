@@ -77,7 +77,7 @@
     <!-- Menu Item (Attaché au menu racine 'menu_support_root') -->
     <menuitem id="menu_support_knowledge"
               name="Base de Connaissances"
-              parent="menu_support_root"
+              parent="menu_root"
               action="action_support_knowledge"
               sequence="20"/>
 </odoo>

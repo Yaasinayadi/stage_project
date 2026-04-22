@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import axios from "axios";
 import { useAuth } from "@/lib/auth";
 import { ArrowRight, Ticket, CheckCircle2, Clock, UserCheck, RefreshCw, X } from "lucide-react";
@@ -179,7 +180,7 @@ export default function ActivityFeed() {
     fetchActivity();
   }, [user]);
 
-  const preview = events.slice(0, 3);
+  const preview = events.slice(0, 5);
 
   if (loading) {
     return (
@@ -215,14 +216,14 @@ export default function ActivityFeed() {
             onClick={() => setShowAll(true)}
             className="w-full btn-ghost flex items-center justify-center gap-2 text-sm font-semibold border-2 border-[hsl(var(--border))] py-2.5 rounded-xl hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-all"
           >
-            Voir tout l'historique
+            Voir tout l&apos;historique
             <ArrowRight size={16} />
           </button>
         )}
       </div>
 
-      {/* Full History Modal */}
-      {showAll && (
+      {/* Full History Modal — rendered via portal to escape layout containers */}
+      {showAll && createPortal(
         <div
           className="modal-overlay"
           onClick={() => setShowAll(false)}
@@ -259,7 +260,8 @@ export default function ActivityFeed() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

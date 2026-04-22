@@ -1,4 +1,5 @@
 from odoo import models, fields, api
+from odoo.tools import html2plaintext
 import re
 
 
@@ -82,10 +83,10 @@ class SupportKnowledge(models.Model):
         """Convertit le HTML en texte brut et tronque à 200 caractères."""
         for rec in self:
             if rec.solution:
-                # Supprimer les balises HTML par regex (simple et sans dépendance externe)
-                text = re.sub(r'<[^>]+>', ' ', rec.solution or '')
-                # Nettoyer les espaces multiples
-                text = re.sub(r'\s+', ' ', text).strip()
+                # Utiliser l'outil standard d'Odoo pour un nettoyage propre
+                text = html2plaintext(rec.solution).strip()
+                # Nettoyer les espaces multiples restant
+                text = re.sub(r'\s+', ' ', text)
                 rec.solution_preview = text[:200] + ('…' if len(text) > 200 else '')
             else:
                 rec.solution_preview = ''

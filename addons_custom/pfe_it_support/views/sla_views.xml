@@ -19,6 +19,6 @@
         <field name="view_mode">list</field>
     </record>
 
-    <menuitem id="menu_support_configuration" name="Configuration" parent="menu_support_root" sequence="100"/>
+    <menuitem id="menu_support_configuration" name="Configuration" parent="menu_root" sequence="100"/>
     <menuitem id="menu_support_sla" name="SLA" parent="menu_support_configuration" action="action_support_sla" sequence="10"/>
 </odoo>

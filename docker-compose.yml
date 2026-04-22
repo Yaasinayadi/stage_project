@@ -21,7 +21,7 @@ services:
     volumes:
       - ./addons_custom:/mnt/extra-addons
       - odoo_data:/var/lib/odoo
-    command: odoo -d pfe_db -u pfe_it_support
+    command: odoo -d it_support -u pfe_it_support
     environment:
       - HOST=db
       - USER=odoo

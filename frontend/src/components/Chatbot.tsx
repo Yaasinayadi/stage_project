@@ -6,8 +6,15 @@ import axios from "axios";
 
 type Message = { sender: "user" | "bot"; text: string };
 
-export default function Chatbot() {
-  const [isOpen, setIsOpen] = useState(false);
+type ChatbotProps = {
+  /** When true, open the panel immediately (controlled from outside) */
+  defaultOpen?: boolean;
+  /** Called when the user closes the panel in controlled mode */
+  onClose?: () => void;
+};
+
+export default function Chatbot({ defaultOpen = false, onClose }: ChatbotProps) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
   const [messages, setMessages] = useState<Message[]>([
     { sender: "bot", text: "Bonjour ! 👋 Je suis l'assistant IA du support IT. Comment puis-je vous aider aujourd'hui ?" }
   ]);
@@ -80,7 +87,7 @@ export default function Chatbot() {
               </div>
             </div>
             <button
-              onClick={() => setIsOpen(false)}
+              onClick={() => { setIsOpen(false); onClose?.(); }}
               className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/15 transition-colors text-white/80 hover:text-white"
             >
               <X size={18} />
