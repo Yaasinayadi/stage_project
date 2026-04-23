@@ -15,7 +15,8 @@ import {
   Filter,
   ChevronDown,
   XCircle,
-  Activity
+  Activity,
+  ArrowUpRight
 } from "lucide-react";
 import StatsCard from "@/components/StatsCard";
 import TicketCard, { getStatusInfo } from "@/components/TicketCard";
@@ -176,8 +177,10 @@ function Dashboard() {
   const totalTickets = tickets.length;
   const resolvedCount = tickets.filter((t) => ["resolved", "closed"].includes(t.state)).length;
   const breachedCount = tickets.filter((t) => !["resolved", "closed"].includes(t.state) && t.sla_status === "breached").length;
-  const atRiskCount   = tickets.filter((t) => !["resolved", "closed"].includes(t.state) && t.sla_status === "at_risk").length;
-  const inProgressCount = tickets.filter((t) => !["resolved", "closed"].includes(t.state) && t.sla_status !== "breached" && t.sla_status !== "at_risk").length;
+  const inProgressCount = tickets.filter((t) => !["resolved", "closed"].includes(t.state) && t.sla_status !== "breached").length;
+  const escalatedCount = tickets.filter((t) => t.state === "escalated").length;
+
+  const isUser = user?.x_support_role === "user" || !user?.x_support_role;
 
   return (
     <div className="p-6 lg:p-8 max-w-[1400px] mx-auto space-y-6" onClick={() => setOpenDropdown(null)}>
@@ -206,12 +209,14 @@ function Dashboard() {
       </div>
 
       {/* ─── KPI Stats Row ─── */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className={`grid gap-4 ${isUser ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-2 lg:grid-cols-5"}`}>
         <StatsCard title="Total Tickets" value={totalTickets} icon={<Ticket size={20} />} color="#6366f1" loading={loading} delay={0} />
         <StatsCard title="Dépassé" value={breachedCount} icon={<AlertTriangle size={20} />} color="#ef4444" loading={loading} delay={80} />
-        <StatsCard title="À Risque" value={atRiskCount} icon={<Clock size={20} />} color="#f59e0b" loading={loading} delay={160} />
-        <StatsCard title="En Cours" value={inProgressCount} icon={<Activity size={20} />} color="#3b82f6" loading={loading} delay={240} />
-        <StatsCard title="Résolus" value={resolvedCount} icon={<CheckCircle2 size={20} />} color="#10b981" loading={loading} delay={320} />
+        {!isUser && (
+          <StatsCard title="Tickets Escaladés" value={escalatedCount} icon={<ArrowUpRight size={20} />} color="#f59e0b" loading={loading} delay={160} />
+        )}
+        <StatsCard title="En Cours" value={inProgressCount} icon={<Activity size={20} />} color="#3b82f6" loading={loading} delay={isUser ? 160 : 240} />
+        <StatsCard title="Résolus" value={resolvedCount} icon={<CheckCircle2 size={20} />} color="#10b981" loading={loading} delay={isUser ? 240 : 320} />
       </div>
 
       {/* ─── Filters Bar ─── */}
@@ -381,7 +386,7 @@ function Dashboard() {
           ))}
         </div>
       ) : (
-        <TicketTable tickets={filteredTickets} />
+        <TicketTable tickets={filteredTickets} onRefresh={fetchTickets} />
       )}
 
       {/* ─── Modal ─── */}

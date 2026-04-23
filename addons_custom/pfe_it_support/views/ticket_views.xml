@@ -57,6 +57,15 @@
                         <page string="IA : Solution suggérée">
                             <field name="ai_suggested_solution"/>
                         </page>
+                        <page string="Discussion / Commentaires">
+                            <field name="comment_ids">
+                                <list string="Commentaires" editable="bottom">
+                                    <field name="author_id"/>
+                                    <field name="create_date"/>
+                                    <field name="body" widget="html"/>
+                                </list>
+                            </field>
+                        </page>
                     </notebook>
                 </sheet>
             </form>

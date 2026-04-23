@@ -66,6 +66,9 @@ class SupportTicket(models.Model):
         'attachment_id',
         string='Pièces jointes'
     )
+    
+    # Commentaires / Discussion
+    comment_ids = fields.One2many('support.ticket.comment', 'ticket_id', string='Commentaires')
 
     @api.depends('priority')
     def _compute_sla(self):

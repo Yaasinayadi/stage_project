@@ -8,7 +8,7 @@ import {
   AlertCircle, CheckCircle2, XCircle, Clock, User,
   CalendarDays, ShieldCheck, ShieldAlert, ShieldX, RefreshCw
 } from "lucide-react";
-import { getCategoryColor, getCategoryIcon, getPriorityBadge, getStatusInfo } from "./TicketCard";
+import { getCategoryColor, getCategoryIcon, getPriorityBadge, getStatusInfo, formatTicketRef } from "./TicketCard";
 import { useAuth } from "@/lib/auth";
 
 // ─── Types ───
@@ -390,12 +390,12 @@ export default function TicketDetailsModal({
         user_id = u.id;
       }
 
-      await axios.post(`${ODOO_BASE}/api/ticket/${ticket.id}/comment`, {
-        params: {
-          body: newComment,
-          author: author,
-          user_id: user_id
-        }
+      const payload: any = { body: newComment.trim() };
+      if (user_id) payload.user_id = user_id;
+      payload.author = author ? author : "Utilisateur Inconnu";
+
+      await axios.post(`${ODOO_BASE}/api/ticket/${ticket.id}/comment`, payload, { 
+        withCredentials: true 
       });
       setNewComment("");
       await fetchComments();
@@ -500,8 +500,8 @@ export default function TicketDetailsModal({
             <div>
               <h2 className="text-lg font-bold leading-tight">Détails du ticket</h2>
               <div className="flex items-center gap-2 mt-0.5">
-                <p className="text-xs text-[hsl(var(--muted-foreground))]">
-                  Réf. TK-{String(ticket.id).padStart(4, "0")}
+                <p className="text-xs font-mono font-semibold tracking-wide text-[hsl(var(--muted-foreground))]">
+                  Réf. {formatTicketRef(ticket.id)}
                 </p>
                 {/* Badge mode */}
                 {isEditing && (
@@ -1050,9 +1050,10 @@ export default function TicketDetailsModal({
                           }) : ''}
                         </span>
                       </div>
-                      <p className="text-sm text-[hsl(var(--foreground))] whitespace-pre-wrap leading-relaxed opacity-90">
-                        {c.body}
-                      </p>
+                      <div 
+                        className="text-sm text-[hsl(var(--foreground))] whitespace-pre-wrap leading-relaxed opacity-90 prose prose-sm max-w-none prose-p:my-1 prose-a:text-[hsl(var(--primary))]"
+                        dangerouslySetInnerHTML={{ __html: c.body }}
+                      />
                     </div>
                   </div>
                 ))}

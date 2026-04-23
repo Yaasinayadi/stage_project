@@ -70,6 +70,11 @@ function getStatusInfo(state: string): { label: string; dotClass: string } {
   return { label: state || "Ouvert", dotClass: "open" };
 }
 
+export function formatTicketRef(id: number | undefined): string {
+  if (!id) return "";
+  return `TK-${String(id).padStart(4, "0")}`;
+}
+
 export default function TicketCard({ ticket, index, onRefresh }: TicketCardProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -79,20 +84,25 @@ export default function TicketCard({ ticket, index, onRefresh }: TicketCardProps
   return (
     <>
       <div
-        className="glass-card p-5 cursor-pointer group animate-fade-in hover:-translate-y-1 transition-all duration-300"
+        className="glass-card p-5 cursor-pointer group animate-fade-in hover:-translate-y-1 transition-all duration-300 flex flex-col h-full"
         style={{ animationDelay: `${index * 60}ms` }}
         onClick={() => setIsModalOpen(true)}
       >
         {/* Top row: icon + priority */}
         <div className="flex items-start justify-between mb-4">
-          <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center transition-colors duration-200"
-            style={{
-              background: `${catColor}14`,
-              color: catColor,
-            }}
-          >
-            {getCategoryIcon(ticket.category)}
+          <div className="flex items-center gap-3">
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center transition-colors duration-200"
+              style={{
+                background: `${catColor}14`,
+                color: catColor,
+              }}
+            >
+              {getCategoryIcon(ticket.category)}
+            </div>
+            <span className="text-xs font-mono font-semibold text-[hsl(var(--muted-foreground))]">
+              {formatTicketRef(ticket.id)}
+            </span>
           </div>
           {getPriorityBadge(ticket.priority)}
         </div>
@@ -103,12 +113,12 @@ export default function TicketCard({ ticket, index, onRefresh }: TicketCardProps
         </h3>
 
         {/* Description */}
-        <p className="text-sm text-[hsl(var(--muted-foreground))] line-clamp-2 mb-4 leading-relaxed">
+        <p className="text-sm text-[hsl(var(--muted-foreground))] line-clamp-2 mb-4 leading-relaxed flex-grow">
           {ticket.description}
         </p>
 
         {/* Footer: status + category */}
-        <div className="flex items-center justify-between pt-3 border-t border-[hsl(var(--border)/0.5)]">
+        <div className="flex items-center justify-between pt-3 mt-auto border-t border-[hsl(var(--border)/0.5)]">
           <div className="flex items-center gap-2">
             <span className={`status-dot ${status.dotClass}`} />
             <span className="text-xs font-medium text-[hsl(var(--muted-foreground))]">

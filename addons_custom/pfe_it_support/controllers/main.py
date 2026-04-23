@@ -263,7 +263,7 @@ class SupportTicketController(http.Controller):
 
     def _cors_response(self, data=None, status_code=200):
         """Helper CORS ultra-permissif pour débloquer le Frontend (OPTIONS et réponses normales)."""
-        origin = request.httprequest.headers.get('Origin', 'http://localhost:3000')
+        origin = 'http://localhost:3000'
         headers = [
             ('Access-Control-Allow-Origin', origin),
             ('Access-Control-Allow-Credentials', 'true'),
@@ -477,39 +477,53 @@ class SupportTicketController(http.Controller):
         except Exception as e:
             return self._json_response({'status': 500, 'message': str(e)}, 500)
 
-    @http.route('/api/ticket/<int:ticket_id>/comment', type='jsonrpc', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
+    @http.route(['/api/ticket/<int:ticket_id>/comment', '/api/ticket/<int:ticket_id>/comment/'], type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
     def post_comment(self, ticket_id, **kw):
-        """Ajoute un commentaire à un ticket (Format JSON-RPC)"""
-        _logger.info(f"==> POST /api/ticket/{ticket_id}/comment - Appel reçu")
+        """Ajoute un commentaire à un ticket (Format HTTP) avec gestion stricte des erreurs."""
         try:
-            ticket = request.env['support.ticket'].sudo().browse(ticket_id)
+            _logger.info("==> POST /api/ticket/%s/comment - Appel reçu", ticket_id)
+            if hasattr(request, 'httprequest'):
+                _logger.info("PAYLOAD REÇU : %s", request.httprequest.data)
+
+            if request.httprequest.method == 'OPTIONS':
+                return self._cors_response()
+
+            if not isinstance(ticket_id, int):
+                return self._cors_response({'status': 400, 'message': 'L\'ID du ticket doit être un entier.'}, 400)
+
+            # Parsing manuel du JSON car type='http'
+            raw_data = request.httprequest.data.decode('utf-8')
+            data = json.loads(raw_data) if raw_data else {}
+            
+            # Support des deux formats : direct ou via params
+            params = data.get('params', {}) if 'params' in data else data
+            body = params.get('body')
+            user_id = params.get('user_id')
+            author_name = params.get('author')
+
+            if not body or not str(body).strip():
+                _logger.warning("Le corps du commentaire est vide.")
+                return self._cors_response({'status': 400, 'message': 'Le corps du commentaire est requis.'}, 400)
+
+            ticket = request.env['support.ticket'].sudo().browse(int(ticket_id))
             if not ticket.exists():
                 _logger.warning(f"Ticket {ticket_id} introuvable.")
-                return {'status': 404, 'message': 'Ticket introuvable.'}
-            
-            _logger.info(f"Payload reçu : {kw}")
-            body = kw.get('body', '').strip()
-            user_id = kw.get('user_id')
-            author_name = kw.get('author', 'Utilisateur')
-
-            if not body:
-                _logger.warning("Le corps du commentaire est vide.")
-                return {'status': 400, 'message': 'Le corps du commentaire est requis.'}
+                return self._cors_response({'status': 404, 'message': 'Ticket introuvable.'}, 404)
 
             vals = {
-                'ticket_id': ticket_id,
-                'body': body,
+                'ticket_id': ticket.id,
+                'body': str(body).strip(),
             }
             if user_id:
                 vals['author_id'] = int(user_id)
             else:
-                vals['author'] = author_name
+                vals['author'] = str(author_name) if author_name else 'Utilisateur Inconnu'
 
             _logger.info(f"Création du commentaire avec les valeurs : {vals}")
             new_comment = request.env['support.ticket.comment'].sudo().create(vals)
             _logger.info(f"Commentaire créé avec l'ID : {new_comment.id}")
             
-            return {
+            return self._cors_response({
                 'status': 201, 
                 'message': 'Commentaire ajouté.',
                 'data': {
@@ -518,12 +532,12 @@ class SupportTicketController(http.Controller):
                     'date': str(new_comment.create_date) if new_comment.create_date else None,
                     'body': new_comment.body,
                 }
-            }
+            }, 201)
         except Exception as e:
             import traceback
-            _logger.error(f"Erreur lors de la création du commentaire : {str(e)}")
+            _logger.error("DÉTAIL CRASH : %s", e)
             _logger.error(traceback.format_exc())
-            return {'status': 500, 'message': str(e)}
+            return self._cors_response({'status': 500, 'message': f'Erreur interne: {str(e)}'}, 500)
 
     # ─────────────────────────────────────────────
     # ATTACHMENTS API

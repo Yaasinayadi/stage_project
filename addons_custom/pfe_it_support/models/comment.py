@@ -8,4 +8,4 @@ class SupportTicketComment(models.Model):
     ticket_id = fields.Many2one('support.ticket', string='Ticket', required=True, ondelete='cascade')
     author_id = fields.Many2one('res.users', string='Auteur (User)')
     author = fields.Char(string='Nom de l\'auteur', default='Anonyme')
-    body = fields.Text(string='Message', required=True)
+    body = fields.Html(string='Message', required=True)
