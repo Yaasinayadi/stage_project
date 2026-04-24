@@ -38,10 +38,36 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAuth } from "@/lib/auth";
 import Link from "next/link";
 // @ts-ignore
-import ReactMarkdown from "react-markdown";
 
 const ODOO_URL = "http://localhost:8069";
 const FLASK_URL = "http://localhost:8000";
+
+// ── Inline markdown renderer (no external dependency) ──────────────────────
+function renderMarkdown(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    // Headings
+    .replace(/^### (.+)$/gm, "<h3>$1</h3>")
+    .replace(/^## (.+)$/gm, "<h2>$1</h2>")
+    .replace(/^# (.+)$/gm, "<h1>$1</h1>")
+    // Bold & italic
+    .replace(/\*\*\*(.+?)\*\*\*/g, "<strong><em>$1</em></strong>")
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    // Bullet lists
+    .replace(/^[-*] (.+)$/gm, "<li>$1</li>")
+    .replace(/(<li>[\s\S]*?<\/li>)/g, "<ul>$1</ul>")
+    // Numbered lists
+    .replace(/^\d+\. (.+)$/gm, "<li>$1</li>")
+    // Code inline
+    .replace(/`(.+?)`/g, "<code>$1</code>")
+    // Line breaks
+    .replace(/\n\n/g, "</p><p>")
+    .replace(/\n/g, "<br/>")
+    .replace(/^(.+)$/, "<p>$1</p>");
+}
+// ───────────────────────────────────────────────────────────────────────────
 
 const PRIORITY_MAP: Record<
   string,
@@ -781,11 +807,10 @@ function TicketDetailPage() {
               <div className="space-y-4 animate-fade-in">
                 {/* Markdown AI response */}
                 {aiSuggestion.analysis_markdown && (
-                  <div className="p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/10 prose prose-sm max-w-none prose-p:text-xs prose-p:leading-relaxed prose-headings:text-indigo-400 prose-headings:text-[10px] prose-headings:font-bold prose-headings:uppercase prose-li:text-xs">
-                    <ReactMarkdown>
-                      {aiSuggestion.analysis_markdown}
-                    </ReactMarkdown>
-                  </div>
+                  <div
+                    className="p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/10 prose prose-sm max-w-none prose-p:text-xs prose-p:leading-relaxed prose-headings:text-indigo-400 prose-headings:text-[10px] prose-headings:font-bold prose-headings:uppercase prose-li:text-xs"
+                    dangerouslySetInnerHTML={{ __html: renderMarkdown(aiSuggestion.analysis_markdown) }}
+                  />
                 )}
 
                 {/* KB Recommendation */}

@@ -58,21 +58,17 @@
                             <field name="ai_suggested_solution"/>
                         </page>
                         <page string="Discussion / Commentaires">
-                            <field name="comment_ids">
-                                <list string="Commentaires" editable="bottom">
-                                    <field name="author_id"/>
-                                    <field name="create_date"/>
-                                    <field name="body" widget="html"/>
+                            <field name="comment_ids" mode="list">
+                                <list string="Commentaires" create="false" delete="false">
+                                    <field name="create_date" string="Date" readonly="1"/>
+                                    <field name="author_id" string="Auteur (compte)" readonly="1"/>
+                                    <field name="author" string="Nom" readonly="1"/>
+                                    <field name="body" widget="html" readonly="1"/>
                                 </list>
                             </field>
                         </page>
                     </notebook>
                 </sheet>
-                <div class="oe_chatter">
-                    <field name="message_follower_ids"/>
-                    <field name="activity_ids"/>
-                    <field name="message_ids"/>
-                </div>
             </form>
         </field>
     </record>
