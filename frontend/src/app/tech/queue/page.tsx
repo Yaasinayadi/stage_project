@@ -6,6 +6,7 @@ import {
   Inbox,
   RefreshCw,
   AlertTriangle,
+  User,
   User2,
   Clock,
   Calendar,
@@ -16,6 +17,8 @@ import {
   Briefcase,
   X,
   ChevronRight,
+  ArrowUpCircle,
+  Globe,
 } from "lucide-react";
 import SlaBadge from "@/components/SlaBadge";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -67,7 +70,9 @@ type QueueTicket = {
   create_date: string | null;
   sla_deadline: string | null;
   sla_status?: string | null;
-  user_id: string | null;
+  user_id: number | null;
+  user_name?: string | null;
+  user_email?: string | null;
 };
 
 type Agent = {
@@ -101,6 +106,10 @@ function QueuePage() {
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [loadingAgents, setLoadingAgents] = useState(false);
   const [dispatching, setDispatching] = useState(false);
+
+  // Modale technicien
+  const [techTicket, setTechTicket] = useState<QueueTicket | null>(null);
+  const [techLoading, setTechLoading] = useState(false);
 
   const showToast = (msg: string, type: "ok" | "err") => {
     setToast({ msg, type });
@@ -179,7 +188,7 @@ function QueuePage() {
     setLoadingAgents(true);
     try {
       const res = await axios.get(`${ODOO_URL}/api/agents/suggest`, {
-        params: { category: ticket.ai_classification || "" },
+        params: { category: ticket.ai_classification || "", ticket_id: ticket.id },
         withCredentials: true,
       });
       if (res.data.status === "success") setAgents(res.data.data);
@@ -216,6 +225,62 @@ function QueuePage() {
       showToast("Impossible de contacter le serveur", "err");
     } finally {
       setDispatching(false);
+    }
+  };
+
+  /* ─ Modale Technicien ─ */
+  const openTechModal = (ticket: QueueTicket) => setTechTicket(ticket);
+  const closeTechModal = () => setTechTicket(null);
+
+  const handleTake = async () => {
+    if (!techTicket) return;
+    setTechLoading(true);
+    try {
+      const res = await axios.patch(
+        `${ODOO_URL}/api/ticket/${techTicket.id}/assign`,
+        { user_id: user?.id },
+        { withCredentials: true },
+      );
+      if (res.data.status === "success") {
+        closeTechModal();
+        showToast(
+          `✅ Vous êtes désormais responsable du ticket TK-${String(techTicket.id).padStart(4, "0")}. Retrouvez-le dans votre espace "Mes Tickets".`,
+          "ok",
+        );
+        fetchQueue();
+      } else {
+        showToast("Erreur lors de l'assignation", "err");
+      }
+    } catch {
+      showToast("Impossible de contacter le serveur", "err");
+    } finally {
+      setTechLoading(false);
+    }
+  };
+
+  const handleAcceptModal = async () => {
+    if (!techTicket) return;
+    setTechLoading(true);
+    try {
+      const res = await axios.patch(
+        `${ODOO_URL}/api/ticket/${techTicket.id}/accept`,
+        {},
+        { withCredentials: true },
+      );
+      if (res.data.status === "success") {
+        closeTechModal();
+        showToast(
+          `✅ Mission acceptée — TK-${String(techTicket.id).padStart(4, "0")} est maintenant dans vos "Mes Tickets".`,
+          "ok",
+        );
+        fetchQueue();
+      } else {
+        showToast("Erreur lors de l'acceptation", "err");
+      }
+    } catch {
+      showToast("Impossible de contacter le serveur", "err");
+    } finally {
+      setTechLoading(false);
     }
   };
 
@@ -315,35 +380,82 @@ function QueuePage() {
               return (
                 <div
                   key={ticket.id}
-                  className={`flex items-start justify-between p-4 bg-[hsl(var(--secondary)/0.2)] hover:bg-[hsl(var(--secondary)/0.4)] border border-[hsl(var(--border)/0.5)] rounded-xl transition-all duration-200 shadow-sm border-l-4 ${pCfg.border} group`}
+                  onClick={
+                    isAdmin
+                      ? () => openDispatch(ticket)
+                      : () => openTechModal(ticket)
+                  }
+                  className={`flex flex-col p-4 bg-[hsl(var(--secondary)/0.2)] border border-[hsl(var(--border)/0.5)] rounded-xl transition-all duration-200 shadow-sm border-l-4 ${pCfg.border} group cursor-pointer
+                    ${
+                      isAdmin
+                        ? "hover:bg-[hsl(var(--primary)/0.06)] hover:border-[hsl(var(--primary)/0.3)] hover:shadow-md"
+                        : "hover:bg-[hsl(var(--secondary)/0.4)] hover:shadow-md"
+                    }`}
                 >
-                  {/* Left: Info */}
-                  <div className="flex-1 min-w-0 pr-4">
-                    {/* ID */}
-                    <span className="inline-block text-[10px] font-mono text-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted))] px-1.5 py-0.5 rounded uppercase mb-1">
-                      #{ticket.id}
-                    </span>
+                  {/* Top Section: Info + SLA */}
+                  <div className="flex items-start justify-between w-full">
+                    {/* Left: Info */}
+                    <div className="flex-1 min-w-0 pr-4">
+                      {/* ID + escalated badge */}
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="inline-block text-[10px] font-mono text-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted))] px-1.5 py-0.5 rounded uppercase">
+                          #{ticket.id}
+                        </span>
+                        {ticket.state === "escalated" && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-400 border border-purple-500/30 uppercase tracking-wider">
+                            <ArrowUpCircle size={12} />
+                            ESCALADÉ
+                          </span>
+                        )}
+                      </div>
 
-                    {/* Title */}
-                    <Link
-                      href={`/tech/tickets/${ticket.id}`}
-                      className="block text-base font-bold text-[hsl(var(--foreground))] tracking-tight mt-1 line-clamp-1 group-hover:text-[hsl(var(--primary))] transition-colors"
-                    >
-                      {ticket.name}
-                    </Link>
+                      {/* Title */}
+                      {isAdmin ? (
+                        <p className="block text-base font-bold text-[hsl(var(--foreground))] tracking-tight mt-1 line-clamp-1 group-hover:text-[hsl(var(--primary))] transition-colors">
+                          {ticket.name}
+                        </p>
+                      ) : (
+                        <p className="block text-base font-bold text-[hsl(var(--foreground))] tracking-tight mt-1 line-clamp-1 group-hover:text-[hsl(var(--primary))] transition-colors">
+                          {ticket.name}
+                        </p>
+                      )}
 
-                    {/* Description */}
-                    <p className="text-sm text-[hsl(var(--muted-foreground)/0.8)] line-clamp-1 mt-1">
-                      {ticket.description}
-                    </p>
+                      {/* Description */}
+                      <p className="text-sm text-[hsl(var(--muted-foreground)/0.8)] line-clamp-1 mt-1">
+                        {ticket.description}
+                      </p>
+                    </div>
 
-                    {/* Metadata Row */}
-                    <div className="flex items-center flex-wrap gap-4 mt-3 text-xs text-[hsl(var(--muted-foreground))]">
-                      {ticket.user_id && (
+                    {/* Right: SLA */}
+                    <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                      {ticket.sla_status === "breached" ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full bg-rose-500/10 text-rose-500 border border-rose-500/20 uppercase tracking-wider">
+                          <AlertTriangle size={12} />
+                          SLA Dépassé
+                        </span>
+                      ) : ticket.sla_status === "at_risk" ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 uppercase tracking-wider">
+                          <Clock size={12} />À risque
+                        </span>
+                      ) : ticket.sla_status === "on_track" ||
+                        ticket.sla_deadline ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 uppercase tracking-wider">
+                          <CheckCircle2 size={12} />
+                          Dans les temps
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {/* Bottom Section: Metadata + Indicator */}
+                  <div className="flex items-center justify-between w-full mt-auto pt-3">
+                    {/* Left: Metadata */}
+                    <div className="flex items-center flex-wrap gap-4 text-xs text-[hsl(var(--muted-foreground))]">
+                      {(ticket.user_name || ticket.user_id) && (
                         <div className="flex items-center">
                           <User2 className="w-3.5 h-3.5 mr-1" />
                           <span className="truncate max-w-[120px]">
-                            {ticket.user_id}
+                            {ticket.user_name ?? `${ticket.user_id}`}
                           </span>
                         </div>
                       )}
@@ -372,58 +484,22 @@ function QueuePage() {
                         </span>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Right: SLA + Action */}
-                  <div className="flex flex-col items-end gap-3 flex-shrink-0">
-                    {ticket.sla_status === "breached" ? (
-                      <div className="bg-rose-500/10 text-rose-500 border border-rose-500/20 px-2 py-1 rounded-full text-[11px] font-medium flex items-center gap-1">
-                        <AlertTriangle size={12} />
-                        SLA Dépassé
-                      </div>
-                    ) : ticket.sla_status === "at_risk" ? (
-                      <div className="bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2 py-1 rounded-full text-[11px] font-medium flex items-center gap-1">
-                        <Clock size={12} />À risque
-                      </div>
-                    ) : ticket.sla_status === "on_track" ||
-                      ticket.sla_deadline ? (
-                      <div className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-2 py-1 rounded-full text-[11px] font-medium flex items-center gap-1">
-                        <CheckCircle2 size={12} />
-                        Dans les temps
-                      </div>
-                    ) : null}
-
-                    {/* Action button: Admin → Assigner à... / Tech → Accept or Take */}
-                    {isAdmin ? (
-                      <button
-                        onClick={() => openDispatch(ticket)}
-                        className="flex items-center gap-1.5 text-xs px-4 py-1.5 rounded-lg font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/30 mt-auto transition-all"
-                      >
-                        <Users size={13} />
-                        Assigner à...
-                      </button>
-                    ) : ticket.assigned_to_id && !ticket.x_accepted ? (
-                      <button
-                        disabled={assigning === ticket.id}
-                        onClick={() => handleAccept(ticket.id)}
-                        className="flex items-center gap-1.5 text-xs px-4 py-1.5 rounded-lg font-semibold bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-500/30 disabled:opacity-60 disabled:cursor-not-allowed mt-auto transition-all"
-                      >
-                        <ShieldCheck size={13} />
-                        {assigning === ticket.id
-                          ? "En cours…"
-                          : "Accepter la mission"}
-                      </button>
-                    ) : (
-                      <button
-                        disabled={assigning === ticket.id}
-                        onClick={() => handleAssign(ticket.id)}
-                        className="bg-orange-500 hover:bg-orange-600 text-white shadow-md shadow-orange-500/30 text-xs px-4 py-1.5 rounded-lg font-semibold disabled:opacity-60 disabled:cursor-not-allowed mt-auto transition-all flex items-center justify-center"
-                      >
-                        {assigning === ticket.id
-                          ? "En cours…"
-                          : "Prendre en charge"}
-                      </button>
-                    )}
+                    {/* Right: Indicator */}
+                    <div className="flex-shrink-0 ml-4">
+                      {!ticket.assigned_to_id ? (
+                        <span className="flex items-center gap-1.5 px-2 py-1 rounded-full border text-[10px] font-black uppercase tracking-widest bg-sky-500/10 text-sky-500 border-sky-500/20">
+                          <Globe size={12} />
+                          OUVERT
+                        </span>
+                      ) : ticket.assigned_to_id === user?.id &&
+                        !ticket.x_accepted ? (
+                        <span className="flex items-center gap-1.5 px-2 py-1 rounded-full border text-[10px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-500 border-emerald-500/20 animate-pulse">
+                          <ArrowUpCircle size={12} />
+                          MISSION ASSIGNÉE
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               );
@@ -432,107 +508,230 @@ function QueuePage() {
         )}
       </div>
 
-      {/* ── Dispatch Modal ───────────────────────────────────── */}
+      {/* ── Modale Tout-en-un : Détails + Assignation ─────────────────── */}
       {dispatchTicket && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-2xl shadow-2xl w-full max-w-lg">
-            {/* Modal Header */}
-            <div className="flex items-start justify-between p-5 border-b border-[hsl(var(--border))]">
-              <div>
-                <p className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded uppercase inline-block mb-1">
-                  TK-{String(dispatchTicket.id).padStart(4, "0")}
-                </p>
-                <h2 className="text-base font-bold text-foreground">
-                  Assigner ce ticket
-                </h2>
-                <p className="text-sm text-muted-foreground mt-0.5 line-clamp-1">
+          <div className="bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
+            {/* ── Header ── */}
+            <div className="flex items-start justify-between p-5 border-b border-[hsl(var(--border))] flex-shrink-0">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <p className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded uppercase inline-block">
+                    TK-{String(dispatchTicket.id).padStart(4, "0")}
+                  </p>
+                  {dispatchTicket.state === "escalated" && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-400 border border-purple-500/30 uppercase tracking-wider">
+                      <ArrowUpCircle size={12} />
+                      ESCALADÉ — Attention urgente requise
+                    </span>
+                  )}
+                </div>
+                <h2 className="text-lg font-bold text-foreground leading-tight line-clamp-2">
                   {dispatchTicket.name}
-                </p>
-                {dispatchTicket.ai_classification && (
-                  <span className="mt-1.5 inline-flex items-center gap-1 text-[11px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded-full">
-                    <Tag size={10} /> {dispatchTicket.ai_classification}
-                  </span>
-                )}
+                </h2>
               </div>
               <button
                 onClick={closeDispatch}
-                className="text-muted-foreground hover:text-foreground transition-colors p-1"
+                className="text-muted-foreground hover:text-foreground transition-colors p-1 ml-3 flex-shrink-0"
               >
                 <X size={18} />
               </button>
             </div>
 
-            {/* Agent List */}
-            <div className="p-5 max-h-[360px] overflow-y-auto space-y-2">
-              {loadingAgents ? (
-                <div className="text-center text-sm text-muted-foreground py-8">
-                  Chargement des experts...
+            {/* ── Corps scrollable ── */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Section Détails */}
+              <div className="space-y-4">
+                {/* Description */}
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                    Description
+                  </p>
+                  <div className="text-sm text-muted-foreground leading-relaxed bg-[hsl(var(--muted)/0.3)] rounded-xl p-3 max-h-32 overflow-y-auto pr-3">
+                    {dispatchTicket.description}
+                  </div>
                 </div>
-              ) : agents.length === 0 ? (
-                <div className="text-center text-sm text-muted-foreground py-8">
-                  Aucun technicien disponible
-                </div>
-              ) : (
-                agents.map((agent) => (
-                  <button
-                    key={agent.id}
-                    onClick={() => setSelectedAgent(agent)}
-                    className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all text-left
-                    ${
-                      selectedAgent?.id === agent.id
-                        ? "border-indigo-500 bg-indigo-500/10"
-                        : "border-[hsl(var(--border)/0.5)] bg-[hsl(var(--secondary)/0.2)] hover:bg-[hsl(var(--secondary)/0.4)]"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold
-                      ${agent.is_expert ? "bg-indigo-500/20 text-indigo-400" : "bg-muted text-muted-foreground"}`}
-                      >
-                        {agent.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">
-                          {agent.name}
+
+                {/* Métadonnées */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Demandeur */}
+                  <div className="flex items-center gap-3 p-4 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))]">
+                    <div className="w-10 h-10 rounded-full accent-gradient flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                      {dispatchTicket.user_name ? (
+                        dispatchTicket.user_name
+                          .trim()
+                          .split(/\s+/)
+                          .filter(Boolean)
+                          .map((w: string) => w[0].toUpperCase())
+                          .join("")
+                          .slice(0, 2)
+                      ) : (
+                        <User size={16} />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[0.6rem] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">
+                        Demandeur
+                      </p>
+                      <p className="text-sm font-semibold truncate">
+                        {dispatchTicket.user_name
+                          ? dispatchTicket.user_name.replace(/#/g, "").trim()
+                          : `Utilisateur ${dispatchTicket.user_id}`}
+                      </p>
+                      {dispatchTicket.user_email && (
+                        <p className="text-[0.7rem] text-muted-foreground truncate mt-0.5">
+                          {dispatchTicket.user_email}
                         </p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          {agent.is_expert && (
-                            <span className="text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.5 rounded-full">
-                              Expert
-                            </span>
-                          )}
-                          {agent.it_domains.slice(0, 3).map((d) => (
-                            <span
-                              key={d}
-                              className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full"
-                            >
-                              {d}
-                            </span>
-                          ))}
-                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Catégorie + Priorité */}
+                  <div className="flex flex-col justify-center gap-2 p-4 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))]">
+                    <p className="text-[0.6rem] font-semibold text-muted-foreground uppercase tracking-wider">
+                      Classification
+                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {dispatchTicket.ai_classification && (
+                        <span className="inline-flex items-center gap-1 text-[11px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2.5 py-0.5 rounded-full">
+                          <Tag size={10} /> {dispatchTicket.ai_classification}
+                        </span>
+                      )}
+                      {(() => {
+                        const pc = PRIORITY_MAP[dispatchTicket.priority];
+                        return pc ? (
+                          <span
+                            className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full border font-semibold ${pc.badge}`}
+                          >
+                            {pc.label}
+                          </span>
+                        ) : null;
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* SLA */}
+                  {(dispatchTicket.sla_status ||
+                    dispatchTicket.sla_deadline) && (
+                    <div className="sm:col-span-2 flex items-center gap-3 p-3 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))]">
+                      <Clock
+                        size={13}
+                        className="text-muted-foreground flex-shrink-0"
+                      />
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {dispatchTicket.sla_status === "breached" && (
+                          <span className="flex flex-row items-center gap-1 text-xs font-bold text-rose-500 bg-rose-500/10 px-2.5 py-0.5 rounded-full border border-rose-500/20">
+                            <AlertTriangle size={12} />
+                            SLA Dépassé
+                          </span>
+                        )}
+                        {dispatchTicket.sla_status === "at_risk" && (
+                          <span className="flex flex-row items-center gap-1 text-xs font-bold text-amber-500 bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/20">
+                            <Clock size={12} />
+                            SLA À risque
+                          </span>
+                        )}
+                        {dispatchTicket.sla_status === "on_track" && (
+                          <span className="flex flex-row items-center gap-1 text-xs font-bold text-emerald-500 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                            <CheckCircle2 size={12} />
+                            SLA Dans les temps
+                          </span>
+                        )}
+                        {dispatchTicket.sla_deadline && (
+                          <span className="text-xs text-muted-foreground">
+                            Deadline :{" "}
+                            {new Date(
+                              dispatchTicket.sla_deadline,
+                            ).toLocaleString("fr-FR")}
+                          </span>
+                        )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
-                      <Briefcase size={12} />
-                      <span
-                        className={
-                          agent.active_tickets >= 5
-                            ? "text-rose-400 font-semibold"
-                            : ""
-                        }
-                      >
-                        {agent.active_tickets} ticket
-                        {agent.active_tickets > 1 ? "s" : ""} actif
-                        {agent.active_tickets > 1 ? "s" : ""}
-                      </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Section Assignation */}
+              <div className="space-y-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                  <Users size={13} />
+                  Choisir un technicien
+                </h3>
+
+                {(() => {
+                  const availableTechs = agents.filter(tech => dispatchTicket?.state === 'escalated' ? tech.id !== dispatchTicket.user_id : true);
+                  
+                  return loadingAgents ? (
+                    <div className="text-center text-sm text-muted-foreground py-8 flex items-center justify-center gap-2">
+                      <RefreshCw size={14} className="animate-spin" />
+                      Chargement des experts...
                     </div>
-                  </button>
-                ))
-              )}
+                  ) : availableTechs.length === 0 ? (
+                    <div className="text-center text-sm text-muted-foreground py-8">
+                      Aucun technicien disponible
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                      {availableTechs.map((agent) => (
+                        <button
+                          key={agent.id}
+                          onClick={() => setSelectedAgent(agent)}
+                          className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all text-left
+                            ${
+                              selectedAgent?.id === agent.id
+                                ? "border-indigo-500 bg-indigo-500/10 shadow-sm shadow-indigo-500/20"
+                                : "border-[hsl(var(--border)/0.5)] bg-[hsl(var(--secondary)/0.2)] hover:bg-[hsl(var(--secondary)/0.4)]"
+                            }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold
+                              ${
+                                selectedAgent?.id === agent.id
+                                  ? "bg-indigo-500 text-white"
+                                  : "bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]"
+                              }`}
+                            >
+                              {agent.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-foreground">
+                                {agent.name}
+                              </p>
+                              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                {agent.is_expert && (
+                                  <span className="text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.5 rounded-full font-semibold">
+                                    ⭐ Expert
+                                  </span>
+                                )}
+                                {agent.it_domains.slice(0, 2).map((d) => (
+                                  <span
+                                    key={d}
+                                    className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full"
+                                  >
+                                    {d}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                          <div
+                            className={`flex items-center gap-1.5 text-xs shrink-0 ${agent.active_tickets >= 5 ? "text-rose-400 font-semibold" : "text-muted-foreground"}`}
+                          >
+                            <Briefcase size={12} />
+                            {agent.active_tickets} actif
+                            {agent.active_tickets > 1 ? "s" : ""}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
 
-            {/* Modal Footer */}
-            <div className="flex items-center justify-between p-5 border-t border-[hsl(var(--border))] gap-3">
+            {/* ── Footer ── */}
+            <div className="flex items-center gap-3 p-5 border-t border-[hsl(var(--border))] flex-shrink-0">
               <button
                 onClick={closeDispatch}
                 className="flex-1 py-2 rounded-lg border border-[hsl(var(--border))] text-sm text-muted-foreground hover:bg-muted transition-all"
@@ -551,6 +750,141 @@ function QueuePage() {
                     ? `Assigner à ${selectedAgent.name.split(" ")[0]}`
                     : "Choisir un technicien"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modale Action Technicien ─────────────────── */}
+      {techTicket && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="flex items-start justify-between p-6 border-b border-[hsl(var(--border))]">
+              <div>
+                <p className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded uppercase inline-block mb-2">
+                  TK-{String(techTicket.id).padStart(4, "0")}
+                </p>
+                <h2 className="text-xl font-bold text-foreground leading-tight line-clamp-2">
+                  {techTicket.name}
+                </h2>
+              </div>
+              <button
+                onClick={closeTechModal}
+                className="text-muted-foreground hover:text-foreground transition-colors p-1 flex-shrink-0"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Corps */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+              {/* Alert Escalade */}
+              {techTicket.state === "escalated" && (
+                <div className="flex items-start gap-3 p-4 bg-purple-500/10 border border-purple-500/30 rounded-xl">
+                  <ArrowUpCircle className="text-purple-500 mt-0.5" size={18} />
+                  <div>
+                    <p className="text-sm font-bold text-purple-400">
+                      Priorité Absolue
+                    </p>
+                    <p className="text-xs text-purple-400/80 mt-1">
+                      Attention : Ce ticket a fait l&apos;objet d&apos;une
+                      escalade et nécessite une prise en charge immédiate.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Description */}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-2">
+                  Description du problème
+                </p>
+                <div className="text-sm text-muted-foreground leading-relaxed bg-[hsl(var(--muted)/0.3)] rounded-xl p-4 border border-[hsl(var(--border)/0.3)] max-h-32 overflow-y-auto pr-3 custom-scrollbar">
+                  {techTicket.description}
+                </div>
+              </div>
+
+              {/* Demandeur + SLA */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex items-center gap-3 p-4 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))] shadow-sm">
+                  <div className="w-10 h-10 rounded-full accent-gradient flex items-center justify-center text-white text-sm font-bold flex-shrink-0 shadow-md">
+                    {techTicket.user_name ? (
+                      techTicket.user_name
+                        .trim()
+                        .split(/\s+/)
+                        .filter(Boolean)
+                        .map((w: string) => w[0].toUpperCase())
+                        .join("")
+                        .slice(0, 2)
+                    ) : (
+                      <User size={16} />
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest mb-0.5">
+                      Demandeur
+                    </p>
+                    <p className="text-sm font-bold truncate text-foreground capitalize">
+                      {techTicket.user_name
+                        ? techTicket.user_name.replace(/#/g, "").trim()
+                        : `${techTicket.user_id}`}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col justify-center gap-2 p-4 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))] shadow-sm">
+                  <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest mb-1">
+                    Classification
+                  </p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span
+                      className={`inline-flex items-center px-2.5 py-1 rounded-lg border font-bold text-[11px] ${PRIORITY_MAP[techTicket.priority]?.badge || "bg-gray-500/10 text-gray-500 border-gray-500/20"}`}
+                    >
+                      {PRIORITY_MAP[techTicket.priority]?.label ||
+                        techTicket.priority}
+                    </span>
+                    {techTicket.ai_classification && (
+                      <span className="inline-flex items-center gap-1.5 text-[11px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2.5 py-1 rounded-lg font-bold">
+                        <Tag size={12} /> {techTicket.ai_classification}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer / Actions */}
+            <div className="p-6 border-t border-[hsl(var(--border))] bg-[hsl(var(--card))] rounded-b-2xl">
+              {techTicket.assigned_to_id && !techTicket.x_accepted ? (
+                <div className="space-y-4">
+                  <p className="text-xs text-center text-emerald-500 font-medium bg-emerald-500/10 py-2 px-3 rounded-lg border border-emerald-500/20">
+                    🎯 Cet article vous a été spécifiquement attribué par
+                    l&apos;administration.
+                  </p>
+                  <button
+                    disabled={techLoading}
+                    onClick={handleAcceptModal}
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-50"
+                  >
+                    <ShieldCheck size={18} />
+                    {techLoading
+                      ? "Acceptation en cours..."
+                      : "Accepter la mission"}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  disabled={techLoading}
+                  onClick={handleTake}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold shadow-lg shadow-orange-500/20 transition-all disabled:opacity-50"
+                >
+                  <Inbox size={18} />
+                  {techLoading
+                    ? "Assignation en cours..."
+                    : "Prendre en charge"}
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -5,6 +5,7 @@ class SupportTicket(models.Model):
     _name = 'support.ticket'
     _inherit = ['mail.thread']
     _description = 'Ticket de Support IT'
+    _inherit = ['mail.thread', 'mail.activity.mixin']
     _order = 'create_date desc'
 
     name = fields.Char(string='Sujet', required=True)
@@ -19,20 +20,23 @@ class SupportTicket(models.Model):
         ('escalated', 'Escaladé'),
         ('resolved', 'Résolu'),
         ('closed', 'Fermé')
-    ], string='Statut', default='new')
+    ], string='Statut', default='new', tracking=True)
     
     priority = fields.Selection([
         ('0', 'Basse'),
         ('1', 'Moyenne'),
         ('2', 'Haute'),
         ('3', 'Critique')
-    ], string='Priorité', default='1')
+    ], string='Priorité', default='1', tracking=True)
 
     # Lien avec l'utilisateur qui a créé le ticket
     user_id = fields.Many2one('res.users', string='Demandeur', default=lambda self: self.env.user)
     
     # Agent IT assigné au ticket (seulement les utilisateurs internes)
-    assigned_to_id = fields.Many2one('res.users', string='Agent Assigné', domain=[('share', '=', False)])
+    assigned_to_id = fields.Many2one('res.users', string='Agent Assigné', domain=[('share', '=', False)], tracking=True)
+    
+    # Technicien qui a déclenché l'escalade
+    escalated_by_id = fields.Many2one('res.users', string='Escaladé par')
     
     # SLA
     sla_id = fields.Many2one('support.sla', string='Règle SLA', compute='_compute_sla', store=True)

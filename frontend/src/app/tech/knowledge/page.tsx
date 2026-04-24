@@ -26,6 +26,7 @@ const CATEGORIES = [
   "Matériel",
   "Accès",
   "Messagerie",
+  "Sécurité",
   "Infrastructure",
   "Autre",
 ];
@@ -60,6 +61,24 @@ function KnowledgePage() {
     undefined,
   );
   // undefined = modal fermé, null = création, KbArticle = édition
+  const [fromTicketId, setFromTicketId] = useState<string | null>(null);
+
+  // ── Auto-open article from URL ────────────────────────────────────────────
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const idParam = params.get("id");
+      const ticketParam = params.get("fromTicket");
+      if (idParam) {
+        axios.get(`${ODOO_URL}/api/knowledge/${idParam}`).then((res) => {
+          if (res.data.status === 200 || res.data.status === "200") {
+            setReadArticle(res.data.data);
+            if (ticketParam) setFromTicketId(ticketParam);
+          }
+        }).catch(console.error);
+      }
+    }
+  }, []);
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
   const fetchArticles = useCallback(
@@ -277,7 +296,13 @@ function KnowledgePage() {
               index={i}
               currentUserId={user?.id}
               currentUserRole={role}
-              onRead={setReadArticle}
+              onRead={(a) => {
+                axios.get(`${ODOO_URL}/api/knowledge/${a.id}`).then((res) => {
+                  if (res.data.status === 200 || res.data.status === "200") {
+                    setReadArticle(res.data.data);
+                  }
+                }).catch(console.error);
+              }}
               onEdit={canWrite ? (a) => setEditArticle(a) : undefined}
               onDelete={role === "admin" ? handleDelete : undefined}
             />
@@ -316,9 +341,18 @@ function KnowledgePage() {
       {readArticle && (
         <KnowledgeReadModal
           article={readArticle}
+          fromTicket={fromTicketId}
           currentUserId={user?.id}
           currentUserRole={role}
-          onClose={() => setReadArticle(null)}
+          onClose={() => {
+            setReadArticle(null);
+            setFromTicketId(null);
+            // Optionnel : nettoyer l'URL sans recharger
+            if (typeof window !== "undefined") {
+              const newUrl = window.location.pathname;
+              window.history.replaceState({}, "", newUrl);
+            }
+          }}
           onEdit={
             canWrite
               ? (a) => {

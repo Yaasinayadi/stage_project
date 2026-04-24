@@ -1,47 +1,63 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
-  X, Calendar, User, Tag, ExternalLink, Pencil, Trash2, BookOpen,
+  X,
+  Calendar,
+  User,
+  Tag,
+  ExternalLink,
+  Pencil,
+  Trash2,
+  BookOpen,
+  ArrowLeft,
 } from "lucide-react";
 import type { KbArticle } from "./KnowledgeCard";
 import { getCategoryColor } from "./KnowledgeCard";
-
+import DOMPurify from "dompurify";
 type Props = {
   article: KbArticle;
+  fromTicket?: string | null;
   currentUserId?: number | null;
   currentUserRole?: string;
-  onClose:  () => void;
-  onEdit?:  (a: KbArticle) => void;
-  onDelete?:(a: KbArticle) => void;
+  onClose: () => void;
+  onEdit?: (a: KbArticle) => void;
+  onDelete?: (a: KbArticle) => void;
 };
 
 function formatDate(iso: string | null): string {
   if (!iso) return "";
   try {
     return new Date(iso).toLocaleDateString("fr-FR", {
-      day: "2-digit", month: "long", year: "numeric",
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
     });
-  } catch { return iso; }
+  } catch {
+    return iso;
+  }
 }
 
 export default function KnowledgeReadModal({
   article,
+  fromTicket,
   currentUserId,
   currentUserRole,
   onClose,
   onEdit,
   onDelete,
 }: Props) {
+  const router = useRouter();
   const overlayRef = useRef<HTMLDivElement>(null);
   const [safeHtml, setSafeHtml] = useState("");
 
-  // Sanitize HTML client-side (DOMPurify needs browser APIs)
   useEffect(() => {
-    if (!article.solution) { setSafeHtml(""); return; }
-    import("dompurify").then(({ default: DOMPurify }) => {
-      setSafeHtml(DOMPurify.sanitize(article.solution ?? ""));
-    });
+    if (!article.solution) {
+      setSafeHtml("");
+      return;
+    }
+    setSafeHtml(DOMPurify.sanitize(article.solution));
   }, [article.solution]);
 
   // Close on overlay click
@@ -51,7 +67,9 @@ export default function KnowledgeReadModal({
 
   // Close on Escape
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
@@ -74,6 +92,20 @@ export default function KnowledgeReadModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── Header ── */}
+        {fromTicket && (
+          <div className="p-4 pb-0">
+            <a
+              href={`/tech/tickets/${fromTicket}`}
+              onClick={(e) => {
+                e.preventDefault();
+                router.back();
+              }}
+              className="btn-ghost text-sm flex items-center gap-1.5 w-fit"
+            >
+              <ArrowLeft size={15} /> Retour
+            </a>
+          </div>
+        )}
         <div className="flex items-start justify-between gap-4 p-5 border-b border-[hsl(var(--border)/0.5)]">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1.5 flex-wrap">
@@ -81,7 +113,11 @@ export default function KnowledgeReadModal({
               {article.category && (
                 <span
                   className="text-[0.65rem] font-semibold px-2.5 py-0.5 rounded-full border"
-                  style={{ background: `${color}14`, color, borderColor: `${color}30` }}
+                  style={{
+                    background: `${color}14`,
+                    color,
+                    borderColor: `${color}30`,
+                  }}
                 >
                   {article.category}
                 </span>
@@ -108,7 +144,8 @@ export default function KnowledgeReadModal({
               )}
               {article.write_date && (
                 <span className="flex items-center gap-1">
-                  <Calendar size={11} /> Mis à jour le {formatDate(article.write_date)}
+                  <Calendar size={11} /> Mis à jour le{" "}
+                  {formatDate(article.write_date)}
                 </span>
               )}
             </div>
@@ -160,12 +197,17 @@ export default function KnowledgeReadModal({
           {/* Source ticket */}
           {article.source_ticket_id && (
             <div className="flex items-center gap-2 p-3 rounded-xl bg-[hsl(var(--muted)/0.4)] border border-[hsl(var(--border)/0.5)] text-sm">
-              <ExternalLink size={14} className="text-[hsl(var(--muted-foreground))] flex-shrink-0" />
+              <ExternalLink
+                size={14}
+                className="text-[hsl(var(--muted-foreground))] flex-shrink-0"
+              />
               <span className="text-[hsl(var(--muted-foreground))]">
                 Issu du ticket{" "}
                 <span className="font-semibold text-[hsl(var(--foreground))]">
                   #{article.source_ticket_id}
-                  {article.source_ticket_name ? ` — ${article.source_ticket_name}` : ""}
+                  {article.source_ticket_name
+                    ? ` — ${article.source_ticket_name}`
+                    : ""}
                 </span>
               </span>
             </div>
@@ -177,7 +219,10 @@ export default function KnowledgeReadModal({
           <div className="px-5 py-3 border-t border-[hsl(var(--border)/0.5)] flex justify-end gap-2">
             {canEdit && onEdit && (
               <button
-                onClick={() => { onClose(); onEdit(article); }}
+                onClick={() => {
+                  onClose();
+                  onEdit(article);
+                }}
                 className="btn-ghost flex items-center gap-2 text-sm"
               >
                 <Pencil size={14} /> Modifier
@@ -185,7 +230,10 @@ export default function KnowledgeReadModal({
             )}
             {canDelete && onDelete && (
               <button
-                onClick={() => { onClose(); onDelete(article); }}
+                onClick={() => {
+                  onClose();
+                  onDelete(article);
+                }}
                 className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg text-red-500 hover:bg-red-500/08 transition-colors font-medium"
               >
                 <Trash2 size={14} /> Supprimer

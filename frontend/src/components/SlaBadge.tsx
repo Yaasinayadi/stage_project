@@ -11,33 +11,33 @@ interface SlaBadgeProps {
   compact?: boolean;
 }
 
-function getTimeLeft(deadline: string): { hours: number; minutes: number; seconds: number; totalMs: number } {
+function getTimeInfo(deadline: string): { hours: number; minutes: number; seconds: number; isOverdue: boolean } {
   const now = new Date().getTime();
   const end = new Date(deadline).getTime();
   const diff = end - now;
+  const absDiff = Math.abs(diff);
 
-  if (diff <= 0) return { hours: 0, minutes: 0, seconds: 0, totalMs: diff };
-
-  const hours = Math.floor(diff / (1000 * 60 * 60));
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-  const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-  return { hours, minutes, seconds, totalMs: diff };
+  const hours = Math.floor(absDiff / (1000 * 60 * 60));
+  const minutes = Math.floor((absDiff % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((absDiff % (1000 * 60)) / 1000);
+  
+  return { hours, minutes, seconds, isOverdue: diff < 0 };
 }
 
 export default function SlaBadge({ slaDeadline, slaStatus, compact = false }: SlaBadgeProps) {
-  const [timeLeft, setTimeLeft] = useState(() =>
-    slaDeadline ? getTimeLeft(slaDeadline) : null
+  const [timeInfo, setTimeInfo] = useState(() =>
+    slaDeadline ? getTimeInfo(slaDeadline) : null
   );
 
   useEffect(() => {
     if (!slaDeadline) return;
     const interval = setInterval(() => {
-      setTimeLeft(getTimeLeft(slaDeadline));
+      setTimeInfo(getTimeInfo(slaDeadline));
     }, 1000);
     return () => clearInterval(interval);
   }, [slaDeadline]);
 
-  if (!slaDeadline || !timeLeft) {
+  if (!slaDeadline || !timeInfo) {
     return (
       <span className="inline-flex items-center gap-1 text-xs text-[hsl(var(--muted-foreground))] px-2 py-1 rounded-md bg-[hsl(var(--muted)/0.5)]">
         <Clock size={11} /> Pas de SLA
@@ -45,15 +45,12 @@ export default function SlaBadge({ slaDeadline, slaStatus, compact = false }: Sl
     );
   }
 
-  const isBreached = timeLeft.totalMs <= 0;
-  const isAtRisk = !isBreached && timeLeft.totalMs <= 60 * 60 * 1000; // < 1 hour
+  const isBreached = timeInfo.isOverdue || slaStatus === "breached";
+  // At risk if less than 1 hour left AND not overdue
+  const isAtRisk = !isBreached && !timeInfo.isOverdue && 
+    (new Date(slaDeadline).getTime() - new Date().getTime() < 60 * 60 * 1000);
 
-  const status: SlaStatus =
-    slaStatus === "breached" || isBreached
-      ? "breached"
-      : slaStatus === "at_risk" || isAtRisk
-      ? "at_risk"
-      : "on_track";
+  const status: SlaStatus = isBreached ? "breached" : isAtRisk ? "at_risk" : "on_track";
 
   const config = {
     on_track: {
@@ -69,14 +66,16 @@ export default function SlaBadge({ slaDeadline, slaStatus, compact = false }: Sl
       pulse: true,
     },
     breached: {
-      bg: "bg-red-500/10 border-red-500/20",
-      text: "text-red-600 dark:text-red-400",
+      bg: "bg-rose-500/10 border-rose-500/20",
+      text: "text-rose-600 dark:text-rose-400",
       icon: <AlertTriangle size={11} />,
       pulse: true,
     },
   };
 
   const cfg = config[status!];
+
+  const timeString = `${timeInfo.isOverdue ? "+" : ""}${timeInfo.hours}h ${timeInfo.minutes}m ${timeInfo.seconds}s`;
 
   if (compact) {
     return (
@@ -85,9 +84,7 @@ export default function SlaBadge({ slaDeadline, slaStatus, compact = false }: Sl
         title={`SLA deadline : ${new Date(slaDeadline).toLocaleString("fr-FR")}`}
       >
         {cfg.icon}
-        {isBreached
-          ? "SLA Dépassé"
-          : `${timeLeft.hours}h ${timeLeft.minutes}m`}
+        {timeInfo.isOverdue ? `En retard ${timeString}` : timeString}
       </span>
     );
   }
@@ -97,14 +94,11 @@ export default function SlaBadge({ slaDeadline, slaStatus, compact = false }: Sl
       className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold ${cfg.bg} ${cfg.text} ${cfg.pulse ? "animate-pulse" : ""}`}
     >
       <Clock size={13} />
-      {isBreached ? (
-        <span>SLA Dépassé !</span>
-      ) : (
-        <span>
-          {timeLeft.hours > 0 && `${timeLeft.hours}h `}
-          {timeLeft.minutes}m {timeLeft.seconds}s restants
-        </span>
-      )}
+      <span>
+        {timeInfo.isOverdue ? "SLA Dépassé de " : "SLA : "}
+        <span className="font-mono tabular-nums">{timeString}</span>
+        {timeInfo.isOverdue ? "" : " restants"}
+      </span>
     </div>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { X, Loader2, CheckCircle2, BookOpen } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { X, Loader2, CheckCircle2, BookOpen, ArrowLeft } from "lucide-react";
 import axios from "axios";
 import type { KbArticle, KbTag } from "./KnowledgeCard";
 
@@ -9,6 +10,9 @@ const ODOO_URL = "http://localhost:8069";
 
 type Props = {
   article?: KbArticle | null;
+  initialTitle?: string;
+  initialContent?: string;
+  fromTicket?: string | number | null;
   onClose: () => void;
   onSaved: (toastMsg?: string) => void;
   userId?: number | null;
@@ -19,21 +23,25 @@ type Step = "form" | "saving" | "success";
 
 export default function KnowledgeModal({
   article,
+  initialTitle,
+  initialContent,
+  fromTicket,
   onClose,
   onSaved,
   userId,
   userRole,
 }: Props) {
+  const router = useRouter();
   const isEditing = !!article;
 
   // ─── State ────────────────────────────────────────────────────────────────
   const [step, setStep] = useState<Step>("form");
-  const [title, setTitle] = useState(article?.title ?? "");
+  const [title, setTitle] = useState(article?.title ?? initialTitle ?? "");
   const [category, setCategory] = useState(article?.category ?? "");
   const [tagInput, setTagInput] = useState(
     article?.tags.map((t) => t.name).join(", ") ?? "",
   );
-  const [content, setContent] = useState("");
+  const [content, setContent] = useState(initialContent ?? "");
   const [isPublished, setIsPublished] = useState(
     article?.is_published ?? false,
   );
@@ -45,6 +53,7 @@ export default function KnowledgeModal({
     "Matériel",
     "Accès",
     "Messagerie",
+    "Sécurité",
     "Infrastructure",
     "Autre",
   ]);
@@ -142,17 +151,25 @@ export default function KnowledgeModal({
             `L'article "${title}" a été publié avec succès.`;
           setStep("success");
           setTimeout(() => {
-            onSaved(toastMsg);
-            handleClose();
-          }, 1400);
+            if (fromTicket) {
+              router.back();
+            } else {
+              onSaved(toastMsg);
+              handleClose();
+            }
+          }, 1500);
           return;
         }
 
         setStep("success");
         setTimeout(() => {
-          onSaved();
-          handleClose();
-        }, 1400);
+          if (fromTicket) {
+            router.back();
+          } else {
+            onSaved();
+            handleClose();
+          }
+        }, 1500);
       } catch (err: unknown) {
         const msg =
           err instanceof Error
@@ -189,6 +206,20 @@ export default function KnowledgeModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── Header ── */}
+        {fromTicket && (
+          <div className="p-4 pb-0">
+            <a 
+              href={`/tech/tickets/${fromTicket}`} 
+              onClick={(e) => {
+                e.preventDefault();
+                router.back();
+              }}
+              className="btn-ghost text-sm flex items-center gap-1.5 w-fit"
+            >
+              <ArrowLeft size={15} /> Retour
+            </a>
+          </div>
+        )}
         <div className="flex items-center justify-between p-5 border-b border-[hsl(var(--border)/0.5)]">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg accent-gradient flex items-center justify-center">

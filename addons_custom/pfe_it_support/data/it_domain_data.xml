@@ -5,6 +5,7 @@
     <record id="domain_materiel"       model="pfe.it.domain"><field name="name">Matériel</field></record>
     <record id="domain_acces"          model="pfe.it.domain"><field name="name">Accès</field></record>
     <record id="domain_messagerie"     model="pfe.it.domain"><field name="name">Messagerie</field></record>
+    <record id="domain_securite"       model="pfe.it.domain"><field name="name">Sécurité</field></record>
     <record id="domain_infrastructure" model="pfe.it.domain"><field name="name">Infrastructure</field></record>
     <record id="domain_autre"          model="pfe.it.domain"><field name="name">Autre</field></record>
 </odoo>

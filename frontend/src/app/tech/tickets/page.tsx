@@ -57,8 +57,14 @@ function MyTicketsPage() {
 
   useEffect(() => {
     axios.get(`${ODOO_URL}/api/categories`).then(res => {
-      if (res.data.status === 200) setCategories(res.data.data);
-    }).catch(console.error);
+      if (res.data.status === 200 && res.data.data.length > 0) {
+        setCategories(res.data.data);
+      } else {
+        setCategories(["Logiciel", "Matériel", "Accès", "Réseau", "Messagerie", "Sécurité", "Infrastructure", "Autre"]);
+      }
+    }).catch(() => {
+      setCategories(["Logiciel", "Matériel", "Accès", "Réseau", "Messagerie", "Sécurité", "Infrastructure", "Autre"]);
+    });
   }, []);
 
   const fetchMyTickets = useCallback(async () => {

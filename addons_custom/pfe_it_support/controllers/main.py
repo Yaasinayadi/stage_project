@@ -205,12 +205,15 @@ class SupportTicketController(http.Controller):
             'x_accepted': t.x_accepted,
             'user_id': t.user_id.id if t.user_id else None,
             'user_name': t.user_id.name if t.user_id else None,
+            'user_email': t.user_id.email or t.user_id.login if t.user_id else None,
             'assigned_to_id': t.assigned_to_id.id if t.assigned_to_id else None,
             'assigned_to': t.assigned_to_id.name if t.assigned_to_id else None,
+            'escalated_by_id': t.escalated_by_id.id if t.escalated_by_id else None,
             'sla_deadline': str(t.sla_deadline) if t.sla_deadline else None,
             'sla_status': t.sla_status or None,
             'create_date': str(t.create_date) if t.create_date else None,
             'write_date': str(t.write_date) if t.write_date else None,
+            'resolution': t.resolution or None,
         } for t in tickets]
         headers.append(('Content-Type', 'application/json'))
         return request.make_response(
@@ -308,6 +311,282 @@ class SupportTicketController(http.Controller):
         ticket.write(vals)
         return self._json_response({'status': 200, 'message': 'Success updated'}, 200)
 
+    # ─────────────────────────────────────────────
+    # TICKET WORKFLOW ACTIONS API
+    # ─────────────────────────────────────────────
+
+    @http.route('/api/ticket/<int:ticket_id>/resolve', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
+    def resolve_ticket(self, ticket_id, **kw):
+        """Résout un ticket : enregistre la note de résolution et change le statut."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+        try:
+            post = json.loads(request.httprequest.data.decode('utf-8'))
+            ticket = request.env['support.ticket'].sudo().browse(ticket_id)
+            if not ticket.exists():
+                return self._json_response({'status': 404, 'message': 'Ticket introuvable.'}, 404)
+
+            resolution_note = post.get('resolution', '').strip()
+            add_to_kb = post.get('add_to_kb', False)
+            user_id = post.get('user_id')
+
+            if not resolution_note:
+                return self._json_response({'status': 400, 'message': 'La note de résolution est requise.'}, 400)
+
+            # Mettre à jour le ticket (date_done est auto-rempli via le write() override)
+            ticket.write({
+                'state': 'resolved',
+                'resolution': resolution_note,
+            })
+
+            # Message public dans le chatter
+            ticket.message_post(
+                body=f"✅ **TICKET RÉSOLU** : {resolution_note}",
+                message_type='comment',
+                subtype_xmlid='mail.mt_comment',
+                author_id=int(user_id) if user_id else False
+            )
+
+            # Publier dans la base de connaissances si demandé
+            if add_to_kb:
+                try:
+                    request.env['support.knowledge'].sudo().create({
+                        'title': f"[Résolu] {ticket.name}",
+                        'content': resolution_note,
+                        'category': ticket.ai_classification or 'Général',
+                    })
+                except Exception as kb_err:
+                    _logger.warning("KB publish failed: %s", kb_err)
+
+            return self._json_response({
+                'status': 200,
+                'message': 'Ticket résolu avec succès.',
+                'state': 'resolved',
+            })
+        except Exception as e:
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
+
+    @http.route('/api/ticket/<int:ticket_id>/escalate', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
+    def escalate_ticket(self, ticket_id, **kw):
+        """Escalade un ticket vers l'administrateur."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+        try:
+            post = json.loads(request.httprequest.data.decode('utf-8'))
+            ticket = request.env['support.ticket'].sudo().browse(ticket_id)
+            if not ticket.exists():
+                return self._json_response({'status': 404, 'message': 'Ticket introuvable.'}, 404)
+
+            tech_id = post.get('tech_id')
+            tech_name = 'Technicien'
+            if tech_id:
+                tech_user = request.env['res.users'].sudo().browse(int(tech_id))
+                if tech_user.exists():
+                    tech_name = tech_user.name
+
+            ticket.write({
+                'state': 'escalated',
+                'assigned_to_id': False,  # Remet dans la file d'attente admin
+                'x_accepted': False,      # Réinitialise l'acceptation
+                'escalated_by_id': int(tech_id) if tech_id else False,
+            })
+
+            # Enregistrer un commentaire système pour notifier l'admin
+            escalation_note = (
+                f"🚨 ESCALADE par {tech_name} : Ce ticket nécessite l'intervention d'un administrateur."
+            )
+            
+            # Message public dans le chatter
+            ticket.message_post(
+                body=escalation_note,
+                message_type='comment',
+                subtype_xmlid='mail.mt_comment'
+            )
+
+            try:
+                request.env['support.ticket.comment'].sudo().create({
+                    'ticket_id': ticket_id,
+                    'body': escalation_note,
+                    'author_id': int(tech_id) if tech_id else False,
+                })
+            except Exception as comment_err:
+                _logger.warning("Escalation comment failed: %s", comment_err)
+
+            return self._json_response({
+                'status': 200,
+                'message': 'Ticket escaladé. L\'administrateur a été notifié.',
+                'state': 'escalated',
+            })
+        except Exception as e:
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
+
+    @http.route('/api/ticket/<int:ticket_id>/unescalate', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
+    def unescalate_ticket(self, ticket_id, **kw):
+        """Annule l'escalade d'un ticket et le réassigne au technicien."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+        try:
+            post = json.loads(request.httprequest.data.decode('utf-8')) if request.httprequest.data else {}
+            ticket = request.env['support.ticket'].sudo().browse(ticket_id)
+            if not ticket.exists():
+                return self._json_response({'status': 404, 'message': 'Ticket introuvable.'}, 404)
+
+            user_id = post.get('user_id')
+            
+            if ticket.state != 'escalated':
+                return self._json_response({'status': 400, 'message': 'Le ticket n\'est pas escaladé.'}, 400)
+            
+            if ticket.escalated_by_id and user_id and ticket.escalated_by_id.id != int(user_id):
+                return self._json_response({'status': 403, 'message': 'Seul le technicien ayant déclenché l\'escalade peut l\'annuler.'}, 403)
+
+            # Revert the escalation
+            assigned_id = ticket.escalated_by_id.id if ticket.escalated_by_id else (int(user_id) if user_id else False)
+            
+            ticket.write({
+                'state': 'in_progress',
+                'assigned_to_id': assigned_id,
+                'x_accepted': True,
+                'escalated_by_id': False,
+            })
+
+            # Add system comment
+            undo_note = "⚠️ Escalade annulée par le technicien."
+            ticket.message_post(
+                body=undo_note,
+                message_type='comment',
+                subtype_xmlid='mail.mt_comment'
+            )
+
+            try:
+                request.env['support.ticket.comment'].sudo().create({
+                    'ticket_id': ticket_id,
+                    'body': undo_note,
+                    'author_id': int(user_id) if user_id else False,
+                })
+            except Exception as comment_err:
+                import logging
+                logging.getLogger(__name__).warning("Unescalation comment failed: %s", comment_err)
+
+            return self._json_response({
+                'status': 200,
+                'message': 'Escalade annulée. Vous avez repris la main sur le ticket.',
+                'state': 'in_progress',
+            })
+        except Exception as e:
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
+
+    @http.route('/api/ticket/<int:ticket_id>/wait', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
+    def wait_ticket(self, ticket_id, **kw):
+        """Passe un ticket en état 'En attente' avec une justification."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+        try:
+            post = json.loads(request.httprequest.data.decode('utf-8'))
+            justification = post.get('justification', '').strip()
+            user_id = post.get('user_id')
+            
+            ticket = request.env['support.ticket'].sudo().browse(ticket_id)
+            if not ticket.exists():
+                return self._json_response({'status': 404, 'message': 'Ticket introuvable.'}, 404)
+
+            ticket.write({'state': 'waiting'})
+
+            # Ajouter un commentaire explicatif et message public
+            if justification:
+                body = f"⏸️ **MISE EN ATTENTE** : {justification}"
+                ticket.message_post(
+                    body=body,
+                    message_type='comment',
+                    subtype_xmlid='mail.mt_comment',
+                    author_id=int(user_id) if user_id else False
+                )
+                request.env['support.ticket.comment'].sudo().create({
+                    'ticket_id': ticket_id,
+                    'body': body,
+                    'author_id': int(user_id) if user_id else request.env.user.id,
+                })
+
+            return self._json_response({
+                'status': 200,
+                'message': 'Ticket mis en attente.',
+                'state': 'waiting',
+            })
+        except Exception as e:
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
+
+    @http.route('/api/ticket/<int:ticket_id>/resume', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
+    def resume_ticket(self, ticket_id, **kw):
+        """Reprend le travail sur un ticket en attente."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+        try:
+            post = json.loads(request.httprequest.data.decode('utf-8')) if request.httprequest.data else {}
+            user_id = post.get('user_id')
+
+            ticket = request.env['support.ticket'].sudo().browse(ticket_id)
+            if not ticket.exists():
+                return self._json_response({'status': 404, 'message': 'Ticket introuvable.'}, 404)
+
+            ticket.write({'state': 'in_progress'})
+
+            # Message public dans le chatter
+            ticket.message_post(
+                body="▶️ **REPRISE DU TRAVAIL** : Le technicien a repris le traitement du ticket.",
+                message_type='comment',
+                subtype_xmlid='mail.mt_comment',
+                author_id=int(user_id) if user_id else False
+            )
+
+            return self._json_response({
+                'status': 200,
+                'message': 'Ticket repris.',
+                'state': 'in_progress',
+            })
+        except Exception as e:
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
+
+    @http.route('/api/ticket/<int:ticket_id>/ai-analyze', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
+    def ai_analyze_ticket(self, ticket_id, **kw):
+        """Proxy vers le service IA pour une analyse détaillée."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+            
+        try:
+            ticket = request.env['support.ticket'].sudo().browse(ticket_id)
+            if not ticket.exists():
+                return self._json_response({'status': 404, 'message': 'Ticket introuvable.'}, 404)
+
+            import requests
+            ia_url = "http://ia_service:8000/ai_analyze_detailed"
+            payload = {"description": f"{ticket.name}\n{ticket.description}"}
+            try:
+                res = requests.post(ia_url, json=payload, timeout=10)
+            except requests.exceptions.ConnectionError:
+                res = requests.post("http://127.0.0.1:8000/ai_analyze_detailed", json=payload, timeout=10)
+            
+            if res.status_code == 200:
+                data = res.json()
+                
+                # Recherche sémantique d'un article pertinent
+                data['kb_article_id'] = None
+                data['kb_article_title'] = None
+                if ticket.name:
+                    import re
+                    words = re.findall(r'\b\w{4,}\b', ticket.name)
+                    if words:
+                        first_word = words[0]
+                        domain = ['&', ('is_published', '=', True), '|', ('name', 'ilike', first_word), ('solution', 'ilike', first_word)]
+                        articles = request.env['support.knowledge'].sudo().search(domain, limit=1)
+                        if articles:
+                            data['kb_article_id'] = articles[0].id
+                            data['kb_article_title'] = articles[0].name
+
+                return self._json_response({'status': 'success', 'data': data})
+            else:
+                return self._json_response({'status': 'error', 'message': 'IA Service unreachable'}, 502)
+        except Exception as e:
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
+
     @http.route('/api/ticket/<int:ticket_id>', type='http', auth='public', methods=['DELETE', 'OPTIONS'], csrf=False)
     def delete_ticket(self, ticket_id, **kw):
         """Supprime un ticket de support."""
@@ -390,6 +669,14 @@ class SupportTicketController(http.Controller):
             
         try:
             category = kw.get('category', '').strip()
+            ticket_id = kw.get('ticket_id')
+            
+            exclude_id = None
+            if ticket_id:
+                ticket = request.env['support.ticket'].sudo().browse(int(ticket_id))
+                if ticket.exists() and ticket.escalated_by_id:
+                    exclude_id = ticket.escalated_by_id.id
+
             # Strictly filter for role 'tech' only
             domain = [('share', '=', False), ('active', '=', True), ('x_support_role', '=', 'tech')]
             users = request.env['res.users'].sudo().search(domain)
@@ -400,6 +687,8 @@ class SupportTicketController(http.Controller):
                 if system_group and u.has_group('base.group_system'):
                     continue
                 if u.id <= 2:
+                    continue
+                if exclude_id and u.id == exclude_id:
                     continue
                 
                 user_domains = [d.name for d in u.it_domain_ids]
@@ -522,6 +811,13 @@ class SupportTicketController(http.Controller):
             _logger.info(f"Création du commentaire avec les valeurs : {vals}")
             new_comment = request.env['support.ticket.comment'].sudo().create(vals)
             _logger.info(f"Commentaire créé avec l'ID : {new_comment.id}")
+
+            # Message public dans le chatter Odoo
+            ticket.message_post(
+                body=body,
+                message_type='comment',
+                subtype_xmlid='mail.mt_comment'
+            )
             
             return self._cors_response({
                 'status': 201, 
@@ -721,6 +1017,7 @@ class SupportTicketController(http.Controller):
                     elif 'acces' in n: norm_name = "Accès"
                     elif 'messagerie' in n: norm_name = "Messagerie"
                     elif 'infrastructure' in n or 'infra' in n: norm_name = "Infrastructure"
+                    elif 'securite' in n: norm_name = "Sécurité"
                     else: norm_name = base.capitalize()
                     
                 cat_map[norm_name] = cat_map.get(norm_name, 0) + count

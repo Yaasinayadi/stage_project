@@ -55,11 +55,13 @@ class TicketController(http.Controller):
                     '&', ('assigned_to_id', '=', calling_user.id), ('x_accepted', '=', False),
                     '&', ('assigned_to_id', '=', False), ('ai_classification', 'in', expertise_list)
                 ] + domain
+                # Hide tickets escalated by this tech
+                domain = ['|', ('escalated_by_id', '=', False), ('escalated_by_id', '!=', calling_user.id)] + domain
             else:
                 domain = [('assigned_to_id', '=', False)] + domain
 
             # Search
-            tickets = request.env['support.ticket'].sudo().search(domain, order='priority desc, create_date asc')
+            tickets = request.env['support.ticket'].sudo().search(domain, order='priority desc, create_date desc')
             _logger.info(f"QUEUE DEBUG: found {len(tickets)} tickets ids={tickets.ids}")
             
             data = []

@@ -7,6 +7,11 @@ from werkzeug.utils import secure_filename
 
 from langchain_groq import ChatGroq
 from langchain.schema import SystemMessage, HumanMessage, AIMessage
+from dotenv import load_dotenv
+
+# Charger les variables d'environnement depuis le dossier parent
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(BASE_DIR, '..', '.env'))
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -14,7 +19,6 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 # ─────────────────────────────────────────────
 # CONFIG CHEMINS
 # ─────────────────────────────────────────────
-BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR  = os.path.join(BASE_DIR, "uploads")
 DB_PATH     = os.path.join(BASE_DIR, "attachments.db")
 
@@ -85,7 +89,7 @@ chat_histories: dict[str, list] = {}
 CLASSIFY_SYSTEM_PROMPT = """Tu es un expert en support IT de niveau 3. 
 Analyse et réponds UNIQUEMENT en JSON valide avec cette structure exacte :
 {
-  "category": "<Réseau, Logiciel, Matériel, Accès, Messagerie, Infrastructure, Autre>",
+  "category": "<Réseau, Logiciel, Matériel, Accès, Messagerie, Sécurité, Infrastructure, Autre>",
   "priority": "<0=Basse, 1=Moyenne, 2=Haute, 3=Critique>",
   "confidence": <0 à 100>,
   "suggested_solution": "<solution courte>"
@@ -107,6 +111,7 @@ def classify_ticket():
         messages = [SystemMessage(content=CLASSIFY_SYSTEM_PROMPT), HumanMessage(content=f"Ticket :\n{description}")]
         response = llm.invoke(messages)
         content = response.content.strip()
+        print(f"DEBUG: Classification response content: {content}")
         if content.startswith("```"): 
             content = content.split("\n", 1)[1].rsplit("```", 1)[0].strip()
         
@@ -121,6 +126,53 @@ def classify_ticket():
     except Exception as e:
         print(f"Erreur LLM classification: {e}")
         return jsonify(_mock_classify(description))
+
+# ─────────────────────────────────────────────
+# ROUTE : Analyse IA Détaillée (Résumé + Procédure)
+# ─────────────────────────────────────────────
+ANALYZE_SYSTEM_PROMPT = """Tu es un expert en support informatique de niveau 3. Analyse le ticket suivant (Titre et Description) et fournis une réponse structurée en 3 parties :
+1. Résumé du problème (en une phrase).
+2. Causes probables (liste à puces des raisons techniques possibles).
+3. Plan d'action suggéré (étapes précises pour résoudre le problème).
+Réponds en français, de manière concise et professionnelle.
+
+IMPORTANT: Tu dois UNIQUEMENT renvoyer un objet JSON valide avec cette structure exacte :
+{
+  "analysis_markdown": "<Ta réponse complète formatée en Markdown, incluant les 3 parties (utilises \\n pour les sauts de ligne)>",
+  "kb_article_id": <un nombre entier au hasard entre 1 et 10 si un article KB fictif est pertinent, sinon null>
+}
+Ne rajoute aucun texte avant ou après le JSON."""
+
+@app.route("/ai_analyze_detailed", methods=["POST"])
+def ai_analyze_detailed():
+    data = request.get_json()
+    if not data or "description" not in data:
+        return jsonify({"error": "Description requise."}), 400
+        
+    description = data["description"]
+    
+    if not llm:
+        return jsonify({
+            "analysis_markdown": "### 1. Résumé du problème\nAnalyse simulée : Le problème semble lié à un dysfonctionnement standard.\n\n### 2. Causes probables\n- Déconnexion réseau\n- Erreur de configuration\n\n### 3. Plan d'action suggéré\n1. Vérifier les câbles\n2. Redémarrer l'appareil\n3. Contacter le support",
+            "kb_article_id": 1
+        })
+        
+    try:
+        messages = [SystemMessage(content=ANALYZE_SYSTEM_PROMPT), HumanMessage(content=f"Ticket :\n{description}")]
+        response = llm.invoke(messages)
+        content = response.content.strip()
+        print(f"DEBUG: Detailed analysis response content: {content}")
+        if content.startswith("```"): 
+            content = content.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        
+        parsed_data = json.loads(content)
+        return jsonify(parsed_data)
+    except Exception as e:
+        print(f"Erreur LLM analyse: {e}")
+        return jsonify({
+            "analysis_markdown": "### Erreur\nImpossible de générer un résumé automatique. Diagnostic manuel requis.",
+            "kb_article_id": None
+        })
 
 # ─────────────────────────────────────────────
 # ROUTE : Chatbot IA

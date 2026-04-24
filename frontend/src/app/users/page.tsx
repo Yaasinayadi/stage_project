@@ -22,7 +22,7 @@ type UserData = {
 /* ─────────────────────────────────────────────────────── consts ── */
 const ODOO = "http://localhost:8069";
 
-const DOMAINS = ["Réseau", "Logiciel", "Matériel", "Accès", "Messagerie", "Infrastructure", "Autre"];
+const DOMAINS = ["Réseau", "Logiciel", "Matériel", "Accès", "Messagerie", "Infrastructure", "Sécurité", "Autre"];
 
 const ROLE_META: Record<string, { label: string; color: string; bg: string; border: string; dot: string }> = {
   admin: { label: "Administrateur", color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/25", dot: "bg-purple-400" },

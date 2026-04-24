@@ -94,11 +94,11 @@ function Dashboard() {
       if (res.data.status === 200) {
         setCategories(res.data.data);
       } else {
-        setCategories(["Logiciel", "Matériel", "Accès", "Réseau", "Messagerie", "Infrastructure", "Autre"]);
+        setCategories(["Logiciel", "Matériel", "Accès", "Réseau", "Messagerie", "Sécurité", "Infrastructure", "Autre"]);
       }
     }).catch((e) => {
       console.error(e);
-      setCategories(["Logiciel", "Matériel", "Accès", "Réseau", "Messagerie", "Infrastructure", "Autre"]);
+      setCategories(["Logiciel", "Matériel", "Accès", "Réseau", "Messagerie", "Sécurité", "Infrastructure", "Autre"]);
     });
     
     fetchTickets();
