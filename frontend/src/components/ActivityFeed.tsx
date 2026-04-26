@@ -5,6 +5,8 @@ import { createPortal } from "react-dom";
 import axios from "axios";
 import { useAuth } from "@/lib/auth";
 import { ArrowRight, Ticket, CheckCircle2, Clock, UserCheck, RefreshCw, X } from "lucide-react";
+import { ODOO_URL } from "@/lib/config";
+
 
 type TicketType = {
   id: number;
@@ -165,8 +167,9 @@ export default function ActivityFeed() {
       try {
         const url =
           user.x_support_role === "user"
-            ? `http://localhost:8069/api/tickets?user_id=${user.id}`
-            : "http://localhost:8069/api/tickets";
+            ? `${ODOO_URL}/api/tickets?user_id=${user.id}`
+            : `${ODOO_URL}/api/tickets`;
+
         const res = await axios.get(url);
         const tickets: TicketType[] = res.data?.data || [];
         setEvents(buildEvents(tickets, user));

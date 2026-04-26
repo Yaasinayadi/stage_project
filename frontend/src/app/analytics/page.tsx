@@ -11,6 +11,8 @@ import {
   PieChart, Pie, Cell, 
   BarChart, Bar
 } from "recharts";
+import { ODOO_URL } from "@/lib/config";
+
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4'];
 
@@ -31,8 +33,9 @@ function AnalyticsDashboard() {
     try {
       const isTech = user?.x_support_role === 'tech';
       const endpoint = isTech 
-        ? `http://localhost:8069/api/tech/stats?period=${selectedPeriod}&tech_id=${user.id}`
-        : `http://localhost:8069/api/admin/stats?period=${selectedPeriod}`;
+        ? `${ODOO_URL}/api/tech/stats?period=${selectedPeriod}&tech_id=${user.id}`
+        : `${ODOO_URL}/api/admin/stats?period=${selectedPeriod}`;
+
 
       const res = await axios.get(endpoint);
       if (res.data.status === 200) {

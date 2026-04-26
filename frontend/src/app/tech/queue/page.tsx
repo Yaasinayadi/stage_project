@@ -25,7 +25,8 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAuth } from "@/lib/auth";
 import Link from "next/link";
 
-const ODOO_URL = "http://localhost:8069";
+import { ODOO_URL } from "@/lib/config";
+
 
 const PRIORITY_MAP: Record<
   string,

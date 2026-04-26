@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { X, Loader2, CheckCircle2, BookOpen, ArrowLeft } from "lucide-react";
 import axios from "axios";
 import type { KbArticle, KbTag } from "./KnowledgeCard";
+import { ODOO_URL } from "@/lib/config";
 
-const ODOO_URL = "http://localhost:8069";
 
 type Props = {
   article?: KbArticle | null;

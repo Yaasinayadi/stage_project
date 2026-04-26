@@ -23,6 +23,8 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import WelcomeSlider from "./WelcomeSlider";
 import TicketModal from "@/components/TicketModal";
 import Chatbot from "@/components/Chatbot";
+import { ODOO_URL } from "@/lib/config";
+
 
 // ─── KPI hook ───────────────────────────────────────────────────────────────
 type DashboardStats = {
@@ -38,6 +40,7 @@ function useDashboardStats(userId: number | undefined, role: string | undefined)
     enCours: 0,
     resolus: 0,
     total: 0,
+    totalKnowledge: 0,
     loading: true,
   });
 
@@ -46,10 +49,10 @@ function useDashboardStats(userId: number | undefined, role: string | undefined)
 
     const ticketsUrl =
       role === "user"
-        ? `http://localhost:8069/api/tickets?user_id=${userId}`
-        : "http://localhost:8069/api/tickets";
+        ? `${ODOO_URL}/api/tickets?user_id=${userId}`
+        : `${ODOO_URL}/api/tickets`;
 
-    const knowledgeUrl = "http://localhost:8069/api/knowledge?limit=1";
+    const knowledgeUrl = `${ODOO_URL}/api/knowledge?limit=1`;
 
     Promise.all([
       axios.get(ticketsUrl),

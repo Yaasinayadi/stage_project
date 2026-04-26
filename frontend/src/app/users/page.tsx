@@ -8,6 +8,8 @@ import {
   User, Shield, Briefcase, Ban, CheckCircle2, Search,
   Loader2, Filter, ChevronDown, XCircle, Check, X
 } from "lucide-react";
+import { ODOO_URL as ODOO } from "@/lib/config";
+
 
 /* ─────────────────────────────────────────────────────── types ── */
 type UserData = {
@@ -20,7 +22,7 @@ type UserData = {
 };
 
 /* ─────────────────────────────────────────────────────── consts ── */
-const ODOO = "http://localhost:8069";
+
 
 const DOMAINS = ["Réseau", "Logiciel", "Matériel", "Accès", "Messagerie", "Infrastructure", "Sécurité", "Autre"];
 

@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import axios from "axios";
 import { useAuth } from "@/lib/auth";
+import { ODOO_URL } from "@/lib/config";
+
 
 type TicketModalProps = {
   isOpen: boolean;
@@ -135,13 +137,14 @@ export default function TicketModal({ isOpen, onClose, onSuccess }: TicketModalP
       setAiResult({ category, priority });
 
       // 2. Création du ticket dans Odoo
-      const createRes = await axios.post("http://localhost:8069/api/ticket/create", {
+      const createRes = await axios.post(`${ODOO_URL}/api/ticket/create`, {
         name: title,
         description: desc,
         category,
         priority,
         user_id: user?.id,
       });
+
 
       const ticketId = createRes.data.ticket_id;
 

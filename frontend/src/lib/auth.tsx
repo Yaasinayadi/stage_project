@@ -9,6 +9,8 @@ import React, {
   useRef,
 } from "react";
 import axios from "axios";
+import { ODOO_URL } from "./config";
+
 
 // ─── Types ───
 export type UserRole = "user" | "tech" | "admin";
@@ -42,8 +44,8 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const STORAGE_KEY = "it_support_user";
-const ODOO_URL = "http://localhost:8069";
 const SYNC_INTERVAL_MS = 60 * 1000; // Re-sync every 60 seconds
+
 
 // ─── Provider ───
 export function AuthProvider({ children }: { children: React.ReactNode }) {

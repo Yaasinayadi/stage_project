@@ -26,6 +26,8 @@ import TicketTable from "@/components/TicketTable";
 import TicketModal from "@/components/TicketModal";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAuth } from "@/lib/auth";
+import { ODOO_URL } from "@/lib/config";
+
 
 type TicketType = {
   id: number;
@@ -83,7 +85,8 @@ function Dashboard() {
       const params: Record<string, any> = {};
       if (user?.x_support_role === "user") params.user_id = user.id;
 
-      const res = await axios.get("http://localhost:8069/api/tickets", { params });
+      const res = await axios.get(`${ODOO_URL}/api/tickets`, { params });
+
       if (res.data.status === 200) {
         setTickets(res.data.data);
       }
@@ -96,7 +99,8 @@ function Dashboard() {
 
   useEffect(() => {
     // Fetch categories dynamically
-    axios.get("http://localhost:8069/api/categories").then(res => {
+    axios.get(`${ODOO_URL}/api/categories`).then(res => {
+
       if (res.data.status === 200) {
         setCategories(res.data.data);
       } else {
@@ -115,8 +119,9 @@ function Dashboard() {
     const poll = async () => {
       try {
         const url = user?.x_support_role === "user"
-          ? `http://localhost:8069/api/tickets?user_id=${user.id}`
-          : "http://localhost:8069/api/tickets";
+          ? `${ODOO_URL}/api/tickets?user_id=${user.id}`
+          : `${ODOO_URL}/api/tickets`;
+
         const res = await axios.get(url);
         if (res.data.status === 200) {
           setTickets(res.data.data);

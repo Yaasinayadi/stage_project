@@ -37,9 +37,12 @@ import SlaBadge from "@/components/SlaBadge";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAuth } from "@/lib/auth";
 import Link from "next/link";
+import { ODOO_URL } from "@/lib/config";
+
 // @ts-ignore
 
-const ODOO_URL = "http://localhost:8069";
+
+
 const FLASK_URL = "http://localhost:8000";
 
 // ── Inline markdown renderer (no external dependency) ──────────────────────

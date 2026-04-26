@@ -5,8 +5,8 @@ import axios from "axios";
 import { useAuth } from "@/lib/auth";
 import { AlertTriangle, X, ChevronRight } from "lucide-react";
 import Link from "next/link";
+import { ODOO_URL } from "@/lib/config";
 
-const ODOO_URL = "http://localhost:8069";
 
 type DangerTicket = {
   id: number;

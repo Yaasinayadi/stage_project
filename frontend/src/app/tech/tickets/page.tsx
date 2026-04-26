@@ -11,7 +11,8 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAuth } from "@/lib/auth";
 import Link from "next/link";
 
-const ODOO_URL = "http://localhost:8069";
+import { ODOO_URL } from "@/lib/config";
+
 
 const PRIORITY_MAP: Record<string, { label: string; dot: string; badge: string; border: string; order: number }> = {
   "3": { label: "Critique", dot: "bg-rose-500",  badge: "bg-rose-500/10 text-rose-500 border-rose-500/20",   border: "border-l-rose-500",  order: 0 },

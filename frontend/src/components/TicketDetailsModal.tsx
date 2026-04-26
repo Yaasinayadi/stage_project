@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { getCategoryColor, getCategoryIcon, getPriorityBadge, getStatusInfo, formatTicketRef } from "./TicketCard";
 import { useAuth } from "@/lib/auth";
+import { ODOO_URL as ODOO_BASE } from "@/lib/config";
+
 
 // ─── Types ───
 
@@ -66,7 +68,7 @@ const ALLOWED_TYPES = [
 ];
 const MAX_SIZE   = 10 * 1024 * 1024;
 const MAX_FILES  = 5;
-const ODOO_BASE  = "http://localhost:8069";
+
 const FLASK_BASE = "http://localhost:8000";
 const POLL_INTERVAL = 30000; // 30 seconds
 
