@@ -477,7 +477,9 @@ function TicketDetailPage() {
       setShowResolveModal(false);
       setResolution("");
       setAddToKb(false);
-      fetchTicket();
+      // ── Redirection automatique vers la liste avec animation de succès ──
+      sessionStorage.setItem("resolved_ticket_id", String(id));
+      setTimeout(() => router.push("/tech/tickets"), 1200);
     } catch (err) {
       console.error("Resolve Error:", err);
       showToast("Erreur lors de la résolution.", "err");

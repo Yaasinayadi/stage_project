@@ -21,7 +21,7 @@ services:
     volumes:
       - ./addons_custom:/mnt/extra-addons
       - odoo_data:/var/lib/odoo
-    command: odoo -d pfe_db -u pfe_it_support
+    command: odoo -d ${ODOO_DB} -u pfe_it_support
     environment:
       - HOST=db
       - USER=odoo
@@ -33,6 +33,7 @@ services:
       context: ./ia_service
       dockerfile: Dockerfile
     container_name: ia_service
+    command: sh -c "pip install -r requirements.txt && python main.py"
     ports:
       - "8000:8000"
     volumes:
@@ -50,7 +51,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: next_frontend
-    command: npm run dev
+    command: sh -c "npm install && npm run dev"
     ports:
       - "3000:3000"
     volumes:

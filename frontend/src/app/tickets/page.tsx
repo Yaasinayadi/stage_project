@@ -16,7 +16,9 @@ import {
   ChevronDown,
   XCircle,
   Activity,
-  ArrowUpRight
+  ArrowUpRight,
+  ClipboardList,
+  History,
 } from "lucide-react";
 import StatsCard from "@/components/StatsCard";
 import TicketCard, { getStatusInfo } from "@/components/TicketCard";
@@ -39,11 +41,15 @@ type TicketType = {
   sla_status?: string | null;
 };
 
+const ACTIVE_STATES  = ["new", "assigned", "in_progress", "waiting", "blocked", "escalated"];
+const RESOLVED_STATES = ["resolved", "closed"];
+
 function Dashboard() {
   const { user } = useAuth();
   const [tickets, setTickets] = useState<TicketType[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"active" | "resolved">("active");
 
   // View mode
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
@@ -172,6 +178,11 @@ function Dashboard() {
 
     return matchesSearch && matchesCategory && matchesStatus && matchesPriority;
   });
+
+  // ── Tab split ────────────────────────────────────────────────────────────
+  const activeTabTickets   = filteredTickets.filter(t => ACTIVE_STATES.includes(t.state));
+  const resolvedTabTickets = filteredTickets.filter(t => RESOLVED_STATES.includes(t.state));
+  const tabFilteredTickets = activeTab === "active" ? activeTabTickets : resolvedTabTickets;
 
   // KPI calculations
   const totalTickets = tickets.length;
@@ -357,21 +368,61 @@ function Dashboard() {
                 Réinitialiser
               </button>
             )}
+
+            {/* ── Segmented control tabs (right-aligned) ── */}
+            <div className="ml-auto flex items-center gap-0.5 p-0.5 bg-[hsl(var(--muted)/0.5)] rounded-lg border border-[hsl(var(--border)/0.4)]">
+              <button
+                onClick={() => setActiveTab("active")}
+                title="En attente de traitement"
+                className={`flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-semibold transition-all duration-150
+                  ${activeTab === "active"
+                    ? "bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm"
+                    : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"}`}
+              >
+                <ClipboardList size={13} />
+                <span className="hidden sm:inline">En attente</span>
+                <span className={`text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full transition-colors
+                  ${activeTab === "active" ? "bg-[hsl(var(--primary))] text-white" : "bg-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]"}`}>
+                  {activeTabTickets.length}
+                </span>
+              </button>
+              <button
+                onClick={() => setActiveTab("resolved")}
+                title="Terminés / Résolus"
+                className={`flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-semibold transition-all duration-150
+                  ${activeTab === "resolved"
+                    ? "bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm"
+                    : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"}`}
+              >
+                <History size={13} />
+                <span className="hidden sm:inline">Terminés</span>
+                <span className={`text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full transition-colors
+                  ${activeTab === "resolved" ? "bg-emerald-500 text-white" : "bg-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]"}`}>
+                  {resolvedTabTickets.length}
+                </span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       {/* ─── Ticket List ─── */}
-      {filteredTickets.length === 0 ? (
+      {tabFilteredTickets.length === 0 ? (
         <div className="glass-card flex flex-col items-center justify-center py-20 text-center animate-fade-in" style={{ animationDelay: "0.3s" }}>
           <div className="w-16 h-16 rounded-2xl bg-[hsl(var(--muted))] flex items-center justify-center mb-4">
-            <Inbox size={28} className="text-[hsl(var(--muted-foreground)/0.5)]" />
+            {activeTab === "active"
+              ? <ClipboardList size={28} className="text-[hsl(var(--muted-foreground)/0.5)]" />
+              : <History size={28} className="text-[hsl(var(--muted-foreground)/0.5)]" />}
           </div>
-          <h3 className="text-lg font-semibold mb-1">Aucun ticket trouvé</h3>
+          <h3 className="text-lg font-semibold mb-1">
+            {activeTab === "active" ? "Aucun ticket actif" : "Aucun ticket résolu"}
+          </h3>
           <p className="text-sm text-[hsl(var(--muted-foreground))] max-w-sm">
             {tickets.length === 0
               ? "Créez votre premier ticket en cliquant sur le bouton \"Nouveau ticket\" ci-dessus."
-              : "Essayez de modifier votre recherche ou vos filtres pour voir d'autres tickets."}
+              : activeTab === "active"
+              ? "Tous les tickets sont résolus ou aucun ne correspond à vos filtres."
+              : "Aucun ticket résolu ne correspond à vos filtres."}
           </p>
           {hasActiveFilters && (
             <button onClick={resetFilters} className="mt-6 btn-ghost text-sm font-semibold text-[hsl(var(--primary))] hover:text-[hsl(var(--primary)/0.9)] hover:bg-[hsl(var(--primary)/0.1)] border border-[hsl(var(--primary)/0.2)]">
@@ -380,13 +431,13 @@ function Dashboard() {
           )}
         </div>
       ) : viewMode === "cards" ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filteredTickets.map((ticket, idx) => (
+        <div key={activeTab} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {tabFilteredTickets.map((ticket, idx) => (
             <TicketCard key={ticket.id} ticket={ticket} index={idx} onRefresh={fetchTickets} />
           ))}
         </div>
       ) : (
-        <TicketTable tickets={filteredTickets} onRefresh={fetchTickets} />
+        <TicketTable tickets={tabFilteredTickets} onRefresh={fetchTickets} />
       )}
 
       {/* ─── Modal ─── */}

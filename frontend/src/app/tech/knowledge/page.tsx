@@ -11,6 +11,8 @@ import {
   ChevronRight,
   Filter,
   X,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAuth } from "@/lib/auth";
@@ -53,6 +55,7 @@ function KnowledgePage() {
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Modals ────────────────────────────────────────────────────────────────
@@ -150,9 +153,17 @@ function KnowledgePage() {
     setSearch("");
     setCatFilter(null);
     setPage(1);
+    setSortOrder("desc");
     fetchArticles(1, "", null);
   };
-  const hasFilters = search !== "" || catFilter !== null;
+  const hasFilters = search !== "" || catFilter !== null || sortOrder !== "desc";
+
+  // ── Sorted articles (client-side, no re-fetch needed) ─────────────────────
+  const sortedArticles = [...articles].sort((a, b) => {
+    const dateA = new Date(a.create_date ?? a.write_date ?? 0).getTime();
+    const dateB = new Date(b.create_date ?? b.write_date ?? 0).getTime();
+    return sortOrder === "desc" ? dateB - dateA : dateA - dateB;
+  });
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -216,7 +227,7 @@ function KnowledgePage() {
           )}
         </div>
 
-        {/* Category pills */}
+        {/* Category pills + Sort control */}
         <div className="flex flex-wrap items-center gap-2">
           <Filter size={13} className="text-[hsl(var(--muted-foreground))]" />
           <button
@@ -248,10 +259,28 @@ function KnowledgePage() {
               {cat}
             </button>
           ))}
+
+          {/* Sort toggle */}
+          <button
+            onClick={() => setSortOrder((o) => (o === "desc" ? "asc" : "desc"))}
+            title={sortOrder === "desc" ? "Plus récents d'abord" : "Plus anciens d'abord"}
+            className={`ml-auto flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${
+              sortOrder === "asc"
+                ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
+                : "border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.3)]"
+            }`}
+          >
+            {sortOrder === "desc" ? (
+              <><ArrowDown size={13} /> Plus récents</>  
+            ) : (
+              <><ArrowUp size={13} /> Plus anciens</>
+            )}
+          </button>
+
           {hasFilters && (
             <button
               onClick={resetFilters}
-              className="flex items-center gap-1 text-xs text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] ml-auto"
+              className="flex items-center gap-1 text-xs text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
             >
               <X size={12} /> Réinitialiser
             </button>
@@ -289,7 +318,7 @@ function KnowledgePage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {articles.map((art, i) => (
+          {sortedArticles.map((art, i) => (
             <KnowledgeCard
               key={art.id}
               article={art}
