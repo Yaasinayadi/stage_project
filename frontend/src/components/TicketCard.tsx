@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import axios from "axios";
-import { Globe, Key, Laptop, HardDrive, Mail, Server, AlertCircle, Clock, Edit2, Trash2, X, Save, ChevronDown, ChevronUp } from "lucide-react";
+import { Globe, Key, Laptop, HardDrive, Mail, Server, AlertCircle, Clock, User } from "lucide-react";
 import TicketDetailsModal from "./TicketDetailsModal";
 type Ticket = {
   id: number;
@@ -75,6 +75,20 @@ export function formatTicketRef(id: number | undefined): string {
   return `TK-${String(id).padStart(4, "0")}`;
 }
 
+function getAgentInitials(name: string): string {
+  const parts = name.trim().split(" ").filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+}
+
+function getAgentColor(name: string): string {
+  const colors = ["#6366f1", "#8b5cf6", "#ec4899", "#10b981", "#f59e0b", "#06b6d4", "#3b82f6", "#ef4444"];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return colors[Math.abs(hash) % colors.length];
+}
+
 export default function TicketCard({ ticket, index, onRefresh }: TicketCardProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -129,6 +143,36 @@ export default function TicketCard({ ticket, index, onRefresh }: TicketCardProps
             <Clock size={12} />
             <span>{ticket.category || "Non classé"}</span>
           </div>
+        </div>
+
+        {/* Agent Assigné — visible sans clic */}
+        <div className="flex items-center gap-2 pt-2.5 mt-2 border-t border-[hsl(var(--border)/0.3)]">
+          {ticket.assigned_to ? (
+            <>
+              <div
+                className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0 ring-1 ring-white/20"
+                style={{ background: getAgentColor(ticket.assigned_to) }}
+                title={ticket.assigned_to}
+              >
+                {getAgentInitials(ticket.assigned_to)}
+              </div>
+              <span
+                className="text-[11px] font-medium truncate max-w-[120px]"
+                style={{ color: getAgentColor(ticket.assigned_to) }}
+              >
+                {ticket.assigned_to}
+              </span>
+            </>
+          ) : (
+            <>
+              <div className="w-5 h-5 rounded-full bg-[hsl(var(--muted))] flex items-center justify-center flex-shrink-0">
+                <User size={10} className="text-[hsl(var(--muted-foreground)/0.5)]" />
+              </div>
+              <span className="text-[11px] italic opacity-40 text-[hsl(var(--muted-foreground))]">
+                Non assigné
+              </span>
+            </>
+          )}
         </div>
       </div>
 

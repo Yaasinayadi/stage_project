@@ -28,6 +28,7 @@ type Ticket = {
   write_date?: string | null;
   sla_deadline?: string | null;
   sla_status?: string | null;
+  date_resolved?: string | null;
 };
 
 type Attachment = {
@@ -153,31 +154,61 @@ function getSlaInfo(status: string | null | undefined): {
   }
 }
 
-function computeSlaProgress(createDate: string | null | undefined, deadline: string | null | undefined): number {
+function computeSlaProgress(createDate: string | null | undefined, deadline: string | null | undefined, state: string, dateResolved: string | null | undefined): number {
   if (!createDate || !deadline) return 0;
   const start = parseOdooDate(createDate).getTime();
   const end = parseOdooDate(deadline).getTime();
-  const now = Date.now();
+  
+  let now = Date.now();
+  if ((state === "resolved" || state === "closed") && dateResolved) {
+    now = parseOdooDate(dateResolved).getTime();
+  }
+  
   const total = end - start;
   if (total <= 0) return 100;
   const elapsed = now - start;
   return Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)));
 }
 
-function getRemainingTime(deadline: string | null | undefined): string {
+function getRemainingTime(deadline: string | null | undefined, state: string, dateResolved: string | null | undefined): string {
   if (!deadline) return "—";
   const end = parseOdooDate(deadline).getTime();
-  const now = Date.now();
+  
+  let now = Date.now();
+  const isResolved = state === "resolved" || state === "closed";
+  if (isResolved && dateResolved) {
+    now = parseOdooDate(dateResolved).getTime();
+  }
+  
   const diff = end - now;
-  if (diff <= 0) return "Expiré";
+  
+  if (diff <= 0) {
+    const over = Math.abs(diff);
+    const hours = Math.floor(over / 3600000);
+    const mins = Math.floor((over % 3600000) / 60000);
+    let timeStr = "";
+    if (hours >= 24) {
+      const days = Math.floor(hours / 24);
+      const remH = hours % 24;
+      timeStr = `${days}j ${remH}h`;
+    } else {
+      timeStr = `${hours}h ${mins}min`;
+    }
+    
+    if (isResolved) {
+      return `Dépassé de ${timeStr} lors de la clôture`;
+    }
+    return `Dépassé de ${timeStr}`;
+  }
+  
   const hours = Math.floor(diff / 3600000);
   const mins = Math.floor((diff % 3600000) / 60000);
   if (hours >= 24) {
     const days = Math.floor(hours / 24);
     const remH = hours % 24;
-    return `${days}j ${remH}h`;
+    return `${days}j ${remH}h restant`;
   }
-  return `${hours}h ${mins}min`;
+  return `${hours}h ${mins}min restant`;
 }
 
 // ─── Status Timeline ───
@@ -478,8 +509,8 @@ export default function TicketDetailsModal({
   const canEdit  = status.dotClass === "new" || ((user?.x_support_role === "admin" || user?.x_support_role === "tech") && status.dotClass !== "resolved"); 
   const activeStep = getStepIndex(ticket.state);
   const slaInfo = getSlaInfo(ticket.sla_status);
-  const slaProgress = computeSlaProgress(ticket.create_date, ticket.sla_deadline);
-  const slaRemaining = getRemainingTime(ticket.sla_deadline);
+  const slaProgress = computeSlaProgress(ticket.create_date, ticket.sla_deadline, ticket.state, ticket.date_resolved);
+  const slaRemaining = getRemainingTime(ticket.sla_deadline, ticket.state, ticket.date_resolved);
 
   // ─── Render ───
   return (
@@ -712,7 +743,7 @@ export default function TicketDetailsModal({
                       </span>
                     </div>
                     <span className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">
-                      {slaRemaining !== "Expiré" ? `${slaRemaining} restant` : "Expiré"}
+                      {slaRemaining}
                     </span>
                   </div>
 

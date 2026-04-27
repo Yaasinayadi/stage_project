@@ -213,6 +213,7 @@ class SupportTicketController(http.Controller):
             'sla_status': t.sla_status or None,
             'create_date': str(t.create_date) if t.create_date else None,
             'write_date': str(t.write_date) if t.write_date else None,
+            'date_resolved': str(t.date_done) if t.date_done else None,
             'resolution': t.resolution or None,
         } for t in tickets]
         headers.append(('Content-Type', 'application/json'))

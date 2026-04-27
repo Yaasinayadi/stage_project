@@ -38,6 +38,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAuth } from "@/lib/auth";
 import Link from "next/link";
 import { ODOO_URL } from "@/lib/config";
+import KnowledgeModal from "@/components/KnowledgeModal";
 
 // @ts-ignore
 
@@ -152,6 +153,7 @@ type Ticket = {
   ai_confidence?: number | null;
   resolution?: string | null;
   escalated_by_id?: number | null;
+  date_resolved?: string | null;
 };
 
 type AiSuggestion = {
@@ -223,6 +225,14 @@ function TicketDetailPage() {
   const [resolution, setResolution] = useState("");
   const [addToKb, setAddToKb] = useState(false);
   const [resolving, setResolving] = useState(false);
+
+  // KB draft modal state (opened automatically after resolve when toggle is ON)
+  const [kbDraftData, setKbDraftData] = useState<{
+    title: string;
+    category: string;
+    content: string;
+    sourceTicketId: number;
+  } | null>(null);
 
   // Wait modal state
   const [showWaitModal, setShowWaitModal] = useState(false);
@@ -467,28 +477,66 @@ function TicketDetailPage() {
     if (!resolution.trim()) return;
     setResolving(true);
     try {
-      console.log("RESOLVE TICKET:", { id, userId: user?.id });
+      // ── Étape A : Persister la résolution du ticket (toujours) ──
       await axios.post(
         `${ODOO_URL}/api/ticket/${id}/resolve`,
-        { resolution, add_to_kb: addToKb, user_id: user?.id },
+        // When addToKb is ON, we do NOT auto-create the KB here; modal handles it
+        { resolution, add_to_kb: false, user_id: user?.id },
         { withCredentials: true },
       );
-      showToast(
-        addToKb ? "✅ Résolu et publié dans la KB !" : "✅ Ticket résolu !",
-        "ok",
-      );
+
       setShowResolveModal(false);
-      setResolution("");
-      setAddToKb(false);
-      // ── Redirection automatique vers la liste avec animation de succès ──
-      sessionStorage.setItem("resolved_ticket_id", String(id));
-      setTimeout(() => router.push("/tech/tickets"), 1200);
+
+      if (addToKb && ticket) {
+        // ── Cas 2 (Toggle ON) : Ouvrir le modal KB pré-rempli ──
+        // Étape B : Préparer les données fusionnées
+        const mergedContent = [
+          "<h3>📋 Description du problème</h3>",
+          `<p>${ticket.description.replace(/\n/g, "<br/>")}</p>`,
+          "<hr/>",
+          "<h3>✅ Solution apportée</h3>",
+          `<p>${resolution.replace(/\n/g, "<br/>")}</p>`,
+        ].join("\n");
+
+        setKbDraftData({
+          title: ticket.name,
+          category: ticket.ai_classification ?? "",
+          content: mergedContent,
+          sourceTicketId: ticket.id,
+        });
+
+        // Refresh ticket state in background
+        fetchTicket();
+        showToast("✅ Ticket résolu — Rédigez votre article KB ci-dessous !", "ok");
+      } else {
+        // ── Cas 1 (Toggle OFF) : Comportement classique ──
+        showToast("✅ Ticket résolu !", "ok");
+        setResolution("");
+        setAddToKb(false);
+        sessionStorage.setItem("resolved_ticket_id", String(id));
+        setTimeout(() => router.push("/tech/tickets"), 1200);
+      }
     } catch (err) {
       console.error("Resolve Error:", err);
       showToast("Erreur lors de la résolution.", "err");
     } finally {
       setResolving(false);
     }
+  };
+
+  const handleKbSaved = (toastMsg?: string) => {
+    setKbDraftData(null);
+    showToast(toastMsg ?? "✅ Article KB enregistré !", "ok");
+    // Navigate to tickets list after KB is saved
+    sessionStorage.setItem("resolved_ticket_id", String(id));
+    setTimeout(() => router.push("/tech/tickets"), 1500);
+  };
+
+  const handleKbClose = () => {
+    setKbDraftData(null);
+    // Even if they discard the KB, ticket is already resolved — go to list
+    sessionStorage.setItem("resolved_ticket_id", String(id));
+    router.push("/tech/tickets");
   };
 
   const handleCreateKb = () => {
@@ -665,6 +713,8 @@ function TicketDetailPage() {
               <SlaBadge
                 slaDeadline={ticket.sla_deadline}
                 slaStatus={ticket.sla_status}
+                ticketState={ticket.state}
+                dateResolved={ticket.date_resolved}
               />
             </div>
           </div>
@@ -1123,21 +1173,28 @@ function TicketDetailPage() {
           onClick={() => setShowResolveModal(false)}
         >
           <div
-            className="glass-card w-full max-w-lg p-6 space-y-4 animate-scale-in shadow-2xl border-[hsl(var(--border))]"
+            className="glass-card w-full max-w-lg p-6 space-y-5 animate-scale-in shadow-2xl border-[hsl(var(--border))]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-500">
+            {/* ── Header ── */}
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-500">
                 <CheckCircle2 size={20} />
               </div>
-              <h2 className="text-base font-bold">
-                Résoudre le ticket #{ticket.id}
-              </h2>
+              <div>
+                <h2 className="text-base font-bold leading-tight">
+                  Résoudre le ticket #{ticket.id}
+                </h2>
+                <p className="text-[10px] text-[hsl(var(--muted-foreground))] mt-0.5">
+                  Documentez la solution avant de clôturer
+                </p>
+              </div>
             </div>
 
+            {/* ── Note de clôture ── */}
             <div>
-              <label className="text-[10px] font-bold uppercase text-[hsl(var(--muted-foreground))] mb-2 block">
-                Note de clôture (obligatoire)
+              <label className="text-[10px] font-bold uppercase tracking-wider text-[hsl(var(--muted-foreground))] mb-2 block">
+                Note de clôture <span className="text-red-400">*</span>
               </label>
               <textarea
                 autoFocus
@@ -1149,36 +1206,55 @@ function TicketDetailPage() {
               />
             </div>
 
-            {/* Add to KB toggle */}
-            <label className="flex items-start gap-3 cursor-pointer group p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10">
+            {/* ── Toggle KB ── */}
+            <div
+              onClick={() => setAddToKb((v) => !v)}
+              className={`flex items-start gap-3 cursor-pointer p-4 rounded-xl border-2 transition-all duration-200
+                ${addToKb
+                  ? "border-emerald-500/40 bg-emerald-500/8 shadow-sm shadow-emerald-500/10"
+                  : "border-[hsl(var(--border))] bg-[hsl(var(--muted)/0.2)] hover:border-emerald-500/20 hover:bg-emerald-500/4"
+                }`}
+            >
+              {/* Toggle switch */}
               <div className="relative flex-shrink-0 mt-0.5">
-                <input
-                  type="checkbox"
-                  checked={addToKb}
-                  onChange={(e) => setAddToKb(e.target.checked)}
-                  className="sr-only"
-                />
                 <div
-                  className={`w-9 h-5 rounded-full transition-colors duration-200 ${addToKb ? "bg-emerald-500" : "bg-[hsl(var(--muted))]"}`}
+                  className={`w-10 h-5.5 h-[22px] rounded-full transition-colors duration-300 flex items-center ${
+                    addToKb ? "bg-emerald-500" : "bg-[hsl(var(--muted-foreground)/0.3)]"
+                  }`}
                 >
                   <div
-                    className={`w-3.5 h-3.5 bg-white rounded-full shadow transition-transform duration-200 mt-[3px] ${addToKb ? "translate-x-4" : "translate-x-0.5"}`}
+                    className={`w-4 h-4 bg-white rounded-full shadow-md transition-transform duration-300 ml-0.5 ${
+                      addToKb ? "translate-x-[18px]" : "translate-x-0"
+                    }`}
                   />
                 </div>
               </div>
-              <div>
-                <p className="text-sm font-bold flex items-center gap-1 text-emerald-700">
-                  <BookOpen size={13} />
+
+              {/* Text */}
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-bold flex items-center gap-1.5 transition-colors ${
+                  addToKb ? "text-emerald-600" : "text-[hsl(var(--foreground))]"
+                }`}>
+                  <BookOpen size={14} />
                   Transformer en article KB
                 </p>
-                <p className="text-[10px] text-emerald-600/70 mt-0.5">
-                  Cette note sera utilisée pour créer un guide de résolution
-                  public.
+                <p className="text-[10px] mt-1 leading-relaxed text-[hsl(var(--muted-foreground))]">
+                  {addToKb
+                    ? "✨ Après la clôture, un formulaire pré-rempli s'ouvrira pour rédiger et publier l'article."
+                    : "Activer pour ouvrir automatiquement le formulaire KB après la clôture."}
                 </p>
               </div>
-            </label>
 
-            <div className="flex gap-3 pt-2">
+              {/* Status pill */}
+              {addToKb && (
+                <span className="flex-shrink-0 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 border border-emerald-500/30 animate-fade-in">
+                  ON
+                </span>
+              )}
+            </div>
+
+            {/* ── Footer ── */}
+            <div className="flex gap-3">
               <button
                 onClick={() => setShowResolveModal(false)}
                 className="flex-1 btn-ghost text-sm"
@@ -1188,18 +1264,38 @@ function TicketDetailPage() {
               <button
                 disabled={!resolution.trim() || resolving}
                 onClick={handleResolve}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+                className={`flex-1 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-all py-2 ${
+                  addToKb
+                    ? "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-md shadow-emerald-500/20"
+                    : "bg-emerald-600 hover:bg-emerald-700"
+                }`}
               >
                 {resolving ? (
                   <Loader2 size={15} className="animate-spin" />
+                ) : addToKb ? (
+                  <BookOpen size={15} />
                 ) : (
                   <Send size={15} />
                 )}
-                Clôturer le ticket
+                {addToKb ? "Clôturer & Rédiger KB" : "Clôturer le ticket"}
               </button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* ══════════ KB DRAFT MODAL (auto-opened after resolve with toggle ON) ══════════ */}
+      {kbDraftData && (
+        <KnowledgeModal
+          initialTitle={kbDraftData.title}
+          initialContent={kbDraftData.content}
+          initialCategory={kbDraftData.category}
+          fromTicket={kbDraftData.sourceTicketId}
+          onClose={handleKbClose}
+          onSaved={handleKbSaved}
+          userId={user?.id}
+          userRole={user?.x_support_role}
+        />
       )}
     </div>
   );

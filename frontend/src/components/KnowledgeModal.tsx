@@ -12,6 +12,7 @@ type Props = {
   article?: KbArticle | null;
   initialTitle?: string;
   initialContent?: string;
+  initialCategory?: string;
   fromTicket?: string | number | null;
   onClose: () => void;
   onSaved: (toastMsg?: string) => void;
@@ -25,6 +26,7 @@ export default function KnowledgeModal({
   article,
   initialTitle,
   initialContent,
+  initialCategory,
   fromTicket,
   onClose,
   onSaved,
@@ -37,7 +39,7 @@ export default function KnowledgeModal({
   // ─── State ────────────────────────────────────────────────────────────────
   const [step, setStep] = useState<Step>("form");
   const [title, setTitle] = useState(article?.title ?? initialTitle ?? "");
-  const [category, setCategory] = useState(article?.category ?? "");
+  const [category, setCategory] = useState(article?.category ?? initialCategory ?? "");
   const [tagInput, setTagInput] = useState(
     article?.tags.map((t) => t.name).join(", ") ?? "",
   );
@@ -148,27 +150,19 @@ export default function KnowledgeModal({
 
           const toastMsg =
             res.data.message ||
-            `L'article "${title}" a été publié avec succès.`;
+            `L'article "${title}" a été ${isPublished ? 'publié' : 'sauvegardé en brouillon'} avec succès.`;
           setStep("success");
           setTimeout(() => {
-            if (fromTicket) {
-              router.back();
-            } else {
-              onSaved(toastMsg);
-              handleClose();
-            }
+            onSaved(toastMsg);
+            handleClose();
           }, 1500);
           return;
         }
 
         setStep("success");
         setTimeout(() => {
-          if (fromTicket) {
-            router.back();
-          } else {
-            onSaved();
-            handleClose();
-          }
+          onSaved();
+          handleClose();
         }, 1500);
       } catch (err: unknown) {
         const msg =
@@ -205,19 +199,20 @@ export default function KnowledgeModal({
         className="glass-card w-full max-w-xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden scale-in"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* ── Header ── */}
-        {fromTicket && (
-          <div className="p-4 pb-0">
-            <a 
-              href={`/tech/tickets/${fromTicket}`} 
-              onClick={(e) => {
-                e.preventDefault();
-                router.back();
-              }}
-              className="btn-ghost text-sm flex items-center gap-1.5 w-fit"
-            >
-              <ArrowLeft size={15} /> Retour
-            </a>
+        {/* ── Contextual banner when opened from ticket resolve ── */}
+        {fromTicket && !isEditing && (
+          <div className="mx-5 mt-5 p-3 rounded-xl bg-emerald-500/8 border border-emerald-500/20 flex items-center gap-2.5">
+            <div className="w-6 h-6 rounded-lg bg-emerald-500/15 flex items-center justify-center flex-shrink-0">
+              <BookOpen size={13} className="text-emerald-500" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-emerald-600 leading-tight">
+                Article pré-rempli depuis le ticket #{fromTicket}
+              </p>
+              <p className="text-[10px] text-emerald-600/70 mt-0.5">
+                Relisez, corrigez et structurez avant de publier ou sauvegarder en brouillon.
+              </p>
+            </div>
           </div>
         )}
         <div className="flex items-center justify-between p-5 border-b border-[hsl(var(--border)/0.5)]">
@@ -227,12 +222,14 @@ export default function KnowledgeModal({
             </div>
             <div>
               <h2 className="text-base font-bold">
-                {isEditing ? "Modifier l'article" : "Nouvel article KB"}
+                {isEditing ? "Modifier l'article" : fromTicket ? "Documenter la résolution" : "Nouvel article KB"}
               </h2>
               <p className="text-[0.65rem] text-[hsl(var(--muted-foreground))]">
                 {isEditing
                   ? "Modifiez les informations ci-dessous"
-                  : "Documentez une solution pour l'équipe"}
+                  : fromTicket
+                    ? "Vérifiez les données pré-remplies et publiez"
+                    : "Documentez une solution pour l'équipe"}
               </p>
             </div>
           </div>
@@ -311,7 +308,7 @@ export default function KnowledgeModal({
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
                   className="input-field focus-ring w-full resize-y"
-                  style={{ minHeight: "180px" }}
+                  style={{ minHeight: fromTicket ? "220px" : "180px" }}
                   placeholder="Décrivez les étapes de résolution, commandes, liens utiles..."
                 />
                 <p className="text-[0.65rem] text-[hsl(var(--muted-foreground))] mt-1">
@@ -358,13 +355,13 @@ export default function KnowledgeModal({
             {/* Footer */}
             <div className="p-4 border-t border-[hsl(var(--border)/0.5)] flex justify-end gap-2 flex-shrink-0">
               <button type="button" onClick={handleClose} className="btn-ghost">
-                Annuler
+                {fromTicket ? "Ignorer" : "Annuler"}
               </button>
               <button
                 type="submit"
                 className="btn-primary flex items-center gap-2"
               >
-                {isEditing ? "Enregistrer" : "Publier l'article"}
+                {isEditing ? "Enregistrer" : isPublished ? "Publier l'article" : "Sauvegarder en brouillon"}
               </button>
             </div>
           </form>

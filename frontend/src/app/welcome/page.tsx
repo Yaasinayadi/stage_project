@@ -308,6 +308,7 @@ function UserGuideModal({ onClose }: { onClose: () => void }) {
 // ─── Main component ───────────────────────────────────────────────────────────
 function Welcome() {
   const { user } = useAuth();
+  const isUser = user?.x_support_role === "user" || !user?.x_support_role;
   const stats = useDashboardStats(user?.id, user?.x_support_role);
 
   const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
@@ -356,15 +357,17 @@ function Welcome() {
             Guide d&apos;utilisation
           </button>
 
-          {/* Nouveau Ticket — action principale */}
-          <button
-            id="btn-nouveau-ticket"
-            onClick={() => setIsTicketModalOpen(true)}
-            className="btn-primary px-5 py-2.5 text-sm shadow-md shadow-[hsl(var(--primary)/0.2)] hover:shadow-lg hover:-translate-y-0.5 transition-all flex items-center gap-2"
-          >
-            <Ticket size={18} />
-            Nouveau Ticket
-          </button>
+          {/* Nouveau Ticket — action principale (Masqué pour les utilisateurs standards) */}
+          {!isUser && (
+            <button
+              id="btn-nouveau-ticket"
+              onClick={() => setIsTicketModalOpen(true)}
+              className="btn-primary px-5 py-2.5 text-sm shadow-md shadow-[hsl(var(--primary)/0.2)] hover:shadow-lg hover:-translate-y-0.5 transition-all flex items-center gap-2"
+            >
+              <Ticket size={18} />
+              Nouveau Ticket
+            </button>
+          )}
         </div>
       </div>
 

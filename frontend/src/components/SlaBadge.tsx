@@ -9,11 +9,21 @@ interface SlaBadgeProps {
   slaDeadline: string | null | undefined;
   slaStatus?: string | null;
   compact?: boolean;
+  ticketState?: string;
+  dateResolved?: string | null;
 }
 
-function getTimeInfo(deadline: string): { hours: number; minutes: number; seconds: number; isOverdue: boolean } {
-  const now = new Date().getTime();
-  const end = new Date(deadline).getTime();
+function parseDateString(raw: string): Date {
+  const sanitized = raw.trim().replace(" ", "T");
+  return new Date(sanitized.endsWith("Z") ? sanitized : sanitized + "Z");
+}
+
+function getTimeInfo(deadline: string, isResolved: boolean, dateResolved: string | null | undefined): { hours: number; minutes: number; seconds: number; isOverdue: boolean } {
+  let now = new Date().getTime();
+  if (isResolved && dateResolved) {
+    now = parseDateString(dateResolved).getTime();
+  }
+  const end = parseDateString(deadline).getTime();
   const diff = end - now;
   const absDiff = Math.abs(diff);
 
@@ -24,18 +34,24 @@ function getTimeInfo(deadline: string): { hours: number; minutes: number; second
   return { hours, minutes, seconds, isOverdue: diff < 0 };
 }
 
-export default function SlaBadge({ slaDeadline, slaStatus, compact = false }: SlaBadgeProps) {
+export default function SlaBadge({ slaDeadline, slaStatus, compact = false, ticketState, dateResolved }: SlaBadgeProps) {
+  const isResolved = ticketState === "resolved" || ticketState === "closed";
+
   const [timeInfo, setTimeInfo] = useState(() =>
-    slaDeadline ? getTimeInfo(slaDeadline) : null
+    slaDeadline ? getTimeInfo(slaDeadline, isResolved, dateResolved) : null
   );
 
   useEffect(() => {
     if (!slaDeadline) return;
+    if (isResolved) {
+      setTimeInfo(getTimeInfo(slaDeadline, isResolved, dateResolved));
+      return;
+    }
     const interval = setInterval(() => {
-      setTimeInfo(getTimeInfo(slaDeadline));
+      setTimeInfo(getTimeInfo(slaDeadline, isResolved, dateResolved));
     }, 1000);
     return () => clearInterval(interval);
-  }, [slaDeadline]);
+  }, [slaDeadline, isResolved, dateResolved]);
 
   if (!slaDeadline || !timeInfo) {
     return (
@@ -48,7 +64,7 @@ export default function SlaBadge({ slaDeadline, slaStatus, compact = false }: Sl
   const isBreached = timeInfo.isOverdue || slaStatus === "breached";
   // At risk if less than 1 hour left AND not overdue
   const isAtRisk = !isBreached && !timeInfo.isOverdue && 
-    (new Date(slaDeadline).getTime() - new Date().getTime() < 60 * 60 * 1000);
+    (parseDateString(slaDeadline).getTime() - (isResolved && dateResolved ? parseDateString(dateResolved).getTime() : new Date().getTime()) < 60 * 60 * 1000);
 
   const status: SlaStatus = isBreached ? "breached" : isAtRisk ? "at_risk" : "on_track";
 
@@ -80,24 +96,24 @@ export default function SlaBadge({ slaDeadline, slaStatus, compact = false }: Sl
   if (compact) {
     return (
       <span
-        className={`inline-flex items-center gap-1 text-[0.65rem] font-bold px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.text} ${cfg.pulse ? "animate-pulse" : ""}`}
-        title={`SLA deadline : ${new Date(slaDeadline).toLocaleString("fr-FR")}`}
+        className={`inline-flex items-center gap-1 text-[0.65rem] font-bold px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.text} ${cfg.pulse && !isResolved ? "animate-pulse" : ""}`}
+        title={`SLA deadline : ${parseDateString(slaDeadline).toLocaleString("fr-FR")}`}
       >
         {cfg.icon}
-        {timeInfo.isOverdue ? `En retard ${timeString}` : timeString}
+        {timeInfo.isOverdue ? `En retard ${timeString}${isResolved ? " (clos)" : ""}` : timeString}
       </span>
     );
   }
 
   return (
     <div
-      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold ${cfg.bg} ${cfg.text} ${cfg.pulse ? "animate-pulse" : ""}`}
+      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold ${cfg.bg} ${cfg.text} ${cfg.pulse && !isResolved ? "animate-pulse" : ""}`}
     >
       <Clock size={13} />
       <span>
         {timeInfo.isOverdue ? "SLA Dépassé de " : "SLA : "}
         <span className="font-mono tabular-nums">{timeString}</span>
-        {timeInfo.isOverdue ? "" : " restants"}
+        {timeInfo.isOverdue ? (isResolved ? " lors de la clôture" : "") : " restants"}
       </span>
     </div>
   );

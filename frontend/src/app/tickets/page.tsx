@@ -19,6 +19,7 @@ import {
   ArrowUpRight,
   ClipboardList,
   History,
+  Users,
 } from "lucide-react";
 import StatsCard from "@/components/StatsCard";
 import TicketCard, { getStatusInfo } from "@/components/TicketCard";
@@ -41,6 +42,13 @@ type TicketType = {
   write_date?: string | null;
   sla_deadline?: string | null;
   sla_status?: string | null;
+};
+
+type AgentType = {
+  id: number;
+  name: string;
+  email: string;
+  role?: string;
 };
 
 const ACTIVE_STATES  = ["new", "assigned", "in_progress", "waiting", "blocked", "escalated"];
@@ -69,7 +77,10 @@ function Dashboard() {
     priorities: [],
   });
 
-  const [openDropdown, setOpenDropdown] = useState<"status" | "priority" | null>(null);
+  const [openDropdown, setOpenDropdown] = useState<"status" | "priority" | "agent" | null>(null);
+
+  const [agents, setAgents] = useState<AgentType[]>([]);
+  const [selectedAgent, setSelectedAgent] = useState<string>("");
 
   const [categories, setCategories] = useState<string[]>([]);
   const statuses = ["Nouveau", "En cours", "En attente", "Résolu"];
@@ -111,6 +122,13 @@ function Dashboard() {
       setCategories(["Logiciel", "Matériel", "Accès", "Réseau", "Messagerie", "Sécurité", "Infrastructure", "Autre"]);
     });
     
+    // Fetch all users list (for admin / tech views to filter by any person)
+    if (user?.x_support_role !== "user") {
+      axios.get(`${ODOO_URL}/api/admin/users`).then(res => {
+        if (res.data.status === 200) setAgents(res.data.data);
+      }).catch(() => {});
+    }
+
     fetchTickets();
   }, [user]);
 
@@ -147,6 +165,7 @@ function Dashboard() {
 
   const resetFilters = () => {
     setActiveFilters({ search: "", categories: [], statuses: [], priorities: [] });
+    setSelectedAgent("");
     setOpenDropdown(null);
   };
 
@@ -154,7 +173,8 @@ function Dashboard() {
     activeFilters.search !== "" ||
     activeFilters.categories.length > 0 ||
     activeFilters.statuses.length > 0 ||
-    activeFilters.priorities.length > 0;
+    activeFilters.priorities.length > 0 ||
+    selectedAgent !== "";
 
   // Filter logic (Cumulative Intersection)
   const filteredTickets = tickets.filter((ticket) => {
@@ -181,7 +201,14 @@ function Dashboard() {
       activeFilters.priorities.length === 0 ||
       activeFilters.priorities.includes(ticket.priority);
 
-    return matchesSearch && matchesCategory && matchesStatus && matchesPriority;
+    // 5. Agent Filter
+    const matchesAgent =
+      selectedAgent === "" ||
+      (selectedAgent === "__unassigned__"
+        ? !ticket.assigned_to
+        : ticket.assigned_to === selectedAgent);
+
+    return matchesSearch && matchesCategory && matchesStatus && matchesPriority && matchesAgent;
   });
 
   // ── Tab split ────────────────────────────────────────────────────────────
@@ -314,6 +341,88 @@ function Dashboard() {
                   </div>
                 )}
               </div>
+
+              {/* Agent Filter — admin/tech only */}
+              {!isUser && agents.length > 0 && (
+                <div className="relative" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={() => setOpenDropdown(openDropdown === "agent" ? null : "agent")}
+                    className={`flex items-center gap-1.5 h-10 px-3.5 rounded-lg text-sm font-semibold transition-all duration-200 border ${
+                      selectedAgent !== "" || openDropdown === "agent"
+                        ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
+                        : "bg-transparent border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)] hover:text-[hsl(var(--foreground))]"
+                    }`}
+                    id="agent-filter-btn"
+                  >
+                    <Users size={14} />
+                    Agent {selectedAgent !== "" && `(•)`}
+                    <ChevronDown size={14} className={`transition-transform ${openDropdown === "agent" ? "rotate-180" : ""}`} />
+                  </button>
+                  {openDropdown === "agent" && (
+                    <div className="absolute top-11 right-0 sm:left-0 sm:right-auto mt-1 w-56 bg-white dark:bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl shadow-xl z-[100] animate-fade-in flex flex-col gap-1 p-2">
+                      {/* Option: tous */}
+                      <button
+                        onClick={() => { setSelectedAgent(""); setOpenDropdown(null); }}
+                        className={`flex items-center gap-2 w-full text-left px-2.5 py-2 rounded-md text-sm font-medium transition-colors ${
+                          selectedAgent === ""
+                            ? "bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]"
+                            : "hover:bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]"
+                        }`}
+                      >
+                        <span className="w-5 h-5 rounded-full bg-[hsl(var(--muted))] flex items-center justify-center text-[9px] font-bold">✓</span>
+                        Tous les agents
+                      </button>
+                      {/* Option: non assigné */}
+                      <button
+                        onClick={() => { setSelectedAgent("__unassigned__"); setOpenDropdown(null); }}
+                        className={`flex items-center gap-2 w-full text-left px-2.5 py-2 rounded-md text-sm font-medium transition-colors ${
+                          selectedAgent === "__unassigned__"
+                            ? "bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]"
+                            : "hover:bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]"
+                        }`}
+                      >
+                        <span className="w-5 h-5 rounded-full border-2 border-dashed border-[hsl(var(--border))] flex items-center justify-center text-[9px]">−</span>
+                        <span className="italic">Non assigné</span>
+                      </button>
+                      <div className="my-1 border-t border-[hsl(var(--border)/0.5)]" />
+                      {agents
+                        .filter(agent => agent.role === 'admin' || agent.role === 'agent' || agent.role === 'tech')
+                        .map(agent => {
+                        const initials = agent.name.trim().split(" ").filter(Boolean).map((p: any) => p[0]).join("").toUpperCase().slice(0, 2);
+                        const colors = ["#6366f1","#8b5cf6","#ec4899","#10b981","#f59e0b","#06b6d4","#3b82f6","#ef4444"];
+                        let hash = 0; for (let i=0;i<agent.name.length;i++) hash = agent.name.charCodeAt(i) + ((hash<<5)-hash);
+                        const color = colors[Math.abs(hash) % colors.length];
+                        
+                        const roleLabel = agent.role === 'admin' ? 'ADMINISTRATEUR' : 'TECHNICIEN';
+                        const roleColor = agent.role === 'admin' ? 'text-indigo-500 dark:text-indigo-400' : 'text-emerald-500 dark:text-emerald-400';
+
+                        return (
+                          <button
+                            key={agent.id}
+                            onClick={() => { setSelectedAgent(agent.name); setOpenDropdown(null); }}
+                            className={`flex items-center gap-2 w-full text-left px-2.5 py-2 rounded-md text-sm font-medium transition-colors ${
+                              selectedAgent === agent.name
+                                ? "bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]"
+                                : "hover:bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]"
+                            }`}
+                          >
+                            <span
+                              className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
+                              style={{ background: color }}
+                            >{initials}</span>
+                            <div className="flex flex-col min-w-0">
+                              <span className="truncate">{agent.name}</span>
+                              <span className={`text-[9px] uppercase font-bold tracking-wider ${roleColor}`}>
+                                {roleLabel}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
 
 
             </div>
