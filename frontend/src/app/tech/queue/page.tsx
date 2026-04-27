@@ -94,6 +94,7 @@ function QueuePage() {
   >([]);
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState<number | null>(null);
+  const [selectedPriority, setSelectedPriority] = useState<string | null>(null);
   const [toast, setToast] = useState<{
     msg: string;
     type: "ok" | "err";
@@ -285,7 +286,11 @@ function QueuePage() {
     }
   };
 
-  const sorted = [...tickets].sort(
+  const filteredTickets = selectedPriority
+    ? tickets.filter((t) => t.priority === selectedPriority)
+    : tickets;
+
+  const sorted = [...filteredTickets].sort(
     (a, b) => parseInt(b.priority) - parseInt(a.priority),
   );
 
@@ -313,14 +318,23 @@ function QueuePage() {
               Tickets non assignés — triés par priorité décroissante
             </p>
           </div>
-          <button
-            onClick={fetchQueue}
-            className="btn-ghost flex items-center gap-2 text-sm"
-            title="Actualiser"
-          >
-            <RefreshCw size={15} />
-            Actualiser
-          </button>
+          <div className="flex items-center gap-4">
+            {selectedPriority && (
+              <span className="text-sm font-medium text-[hsl(var(--primary))] animate-fade-in">
+                {filteredTickets.length} ticket{filteredTickets.length > 1 ? "s" : ""}{" "}
+                {PRIORITY_MAP[selectedPriority]?.label.toLowerCase()}
+                {filteredTickets.length > 1 ? "s" : ""} trouvé{filteredTickets.length > 1 ? "s" : ""}
+              </span>
+            )}
+            <button
+              onClick={fetchQueue}
+              className="btn-ghost flex items-center gap-2 text-sm"
+              title="Actualiser"
+            >
+              <RefreshCw size={15} />
+              Actualiser
+            </button>
+          </div>
         </div>
 
         {/* Stats rapides */}
@@ -333,7 +347,10 @@ function QueuePage() {
             return (
               <div
                 key={p.id}
-                className={`glass-card px-4 py-3 flex items-center gap-3 border ${cfg.badge}`}
+                onClick={() => setSelectedPriority(selectedPriority === p.id ? null : p.id)}
+                className={`glass-card px-4 py-3 flex items-center gap-3 border cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95
+                  ${selectedPriority === p.id ? "ring-2 ring-[hsl(var(--primary))] border-transparent shadow-lg" : selectedPriority ? "opacity-40 grayscale-[0.5]" : "hover:border-[hsl(var(--primary)/0.5)]"}
+                  ${cfg.badge}`}
               >
                 <span
                   className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${cfg.dot}`}

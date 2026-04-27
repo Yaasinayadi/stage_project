@@ -32,6 +32,17 @@ export default function Chatbot({ defaultOpen = false, onClose }: ChatbotProps) 
     scrollToBottom();
   }, [messages]);
 
+  // Listen for global toggle events (to avoid multiple instances)
+  useEffect(() => {
+    const handleToggle = (e: any) => {
+      if (e.detail?.open !== undefined) {
+        setIsOpen(e.detail.open);
+      }
+    };
+    window.addEventListener("toggle-chatbot", handleToggle);
+    return () => window.removeEventListener("toggle-chatbot", handleToggle);
+  }, []);
+
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
     const userMessage = input;
@@ -58,7 +69,7 @@ export default function Chatbot({ defaultOpen = false, onClose }: ChatbotProps) 
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 w-14 h-14 rounded-2xl flex items-center justify-center z-50 transition-all duration-300 hover:scale-110 hover:shadow-xl active:scale-95 accent-gradient shadow-lg"
+          className="fixed bottom-6 right-6 w-14 h-14 rounded-2xl flex items-center justify-center z-[9998] transition-all duration-300 hover:scale-110 hover:shadow-xl active:scale-95 accent-gradient shadow-lg"
           style={{ boxShadow: "0 8px 24px hsl(var(--primary) / 0.35)" }}
           id="chatbot-toggle"
         >
@@ -69,7 +80,7 @@ export default function Chatbot({ defaultOpen = false, onClose }: ChatbotProps) 
       {/* Chat Panel */}
       {isOpen && (
         <div
-          className="fixed bottom-6 right-6 w-[380px] h-[520px] rounded-2xl flex flex-col overflow-hidden z-50 chatbot-panel animate-slide-up"
+          className="fixed bottom-6 right-6 w-[380px] h-[520px] rounded-2xl flex flex-col overflow-hidden z-[9999] chatbot-panel animate-slide-up"
           id="chatbot-panel"
         >
           {/* Header */}

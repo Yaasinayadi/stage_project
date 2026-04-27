@@ -320,6 +320,10 @@ function Welcome() {
     setStatsKey((k) => k + 1);
   };
 
+  const handleChatbotOpen = () => {
+    window.dispatchEvent(new CustomEvent("toggle-chatbot", { detail: { open: true } }));
+  };
+
   return (
     <div className="p-6 lg:p-8 max-w-[1440px] mx-auto space-y-10">
 
@@ -368,7 +372,7 @@ function Welcome() {
       <div className="animate-fade-in w-full stagger-1">
         <WelcomeSlider
           onOpenTicketModal={() => setIsTicketModalOpen(true)}
-          onOpenChatbot={() => setIsChatbotOpen(true)}
+          onOpenChatbot={handleChatbotOpen}
         />
       </div>
 
@@ -457,7 +461,7 @@ function Welcome() {
             {/* Card 3 — Assistant IA (Groq) */}
             <button
               id="card-assistant-ia"
-              onClick={() => setIsChatbotOpen(true)}
+              onClick={handleChatbotOpen}
               className="glass-card p-6 flex flex-col gap-2 group cursor-pointer hover:border-[#f59e0b]/50 transition-all text-left w-full"
             >
               <div className="relative w-12 h-12 rounded-2xl bg-[#f59e0b]/10 text-[#f59e0b] flex items-center justify-center group-hover:scale-110 group-hover:bg-[#f59e0b]/15 transition-all duration-300">
@@ -504,12 +508,7 @@ function Welcome() {
         onSuccess={handleTicketSuccess}
       />
 
-      {isChatbotOpen && (
-        <Chatbot
-          defaultOpen={true}
-          onClose={() => setIsChatbotOpen(false)}
-        />
-      )}
+
 
       {isGuideOpen && <UserGuideModal onClose={() => setIsGuideOpen(false)} />}
 

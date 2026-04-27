@@ -567,15 +567,42 @@ class SupportTicketController(http.Controller):
             if res.status_code == 200:
                 data = res.json()
                 
-                # Recherche sémantique d'un article pertinent
+                # Recherche d'un article pertinent avec Llama-3 et filtre de catégorie strict
                 data['kb_article_id'] = None
                 data['kb_article_title'] = None
-                if ticket.name:
-                    import re
-                    words = re.findall(r'\b\w{4,}\b', ticket.name)
-                    if words:
-                        first_word = words[0]
-                        domain = ['&', ('is_published', '=', True), '|', ('name', 'ilike', first_word), ('solution', 'ilike', first_word)]
+                
+                if ticket.name or ticket.description:
+                    extract_url = "http://ia_service:8000/extract_keywords"
+                    payload_extract = {"description": f"{ticket.name}\n{ticket.description}"}
+                    
+                    keywords = []
+                    try:
+                        res_extract = requests.post(extract_url, json=payload_extract, timeout=10)
+                        if res_extract.status_code == 200:
+                            keywords = res_extract.json().get("keywords", [])
+                    except Exception:
+                        try:
+                            res_extract = requests.post("http://127.0.0.1:8000/extract_keywords", json=payload_extract, timeout=10)
+                            if res_extract.status_code == 200:
+                                keywords = res_extract.json().get("keywords", [])
+                        except Exception:
+                            pass
+                            
+                    domain = [('is_published', '=', True)]
+                    
+                    # 1. Filtrage Strict par Catégorie
+                    if ticket.ai_classification:
+                        domain.append(('category', '=ilike', ticket.ai_classification))
+                        
+                    # 2. Recherche Textuelle ciblée avec ilike sur le Titre (logique OU pour éviter les faux négatifs)
+                    if keywords:
+                        kw_domain = []
+                        for _ in range(len(keywords) - 1):
+                            kw_domain.append('|')
+                        for kw in keywords:
+                            kw_domain.append(('name', 'ilike', kw))
+                        domain.extend(kw_domain)
+                            
                         articles = request.env['support.knowledge'].sudo().search(domain, limit=1)
                         if articles:
                             data['kb_article_id'] = articles[0].id

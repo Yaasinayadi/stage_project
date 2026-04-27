@@ -175,6 +175,56 @@ def ai_analyze_detailed():
         })
 
 # ─────────────────────────────────────────────
+# ROUTE : Extraction de Mots-clés (Recherche KB)
+# ─────────────────────────────────────────────
+EXTRACT_KEYWORDS_PROMPT = """Tu es un expert en support informatique de niveau 3.
+Analyse le ticket fourni et extrais exactement DEUX (2) mots-clés techniques les plus précis pour effectuer une recherche dans une base de connaissances.
+Règle très importante : Chaque mot-clé doit être constitué d'UN SEUL MOT EXACT (pas de phrases, pas d'espaces).
+Exemples de bons mots-clés : "BSOD", "VPN", "GlobalProtect", "Imprimante", "Certificat".
+Tu dois UNIQUEMENT renvoyer un objet JSON valide avec cette structure exacte :
+{
+  "keywords": ["mot1", "mot2"]
+}
+Ne rajoute aucun texte avant ou après le JSON."""
+
+@app.route("/extract_keywords", methods=["POST"])
+def extract_keywords():
+    data = request.get_json()
+    if not data or "description" not in data:
+        return jsonify({"error": "Description requise."}), 400
+        
+    description = data["description"]
+    
+    if not llm:
+        import re
+        words = re.findall(r'\b\w{4,}\b', description)
+        fallback_keywords = words[:2] if len(words) >= 2 else (words + ["erreur"])[:2]
+        return jsonify({"keywords": fallback_keywords})
+        
+    try:
+        messages = [SystemMessage(content=EXTRACT_KEYWORDS_PROMPT), HumanMessage(content=f"Ticket :\n{description}")]
+        response = llm.invoke(messages)
+        content = response.content.strip()
+        print(f"DEBUG: Extract keywords response content: {content}")
+        if content.startswith("```"): 
+            content = content.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        
+        parsed_data = json.loads(content)
+        keywords = parsed_data.get("keywords", [])
+        if not isinstance(keywords, list) or len(keywords) < 2:
+            import re
+            words = re.findall(r'\b\w{4,}\b', description)
+            keywords = words[:2] if len(words) >= 2 else (words + ["erreur"])[:2]
+        
+        return jsonify({"keywords": keywords[:2]})
+    except Exception as e:
+        print(f"Erreur LLM extract_keywords: {e}")
+        import re
+        words = re.findall(r'\b\w{4,}\b', description)
+        fallback_keywords = words[:2] if len(words) >= 2 else (words + ["erreur"])[:2]
+        return jsonify({"keywords": fallback_keywords})
+
+# ─────────────────────────────────────────────
 # ROUTE : Chatbot IA
 # ─────────────────────────────────────────────
 CHAT_SYSTEM_PROMPT = """Tu es un assistant expert en support IT. Règles STRICTES :
