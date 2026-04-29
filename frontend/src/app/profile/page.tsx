@@ -7,10 +7,12 @@ import { ArrowLeft, User as UserIcon, Shield, Star, CheckCircle, Loader2, Eye, E
 import axios from "axios";
 import { ODOO_URL } from "@/lib/config";
 import { toast, Toaster } from "sonner";
+import { useTheme } from "next-themes";
 
 export default function ProfilePage() {
   const { user, refreshUser, isLoading } = useAuth();
   const router = useRouter();
+  const { theme, resolvedTheme } = useTheme();
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -141,16 +143,15 @@ export default function ProfilePage() {
   };
 
   const handleBack = () => {
-    if (user.x_support_role === "user") {
-      router.push("/welcome");
-    } else {
-      router.push("/tech/queue");
-    }
+    router.back();
   };
+
+  const currentTheme = resolvedTheme || theme;
+  const toasterTheme = currentTheme === "dark" ? "light" : "dark";
 
   return (
     <div className="flex-1 flex flex-col h-screen overflow-y-auto custom-scrollbar bg-[hsl(var(--background))]">
-      <Toaster position="top-right" theme="dark" />
+      <Toaster position="top-right" theme={toasterTheme as any} />
       
       {/* Header Area */}
       <header className="h-16 flex items-center px-6 border-b border-[hsl(var(--border)/0.5)] flex-shrink-0 sticky top-0 bg-[hsl(var(--background)/0.8)] backdrop-blur-md z-10">

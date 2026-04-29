@@ -57,11 +57,14 @@ class SupportTicketController(http.Controller):
             # Générer un token simple
             token = secrets.token_hex(32)
             
-            # Nombre de tickets résolus
-            resolved_tickets = request.env['support.ticket'].sudo().search_count([
-                ('assigned_to_id', '=', user.id),
-                ('state', '=', 'resolved')
-            ])
+            if x_support_role == 'tech':
+                resolved_domain = [('assigned_to_id', '=', user.id), ('state', '=', 'resolved')]
+            elif x_support_role == 'admin':
+                resolved_domain = [('state', '=', 'resolved')]  # Admin voit tous les tickets résolus
+            else:
+                resolved_domain = [('user_id', '=', user.id), ('state', '=', 'resolved')]
+                
+            resolved_tickets = request.env['support.ticket'].sudo().search_count(resolved_domain)
 
             return self._json_response({
                 'status': 200,
@@ -152,11 +155,14 @@ class SupportTicketController(http.Controller):
 
             x_support_role = user.x_support_role or 'user'
             
-            # Nombre de tickets résolus
-            resolved_tickets = request.env['support.ticket'].sudo().search_count([
-                ('assigned_to_id', '=', user.id),
-                ('state', '=', 'resolved')
-            ])
+            if x_support_role == 'tech':
+                resolved_domain = [('assigned_to_id', '=', user.id), ('state', '=', 'resolved')]
+            elif x_support_role == 'admin':
+                resolved_domain = [('state', '=', 'resolved')]  # Admin voit tous les tickets résolus
+            else:
+                resolved_domain = [('user_id', '=', user.id), ('state', '=', 'resolved')]
+                
+            resolved_tickets = request.env['support.ticket'].sudo().search_count(resolved_domain)
 
             return self._json_response({
                 'status': 200,
@@ -734,7 +740,7 @@ class SupportTicketController(http.Controller):
     # CATEGORIES API
     # ─────────────────────────────────────────────
 
-    @http.route('/api/categories', type='http', auth='public', methods=['GET', 'OPTIONS'], cors='*', csrf=False)
+    @http.route('/api/categories', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
     def get_categories(self, **kw):
         """Récupère la liste des catégories de tickets disponibles."""
         try:

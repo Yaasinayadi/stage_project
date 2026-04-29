@@ -500,7 +500,7 @@ function TicketDetailPage() {
 
         setKbDraftData({
           title: ticket.name,
-          category: ticket.ai_classification ?? "",
+          category: ticket.category ?? "",
           content: mergedContent,
           sourceTicketId: ticket.id,
         });

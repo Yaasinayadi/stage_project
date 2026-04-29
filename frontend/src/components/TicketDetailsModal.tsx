@@ -1,17 +1,43 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import axios from "axios";
 import {
-  X, Edit2, Trash2, Save, Sparkles, Loader2,
-  Paperclip, Upload, FileText, Image, File, Download,
-  AlertCircle, CheckCircle2, XCircle, Clock, User,
-  CalendarDays, ShieldCheck, ShieldAlert, ShieldX, RefreshCw
+  X,
+  Edit2,
+  Trash2,
+  Save,
+  Sparkles,
+  Loader2,
+  Paperclip,
+  Upload,
+  FileText,
+  Image,
+  File,
+  Download,
+  AlertCircle,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  User,
+  CalendarDays,
+  ShieldCheck,
+  ShieldAlert,
+  ShieldX,
+  RefreshCw,
+  Check,
+  ChevronDown,
 } from "lucide-react";
-import { getCategoryColor, getCategoryIcon, getPriorityBadge, getStatusInfo, formatTicketRef } from "./TicketCard";
+import {
+  getCategoryColor,
+  getCategoryIcon,
+  getPriorityBadge,
+  getStatusInfo,
+  formatTicketRef,
+} from "./TicketCard";
+import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { ODOO_URL as ODOO_BASE } from "@/lib/config";
-
 
 // ─── Types ───
 
@@ -58,17 +84,21 @@ type TicketDetailsModalProps = {
 // ─── Constants ───
 
 const ALLOWED_TYPES = [
-  "image/jpeg", "image/png", "image/gif", "image/webp",
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
   "application/pdf",
-  "text/plain", "text/csv",
+  "text/plain",
+  "text/csv",
   "application/zip",
   "application/vnd.ms-excel",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ];
-const MAX_SIZE   = 10 * 1024 * 1024;
-const MAX_FILES  = 5;
+const MAX_SIZE = 10 * 1024 * 1024;
+const MAX_FILES = 5;
 
 const FLASK_BASE = "http://localhost:8000";
 const POLL_INTERVAL = 30000; // 30 seconds
@@ -84,7 +114,9 @@ function formatBytes(bytes: number) {
 function formatDate(dateStr: string | null) {
   if (!dateStr) return "";
   return new Date(dateStr).toLocaleDateString("fr-FR", {
-    day: "2-digit", month: "short", year: "numeric",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
   });
 }
 
@@ -97,16 +129,25 @@ function parseOdooDate(raw: string): Date {
 function formatFullDate(dateStr: string | null | undefined): string {
   if (!dateStr) return "—";
   const d = parseOdooDate(dateStr);
-  return d.toLocaleDateString("fr-FR", {
-    day: "numeric", month: "long", year: "numeric",
-  }) + " à " + d.toLocaleTimeString("fr-FR", {
-    hour: "2-digit", minute: "2-digit",
-  });
+  return (
+    d.toLocaleDateString("fr-FR", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }) +
+    " à " +
+    d.toLocaleTimeString("fr-FR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  );
 }
 
 function getFileIcon(mimetype: string, size = 16) {
-  if (mimetype.startsWith("image/")) return <Image size={size} className="text-blue-400" />;
-  if (mimetype === "application/pdf")  return <FileText size={size} className="text-red-400" />;
+  if (mimetype.startsWith("image/"))
+    return <Image size={size} className="text-blue-400" />;
+  if (mimetype === "application/pdf")
+    return <FileText size={size} className="text-red-400" />;
   return <File size={size} className="text-gray-400" />;
 }
 
@@ -154,34 +195,43 @@ function getSlaInfo(status: string | null | undefined): {
   }
 }
 
-function computeSlaProgress(createDate: string | null | undefined, deadline: string | null | undefined, state: string, dateResolved: string | null | undefined): number {
+function computeSlaProgress(
+  createDate: string | null | undefined,
+  deadline: string | null | undefined,
+  state: string,
+  dateResolved: string | null | undefined,
+): number {
   if (!createDate || !deadline) return 0;
   const start = parseOdooDate(createDate).getTime();
   const end = parseOdooDate(deadline).getTime();
-  
+
   let now = Date.now();
   if ((state === "resolved" || state === "closed") && dateResolved) {
     now = parseOdooDate(dateResolved).getTime();
   }
-  
+
   const total = end - start;
   if (total <= 0) return 100;
   const elapsed = now - start;
   return Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)));
 }
 
-function getRemainingTime(deadline: string | null | undefined, state: string, dateResolved: string | null | undefined): string {
+function getRemainingTime(
+  deadline: string | null | undefined,
+  state: string,
+  dateResolved: string | null | undefined,
+): string {
   if (!deadline) return "—";
   const end = parseOdooDate(deadline).getTime();
-  
+
   let now = Date.now();
   const isResolved = state === "resolved" || state === "closed";
   if (isResolved && dateResolved) {
     now = parseOdooDate(dateResolved).getTime();
   }
-  
+
   const diff = end - now;
-  
+
   if (diff <= 0) {
     const over = Math.abs(diff);
     const hours = Math.floor(over / 3600000);
@@ -194,13 +244,13 @@ function getRemainingTime(deadline: string | null | undefined, state: string, da
     } else {
       timeStr = `${hours}h ${mins}min`;
     }
-    
+
     if (isResolved) {
       return `Dépassé de ${timeStr} lors de la clôture`;
     }
     return `Dépassé de ${timeStr}`;
   }
-  
+
   const hours = Math.floor(diff / 3600000);
   const mins = Math.floor((diff % 3600000) / 60000);
   if (hours >= 24) {
@@ -215,17 +265,286 @@ function getRemainingTime(deadline: string | null | undefined, state: string, da
 
 const TIMELINE_STEPS = [
   { key: "new", label: "Nouveau", stateMatch: ["new", "nouveau"] },
-  { key: "in_progress", label: "En cours", stateMatch: ["in_progress", "cours", "progress"] },
+  {
+    key: "in_progress",
+    label: "En cours",
+    stateMatch: ["in_progress", "cours", "progress"],
+  },
   { key: "waiting", label: "En attente", stateMatch: ["waiting", "attente"] },
-  { key: "resolved", label: "Résolu", stateMatch: ["resolved", "résolu", "done", "closed", "fermé"] },
+  {
+    key: "resolved",
+    label: "Résolu",
+    stateMatch: ["resolved", "résolu", "done", "closed", "fermé"],
+  },
 ];
 
 function getStepIndex(state: string): number {
   const s = (state || "").toLowerCase();
   for (let i = 0; i < TIMELINE_STEPS.length; i++) {
-    if (TIMELINE_STEPS[i].stateMatch.some(m => s.includes(m))) return i;
+    if (TIMELINE_STEPS[i].stateMatch.some((m) => s.includes(m))) return i;
   }
   return 0;
+}
+
+// ─── Inline Selects (Ghost Dropdowns) ───
+
+const PRIORITIES = [
+  { value: "0", label: "Basse" },
+  { value: "1", label: "Moyenne" },
+  { value: "2", label: "Haute" },
+  { value: "3", label: "Urgente" },
+];
+
+function InlinePrioritySelect({
+  priority,
+  canEdit,
+  isUpdating,
+  onUpdate,
+}: {
+  priority: string;
+  canEdit: boolean;
+  isUpdating: boolean;
+  onUpdate: (val: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative inline-block">
+      <div
+        onClick={() => canEdit && !isUpdating && setOpen(!open)}
+        className={`flex items-center gap-1.5 w-fit ${canEdit && !isUpdating ? "cursor-pointer hover:opacity-80 transition-opacity" : ""}`}
+      >
+        {getPriorityBadge(priority)}
+        {canEdit && !isUpdating && (
+          <ChevronDown
+            size={12}
+            className={`text-[hsl(var(--muted-foreground))] transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        )}
+        {isUpdating && (
+          <Loader2
+            size={12}
+            className="text-[hsl(var(--muted-foreground))] animate-spin"
+          />
+        )}
+      </div>
+      {open && (
+        <div className="absolute top-[calc(100%+6px)] left-0 z-[200] w-48 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-2xl backdrop-blur-lg overflow-hidden animate-fade-in flex flex-col p-1.5 space-y-0.5">
+          {PRIORITIES.map((p) => (
+            <button
+              key={p.value}
+              onClick={(e) => {
+                e.preventDefault();
+                setOpen(false);
+                if (p.value !== priority) onUpdate(p.value);
+              }}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all
+                ${
+                  p.value === priority
+                    ? "bg-[hsl(var(--primary)/0.12)] text-[hsl(var(--primary))] border border-[hsl(var(--primary)/0.2)]"
+                    : "hover:bg-[hsl(var(--muted)/0.5)] text-[hsl(var(--foreground))] border border-transparent"
+                }`}
+            >
+              {p.label}
+              {p.value === priority && <Check size={12} className="ml-2" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const CATEGORIES = [
+  "Réseau",
+  "Logiciel",
+  "Matériel",
+  "Accès",
+  "Messagerie",
+  "Infrastructure",
+  "Sécurité",
+  "Autre",
+];
+
+function InlineCategorySelect({
+  category,
+  canEdit,
+  isUpdating,
+  onUpdate,
+}: {
+  category: string;
+  canEdit: boolean;
+  isUpdating: boolean;
+  onUpdate: (val: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const catColor = getCategoryColor(category);
+
+  return (
+    <div ref={ref} className="relative inline-block w-full">
+      <div
+        onClick={() => canEdit && !isUpdating && setOpen(!open)}
+        className={`flex items-center gap-1.5 w-fit rounded-md ${canEdit && !isUpdating ? "cursor-pointer hover:opacity-80 transition-opacity" : ""}`}
+      >
+        <span
+          className="text-sm font-semibold truncate block"
+          style={{ color: catColor }}
+        >
+          {category || "Non classé"}
+        </span>
+        {canEdit && !isUpdating && (
+          <ChevronDown
+            size={12}
+            className={`text-[hsl(var(--muted-foreground))] transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        )}
+        {isUpdating && (
+          <Loader2
+            size={12}
+            className="text-[hsl(var(--muted-foreground))] animate-spin"
+          />
+        )}
+      </div>
+      {open && (
+        <div className="absolute top-[calc(100%+6px)] left-0 z-[200] w-48 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-2xl backdrop-blur-lg overflow-hidden animate-fade-in flex flex-col p-1.5 max-h-56 overflow-y-auto custom-scrollbar">
+          {CATEGORIES.map((c) => {
+            const cColor = getCategoryColor(c);
+            return (
+              <button
+                key={c}
+                onClick={(e) => {
+                  e.preventDefault();
+                  setOpen(false);
+                  if (c !== category) onUpdate(c);
+                }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all
+                  ${
+                    c === category
+                      ? "bg-[hsl(var(--primary)/0.12)] border border-[hsl(var(--primary)/0.2)]"
+                      : "hover:bg-[hsl(var(--muted)/0.5)] border border-transparent"
+                  }`}
+                style={{
+                  color: c === category ? cColor : "hsl(var(--foreground))",
+                }}
+              >
+                {c}
+                {c === category && <Check size={12} className="ml-2" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InlineAgentSelect({
+  value,
+  agents,
+  isUpdating,
+  onUpdate,
+}: {
+  value: number | string;
+  agents: { id: number; name: string }[];
+  isUpdating: boolean;
+  onUpdate: (val: number | string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const selectedAgent = agents.find((a) => String(a.id) === String(value));
+  const displayName = selectedAgent ? selectedAgent.name : "Non assigné";
+
+  return (
+    <div ref={ref} className="relative inline-block w-full mt-0.5">
+      <div
+        onClick={() => !isUpdating && setOpen(!open)}
+        className={`flex items-center gap-1.5 w-fit rounded-md px-1 py-0.5 -ml-1 ${!isUpdating ? "cursor-pointer hover:bg-[hsl(var(--muted)/0.5)] transition-colors" : "opacity-50"}`}
+      >
+        <span className="text-xs font-semibold truncate block">
+          {displayName}
+        </span>
+        {!isUpdating && (
+          <ChevronDown
+            size={12}
+            className={`text-[hsl(var(--muted-foreground))] transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        )}
+      </div>
+      {open && (
+        <div className="absolute top-[calc(100%+6px)] left-0 z-[200] w-56 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-2xl backdrop-blur-lg overflow-hidden animate-fade-in flex flex-col p-1.5 max-h-56 overflow-y-auto custom-scrollbar">
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              setOpen(false);
+              if (value !== "") onUpdate("");
+            }}
+            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all
+              ${
+                value === ""
+                  ? "bg-[hsl(var(--primary)/0.12)] border border-[hsl(var(--primary)/0.2)] text-[hsl(var(--primary))]"
+                  : "hover:bg-[hsl(var(--muted)/0.5)] border border-transparent text-[hsl(var(--foreground))]"
+              }`}
+          >
+            Non assigné
+            {value === "" && <Check size={12} className="ml-2" />}
+          </button>
+          {agents.map((a) => {
+            const isSelected = String(a.id) === String(value);
+            return (
+              <button
+                key={a.id}
+                onClick={(e) => {
+                  e.preventDefault();
+                  setOpen(false);
+                  if (String(a.id) !== String(value)) onUpdate(a.id);
+                }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all
+                  ${
+                    isSelected
+                      ? "bg-[hsl(var(--primary)/0.12)] border border-[hsl(var(--primary)/0.2)] text-[hsl(var(--primary))]"
+                      : "hover:bg-[hsl(var(--muted)/0.5)] border border-transparent text-[hsl(var(--foreground))]"
+                  }`}
+              >
+                {a.name}
+                {isSelected && <Check size={12} className="ml-2" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Component ───
@@ -236,32 +555,40 @@ export default function TicketDetailsModal({
   onClose,
   onRefresh,
 }: TicketDetailsModalProps) {
-
   // ══════════════════════════════════════════
   //  HOOKS — tous AVANT le return conditionnel
   // ══════════════════════════════════════════
 
   const { user } = useAuth();
   const [ticket, setTicket] = useState<Ticket>(initialTicket);
-  const [isEditing,     setIsEditing]     = useState(false);
-  const [isAnalyzing,   setIsAnalyzing]   = useState(false);
-  const [editForm,      setEditForm]      = useState({
-    name:        initialTicket.name,
+  const [isEditing, setIsEditing] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const [editForm, setEditForm] = useState({
+    name: initialTicket.name,
     description: initialTicket.description,
     assigned_to: initialTicket.assigned_to_id || "",
+    category: initialTicket.category || "",
+    priority: initialTicket.priority || "",
   });
-  
+
+  const [pendingUploads, setPendingUploads] = useState<File[]>([]);
+  const [pendingDeletes, setPendingDeletes] = useState<number[]>([]);
+
   // Agents
-  const [agents, setAgents] = useState<{id: number, name: string, it_domains: string[]}[]>([]);
+  const [agents, setAgents] = useState<
+    { id: number; name: string; it_domains: string[] }[]
+  >([]);
 
   // Attachments
-  const [attachments,   setAttachments]   = useState<Attachment[]>([]);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [attachLoading, setAttachLoading] = useState(true);
-  const [isDragging,    setIsDragging]    = useState(false);
-  const [isUploading,   setIsUploading]   = useState(false);
-  const [uploadError,   setUploadError]   = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
-  const [deletingId,    setDeletingId]    = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   // Polling visual indicator
   const [lastPolled, setLastPolled] = useState<Date | null>(null);
@@ -288,7 +615,9 @@ export default function TicketDetailsModal({
   const fetchAttachments = useCallback(async () => {
     setAttachLoading(true);
     try {
-      const res = await axios.get(`${FLASK_BASE}/api/ticket/${ticket.id}/attachments`);
+      const res = await axios.get(
+        `${FLASK_BASE}/api/ticket/${ticket.id}/attachments`,
+      );
       if (res.data.status === 200) setAttachments(res.data.data);
     } catch {
       // silently ignore
@@ -300,7 +629,9 @@ export default function TicketDetailsModal({
   const fetchComments = useCallback(async () => {
     setCommentsLoading(true);
     try {
-      const res = await axios.get(`${ODOO_BASE}/api/ticket/${ticket.id}/comments`);
+      const res = await axios.get(
+        `${ODOO_BASE}/api/ticket/${ticket.id}/comments`,
+      );
       console.log("DATA_RECUE_DE_ODOO:", res.data.data);
       if (res.data.status === 200) setComments(res.data.data);
     } catch {
@@ -317,25 +648,44 @@ export default function TicketDetailsModal({
     }
   }, [isOpen, fetchAttachments, fetchComments]);
 
-  // Réinitialiser le mode édition à chaque ouverture
+  // Synchroniser le formulaire avec les données initiales, sauf si l'utilisateur est en train d'éditer ou si l'animation de succès est en cours
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !isEditing && !saveSuccess) {
       setIsEditing(false);
-      setEditForm({ name: initialTicket.name, description: initialTicket.description, assigned_to: initialTicket.assigned_to_id || "" });
+      setEditForm({
+        name: initialTicket.name,
+        description: initialTicket.description,
+        assigned_to: initialTicket.assigned_to_id || "",
+        category: initialTicket.category || "",
+        priority: initialTicket.priority || "",
+      });
       setUploadError(null);
       setUploadSuccess(null);
+      setPendingUploads([]);
+      setPendingDeletes([]);
       setNewComment("");
-      
+
       // Fetch agents if user is admin or agent
       if (user?.x_support_role === "admin" || user?.x_support_role === "tech") {
-        axios.get(`${ODOO_BASE}/api/agents`).then(res => {
-          if (res.data.status === 200) {
-            setAgents(res.data.data);
-          }
-        }).catch(err => console.error("Error fetching agents", err));
+        axios
+          .get(`${ODOO_BASE}/api/agents`)
+          .then((res) => {
+            if (res.data.status === 200) {
+              setAgents(res.data.data);
+            }
+          })
+          .catch((err) => console.error("Error fetching agents", err));
       }
     }
-  }, [isOpen, initialTicket.name, initialTicket.description, initialTicket.assigned_to_id, user?.x_support_role]);
+  }, [
+    isOpen,
+    initialTicket.name,
+    initialTicket.description,
+    initialTicket.assigned_to_id,
+    user?.x_support_role,
+    isEditing,
+    saveSuccess,
+  ]);
 
   // ══ POLLING — Refresh ticket data every 30s ══
   useEffect(() => {
@@ -345,7 +695,9 @@ export default function TicketDetailsModal({
       try {
         const res = await axios.get(`${ODOO_BASE}/api/tickets`);
         if (res.data.status === 200) {
-          const fresh = (res.data.data as Ticket[]).find((t: Ticket) => t.id === ticket.id);
+          const fresh = (res.data.data as Ticket[]).find(
+            (t: Ticket) => t.id === ticket.id,
+          );
           if (fresh) {
             setTicket(fresh);
             setLastPolled(new Date());
@@ -369,10 +721,18 @@ export default function TicketDetailsModal({
 
   const handleCancelEdit = useCallback(() => {
     setIsEditing(false);
-    setEditForm({ name: ticket.name, description: ticket.description, assigned_to: ticket.assigned_to_id || "" });
+    setEditForm({
+      name: ticket.name,
+      description: ticket.description,
+      assigned_to: ticket.assigned_to_id || "",
+      category: ticket.category || "",
+      priority: ticket.priority || "",
+    });
     setUploadError(null);
     setUploadSuccess(null);
-  }, [ticket.name, ticket.description, ticket.assigned_to_id]);
+    setPendingUploads([]);
+    setPendingDeletes([]);
+  }, [ticket]);
 
   const handleDelete = useCallback(async () => {
     if (!confirm("Êtes-vous sûr de vouloir supprimer ce ticket ?")) return;
@@ -385,132 +745,219 @@ export default function TicketDetailsModal({
     }
   }, [ticket.id, onRefresh, onClose]);
 
-  const handleUpdate = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
+  const hasChanges = useMemo(() => {
+    return (
+      editForm.name !== ticket.name ||
+      editForm.description !== ticket.description ||
+      String(editForm.assigned_to) !== String(ticket.assigned_to_id || "") ||
+      editForm.category !== (ticket.category || "") ||
+      editForm.priority !== (ticket.priority || "") ||
+      pendingUploads.length > 0 ||
+      pendingDeletes.length > 0
+    );
+  }, [editForm, ticket, pendingUploads, pendingDeletes]);
+
+  const handleGroupedSave = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!hasChanges) return;
     setIsAnalyzing(true);
     try {
-      const iaRes = await axios.post(`${FLASK_BASE}/classify_ticket`, {
-        description: editForm.description,
-      });
-      const { category, priority } = iaRes.data;
-      await axios.put(`${ODOO_BASE}/api/ticket/update/${ticket.id}`, {
-        name:        editForm.name,
-        description: editForm.description,
-        assigned_to_id: editForm.assigned_to,
-        category,
-        priority,
-      });
+      let changesMsg = [];
+      const fieldUpdates: any = {};
+
+      if (editForm.name !== ticket.name) {
+        fieldUpdates.name = editForm.name;
+        changesMsg.push("Sujet");
+      }
+      if (editForm.description !== ticket.description) {
+        fieldUpdates.description = editForm.description;
+        changesMsg.push("Description");
+      }
+      if (
+        String(editForm.assigned_to) !== String(ticket.assigned_to_id || "")
+      ) {
+        fieldUpdates.assigned_to_id = editForm.assigned_to || false;
+        changesMsg.push("Agent");
+      }
+      if (editForm.category !== (ticket.category || "")) {
+        fieldUpdates.category = editForm.category;
+        changesMsg.push("Catégorie");
+      }
+      if (editForm.priority !== (ticket.priority || "")) {
+        fieldUpdates.priority = editForm.priority;
+        changesMsg.push("Priorité");
+      }
+
+      if (Object.keys(fieldUpdates).length > 0) {
+        const res = await axios.put(
+          `${ODOO_BASE}/api/ticket/update/${ticket.id}`,
+          fieldUpdates,
+        );
+        if (res.data.status === 200) {
+          setTicket((prev) => ({
+            ...prev,
+            ...fieldUpdates,
+            assigned_to_id: editForm.assigned_to || null,
+          }));
+        }
+      }
+
+      let filesChanged = false;
+      if (pendingDeletes.length > 0) {
+        await Promise.all(
+          pendingDeletes.map((id) =>
+            axios.delete(`${FLASK_BASE}/api/attachment/${id}`),
+          ),
+        );
+        filesChanged = true;
+      }
+      if (pendingUploads.length > 0) {
+        const formData = new FormData();
+        pendingUploads.forEach((f) => formData.append("files", f));
+        await axios.post(
+          `${FLASK_BASE}/api/ticket/${ticket.id}/upload`,
+          formData,
+          { headers: { "Content-Type": "multipart/form-data" } },
+        );
+        filesChanged = true;
+      }
+      if (filesChanged) changesMsg.push("Pièces jointes");
+
       onRefresh?.();
-      setIsEditing(false);
-    } catch {
-      alert("Erreur lors de la modification.");
+      fetchAttachments();
+      setPendingUploads([]);
+      setPendingDeletes([]);
+
+      if (changesMsg.length > 0) {
+        setSaveSuccess(true);
+        toast.success(
+          `Modification réussie : ${changesMsg.join(", ")} mis à jour.`,
+        );
+        setTimeout(() => {
+          setSaveSuccess(false);
+          setIsEditing(false);
+        }, 3000);
+      } else {
+        setIsEditing(false);
+      }
+    } catch (err) {
+      toast.error("Erreur lors de la sauvegarde.");
     } finally {
       setIsAnalyzing(false);
     }
-  }, [editForm, ticket.id, onRefresh]);
+  };
 
-  const handlePostComment = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newComment.trim()) return;
-    setPostingComment(true);
-    try {
-      const userStr = localStorage.getItem("it_support_user");
-      let author = "";
-      let user_id = null;
-      if (userStr) {
-        const u = JSON.parse(userStr);
-        author = u.name;
-        user_id = u.id;
+  const handlePostComment = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!newComment.trim()) return;
+      setPostingComment(true);
+      try {
+        const userStr = localStorage.getItem("it_support_user");
+        let author = "";
+        let user_id = null;
+        if (userStr) {
+          const u = JSON.parse(userStr);
+          author = u.name;
+          user_id = u.id;
+        }
+
+        const payload: any = { body: newComment.trim() };
+        if (user_id) payload.user_id = user_id;
+        payload.author = author ? author : "Utilisateur Inconnu";
+
+        await axios.post(
+          `${ODOO_BASE}/api/ticket/${ticket.id}/comment`,
+          payload,
+          {
+            withCredentials: true,
+          },
+        );
+        setNewComment("");
+        await fetchComments();
+      } catch {
+        toast.error("Erreur lors de l'ajout du commentaire.");
+      } finally {
+        setPostingComment(false);
+      }
+    },
+    [newComment, ticket.id, fetchComments],
+  );
+
+  const uploadFiles = useCallback(
+    (files: FileList | File[]) => {
+      setUploadError(null);
+      const arr = Array.from(files);
+
+      if (
+        attachments.length -
+          pendingDeletes.length +
+          pendingUploads.length +
+          arr.length >
+        MAX_FILES
+      ) {
+        setUploadError(`Maximum ${MAX_FILES} fichiers par ticket.`);
+        return;
+      }
+      for (const f of arr) {
+        if (!ALLOWED_TYPES.includes(f.type)) {
+          setUploadError(`Type non autorisé : ${f.name}`);
+          return;
+        }
+        if (f.size > MAX_SIZE) {
+          setUploadError(`"${f.name}" dépasse 10 Mo.`);
+          return;
+        }
       }
 
-      const payload: any = { body: newComment.trim() };
-      if (user_id) payload.user_id = user_id;
-      payload.author = author ? author : "Utilisateur Inconnu";
+      setPendingUploads((p) => [...p, ...arr]);
+    },
+    [attachments.length, pendingDeletes.length, pendingUploads.length],
+  );
 
-      await axios.post(`${ODOO_BASE}/api/ticket/${ticket.id}/comment`, payload, { 
-        withCredentials: true 
-      });
-      setNewComment("");
-      await fetchComments();
-    } catch {
-      alert("Erreur lors de l'ajout du commentaire.");
-    } finally {
-      setPostingComment(false);
-    }
-  }, [newComment, ticket.id, fetchComments]);
-
-  const uploadFiles = useCallback(async (files: FileList | File[]) => {
-    setUploadError(null);
-    setUploadSuccess(null);
-    const arr = Array.from(files);
-
-    if (attachments.length + arr.length > MAX_FILES) {
-      setUploadError(`Maximum ${MAX_FILES} fichiers par ticket.`);
-      return;
-    }
-    for (const f of arr) {
-      if (!ALLOWED_TYPES.includes(f.type)) { setUploadError(`Type non autorisé : ${f.name}`); return; }
-      if (f.size > MAX_SIZE)               { setUploadError(`"${f.name}" dépasse 10 Mo.`);   return; }
-    }
-
-    setIsUploading(true);
-    try {
-      const formData = new FormData();
-      arr.forEach((f) => formData.append("files", f));
-      const res = await axios.post(
-        `${FLASK_BASE}/api/ticket/${ticket.id}/upload`,
-        formData,
-        { headers: { "Content-Type": "multipart/form-data" } }
-      );
-      if (res.data.status === 201) {
-        setUploadSuccess(`${res.data.data.length} fichier(s) ajouté(s) !`);
-        setTimeout(() => setUploadSuccess(null), 4000);
-        fetchAttachments();
-      }
-    } catch {
-      setUploadError("Erreur lors du téléversement. Réessayez.");
-    } finally {
-      setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  }, [attachments.length, ticket.id, fetchAttachments]);
-
-  const handleDeleteAttachment = useCallback(async (attId: number) => {
-    if (!confirm("Supprimer ce fichier ?")) return;
-    setDeletingId(attId);
-    try {
-      await axios.delete(`${FLASK_BASE}/api/attachment/${attId}`);
-      setAttachments((prev) => prev.filter((a) => a.id !== attId));
-      setUploadSuccess("Fichier supprimé.");
-      setTimeout(() => setUploadSuccess(null), 3000);
-    } catch {
-      setUploadError("Erreur lors de la suppression.");
-    } finally {
-      setDeletingId(null);
-    }
+  const handleDeleteAttachment = useCallback((attId: number) => {
+    setPendingDeletes((p) => [...p, attId]);
   }, []);
 
-  const handleDragOver  = useCallback((e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); }, []);
-  const handleDragLeave = useCallback(() => setIsDragging(false), []);
-  const handleDrop      = useCallback((e: React.DragEvent) => {
+  const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragging(false);
-    uploadFiles(e.dataTransfer.files);
-  }, [uploadFiles]);
+    setIsDragging(true);
+  }, []);
+  const handleDragLeave = useCallback(() => setIsDragging(false), []);
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+      uploadFiles(e.dataTransfer.files);
+    },
+    [uploadFiles],
+  );
 
   // ══════════════════════════════════════════
   //  RETURN CONDITIONNEL — après tous les hooks
   // ══════════════════════════════════════════
   if (!isOpen) return null;
 
-  const status   = getStatusInfo(ticket.state);
+  const status = getStatusInfo(ticket.state);
   const catColor = getCategoryColor(ticket.category);
   // Agents and admins can edit tickets until they are resolved, normal users can only edit when new
-  const canEdit  = status.dotClass === "new" || ((user?.x_support_role === "admin" || user?.x_support_role === "tech") && status.dotClass !== "resolved"); 
+  const canEdit =
+    status.dotClass === "new" ||
+    ((user?.x_support_role === "admin" || user?.x_support_role === "tech") &&
+      status.dotClass !== "resolved");
   const activeStep = getStepIndex(ticket.state);
   const slaInfo = getSlaInfo(ticket.sla_status);
-  const slaProgress = computeSlaProgress(ticket.create_date, ticket.sla_deadline, ticket.state, ticket.date_resolved);
-  const slaRemaining = getRemainingTime(ticket.sla_deadline, ticket.state, ticket.date_resolved);
+  const slaProgress = computeSlaProgress(
+    ticket.create_date,
+    ticket.sla_deadline,
+    ticket.state,
+    ticket.date_resolved,
+  );
+  const slaRemaining = getRemainingTime(
+    ticket.sla_deadline,
+    ticket.state,
+    ticket.date_resolved,
+  );
 
   // ─── Render ───
   return (
@@ -520,7 +967,6 @@ export default function TicketDetailsModal({
         style={{ maxHeight: "92vh", maxWidth: "640px" }}
         onClick={(e) => e.stopPropagation()}
       >
-
         {/* ══ HEADER ══ */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[hsl(var(--border))] bg-[hsl(var(--background)/0.5)] flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -531,7 +977,9 @@ export default function TicketDetailsModal({
               {getCategoryIcon(ticket.category)}
             </div>
             <div>
-              <h2 className="text-lg font-bold leading-tight">Détails du ticket</h2>
+              <h2 className="text-lg font-bold leading-tight">
+                Détails du ticket
+              </h2>
               <div className="flex items-center gap-2 mt-0.5">
                 <p className="text-xs font-mono font-semibold tracking-wide text-[hsl(var(--muted-foreground))]">
                   Réf. {formatTicketRef(ticket.id)}
@@ -544,7 +992,10 @@ export default function TicketDetailsModal({
                 )}
                 {/* Polling indicator */}
                 {lastPolled && !isEditing && (
-                  <span className="text-[0.6rem] font-medium text-[hsl(var(--muted-foreground))] flex items-center gap-1 opacity-60" title={`Dernière mise à jour: ${lastPolled.toLocaleTimeString("fr-FR")}`}>
+                  <span
+                    className="text-[0.6rem] font-medium text-[hsl(var(--muted-foreground))] flex items-center gap-1 opacity-60"
+                    title={`Dernière mise à jour: ${lastPolled.toLocaleTimeString("fr-FR")}`}
+                  >
                     <RefreshCw size={9} />
                     Live
                   </span>
@@ -554,7 +1005,7 @@ export default function TicketDetailsModal({
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Bouton CRAYON — active le mode édition */}
+            {/* Bouton MODIFIER — uniquement en mode lecture */}
             {!isEditing && canEdit && (
               <button
                 onClick={() => setIsEditing(true)}
@@ -592,8 +1043,7 @@ export default function TicketDetailsModal({
 
         {/* ══ CORPS SCROLLABLE ══ */}
         <div className="flex-1 overflow-y-auto custom-scrollbar">
-          <form onSubmit={handleUpdate} className="p-6 space-y-6">
-
+          <form onSubmit={handleGroupedSave} className="p-6 space-y-6">
             {/* ── Titre ── */}
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))] mb-2">
@@ -604,7 +1054,9 @@ export default function TicketDetailsModal({
                   required
                   disabled={isAnalyzing}
                   value={editForm.name}
-                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, name: e.target.value })
+                  }
                   className="input-field focus-ring disabled:opacity-50 text-base font-semibold animate-fade-in"
                 />
               ) : (
@@ -623,13 +1075,18 @@ export default function TicketDetailsModal({
                     required
                     disabled={isAnalyzing}
                     value={editForm.description}
-                    onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, description: e.target.value })
+                    }
                     className="input-field focus-ring resize-none disabled:opacity-50 w-full"
                     style={{ height: "130px" }}
                   />
                   {isAnalyzing && (
                     <div className="absolute inset-0 bg-[hsl(var(--background)/0.8)] backdrop-blur-sm rounded-xl flex items-center justify-center gap-2">
-                      <Loader2 size={18} className="text-[hsl(var(--primary))] animate-spin" />
+                      <Loader2
+                        size={18}
+                        className="text-[hsl(var(--primary))] animate-spin"
+                      />
                       <span className="text-xs font-semibold text-[hsl(var(--primary))] flex items-center gap-1">
                         <Sparkles size={11} /> Analyse IA...
                       </span>
@@ -646,21 +1103,39 @@ export default function TicketDetailsModal({
             {/* ── Statut + Priorité + Catégorie ── */}
             <div className="grid grid-cols-3 gap-3">
               <div className="p-3 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))]">
-                <span className="block text-xs font-semibold mb-1.5 opacity-60">Statut</span>
+                <span className="block text-xs font-semibold mb-1.5 opacity-60">
+                  Statut
+                </span>
                 <div className="flex items-center gap-1.5">
                   <span className={`status-dot ${status.dotClass}`} />
                   <span className="text-sm font-semibold">{status.label}</span>
                 </div>
               </div>
-              <div className="p-3 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))]">
-                <span className="block text-xs font-semibold mb-1.5 opacity-60">Priorité</span>
-                {getPriorityBadge(ticket.priority)}
-              </div>
-              <div className="p-3 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))]">
-                <span className="block text-xs font-semibold mb-1.5 opacity-60">Catégorie IA</span>
-                <span className="text-sm font-semibold truncate block" style={{ color: catColor }}>
-                  {ticket.category || "Non classé"}
+              <div className="p-3 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))] overflow-visible">
+                <span className="block text-xs font-semibold mb-1.5 opacity-60">
+                  Priorité
                 </span>
+                <InlinePrioritySelect
+                  priority={isEditing ? editForm.priority : ticket.priority}
+                  canEdit={isEditing}
+                  isUpdating={false}
+                  onUpdate={(val) =>
+                    setEditForm((prev) => ({ ...prev, priority: val }))
+                  }
+                />
+              </div>
+              <div className="p-3 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))] overflow-visible">
+                <span className="block text-xs font-semibold mb-1.5 opacity-60">
+                  Catégorie
+                </span>
+                <InlineCategorySelect
+                  category={isEditing ? editForm.category : ticket.category}
+                  canEdit={isEditing}
+                  isUpdating={false}
+                  onUpdate={(val) =>
+                    setEditForm((prev) => ({ ...prev, category: val }))
+                  }
+                />
               </div>
             </div>
 
@@ -683,7 +1158,10 @@ export default function TicketDetailsModal({
                     style={{
                       width: `${(activeStep / (TIMELINE_STEPS.length - 1)) * 100}%`,
                       maxWidth: "calc(100% - 32px)",
-                      background: activeStep === TIMELINE_STEPS.length - 1 ? "#10b981" : "hsl(var(--primary))",
+                      background:
+                        activeStep === TIMELINE_STEPS.length - 1
+                          ? "#10b981"
+                          : "hsl(var(--primary))",
                     }}
                   />
 
@@ -693,7 +1171,11 @@ export default function TicketDetailsModal({
                     const isResolved = activeStep === TIMELINE_STEPS.length - 1;
 
                     return (
-                      <div key={step.key} className="flex flex-col items-center relative z-10" style={{ flex: 1 }}>
+                      <div
+                        key={step.key}
+                        className="flex flex-col items-center relative z-10"
+                        style={{ flex: 1 }}
+                      >
                         {/* Dot */}
                         <div
                           className={`w-[26px] h-[26px] rounded-full flex items-center justify-center border-2 transition-all duration-500 ${
@@ -717,13 +1199,17 @@ export default function TicketDetailsModal({
                           )}
                         </div>
                         {/* Label */}
-                        <span className={`text-[0.65rem] font-semibold mt-2 text-center leading-tight ${
-                          isActive
-                            ? isResolved ? "text-emerald-500" : "text-[hsl(var(--primary))]"
-                            : isPast
-                              ? "text-[hsl(var(--foreground))]"
-                              : "text-[hsl(var(--muted-foreground)/0.5)]"
-                        }`}>
+                        <span
+                          className={`text-[0.65rem] font-semibold mt-2 text-center leading-tight ${
+                            isActive
+                              ? isResolved
+                                ? "text-emerald-500"
+                                : "text-[hsl(var(--primary))]"
+                              : isPast
+                                ? "text-[hsl(var(--foreground))]"
+                                : "text-[hsl(var(--muted-foreground)/0.5)]"
+                          }`}
+                        >
                           {step.label}
                         </span>
                       </div>
@@ -737,7 +1223,9 @@ export default function TicketDetailsModal({
                 <div className="p-4 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))] space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg border ${slaInfo.bgClass}`}>
+                      <span
+                        className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg border ${slaInfo.bgClass}`}
+                      >
                         {slaInfo.icon}
                         SLA : {slaInfo.label}
                       </span>
@@ -753,11 +1241,12 @@ export default function TicketDetailsModal({
                       className="absolute inset-y-0 left-0 rounded-full transition-all duration-1000 ease-out"
                       style={{
                         width: `${slaProgress}%`,
-                        background: slaProgress < 60
-                          ? "#10b981"
-                          : slaProgress < 85
-                            ? "#f59e0b"
-                            : "#ef4444",
+                        background:
+                          slaProgress < 60
+                            ? "#10b981"
+                            : slaProgress < 85
+                              ? "#f59e0b"
+                              : "#ef4444",
                       }}
                     />
                   </div>
@@ -773,11 +1262,18 @@ export default function TicketDetailsModal({
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-3 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))] flex items-start gap-3">
                   <div className="w-8 h-8 rounded-lg bg-[hsl(var(--primary)/0.1)] flex items-center justify-center flex-shrink-0">
-                    <CalendarDays size={14} className="text-[hsl(var(--primary))]" />
+                    <CalendarDays
+                      size={14}
+                      className="text-[hsl(var(--primary))]"
+                    />
                   </div>
                   <div>
-                    <span className="block text-[0.65rem] font-semibold opacity-50 uppercase tracking-wide">Créé le</span>
-                    <span className="text-xs font-semibold">{formatFullDate(ticket.create_date)}</span>
+                    <span className="block text-[0.65rem] font-semibold opacity-50 uppercase tracking-wide">
+                      Créé le
+                    </span>
+                    <span className="text-xs font-semibold">
+                      {formatFullDate(ticket.create_date)}
+                    </span>
                   </div>
                 </div>
                 <div className="p-3 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))] flex items-start gap-3">
@@ -785,8 +1281,12 @@ export default function TicketDetailsModal({
                     <RefreshCw size={14} className="text-amber-500" />
                   </div>
                   <div>
-                    <span className="block text-[0.65rem] font-semibold opacity-50 uppercase tracking-wide">Mis à jour</span>
-                    <span className="text-xs font-semibold">{formatFullDate(ticket.write_date)}</span>
+                    <span className="block text-[0.65rem] font-semibold opacity-50 uppercase tracking-wide">
+                      Mis à jour
+                    </span>
+                    <span className="text-xs font-semibold">
+                      {formatFullDate(ticket.write_date)}
+                    </span>
                   </div>
                 </div>
                 <div className="p-3 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))] flex items-start gap-3">
@@ -794,42 +1294,56 @@ export default function TicketDetailsModal({
                     <User size={14} className="text-indigo-500" />
                   </div>
                   <div>
-                    <span className="block text-[0.65rem] font-semibold opacity-50 uppercase tracking-wide">Agent assigné</span>
-                    {isEditing && (user?.x_support_role === "admin" || user?.x_support_role === "tech") ? (
-                      <select
+                    <span className="block text-[0.65rem] font-semibold opacity-50 uppercase tracking-wide">
+                      Agent assigné
+                    </span>
+                    {isEditing &&
+                    (user?.x_support_role === "admin" ||
+                      user?.x_support_role === "tech") ? (
+                      <InlineAgentSelect
                         value={editForm.assigned_to}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, assigned_to: e.target.value }))}
-                        disabled={isAnalyzing}
-                        className="input-field focus-ring disabled:opacity-50 text-xs w-full mt-1 px-2 py-1"
-                      >
-                        <option value="">Non assigné</option>
-                        {agents
-                          .filter(agent => {
-                             // Si le ticket n'a pas de catégorie, on montre tout le monde
-                             if (!ticket.category || ticket.category.toLowerCase() === "autre") return true;
-                             // Filter: match if ANY of the agent's domains matches the ticket category
-                             if (agent.it_domains && agent.it_domains.length > 0) {
-                               return agent.it_domains.some(d => d.toLowerCase() === ticket.category.toLowerCase());
-                             }
-                             return false;
-                          })
-                          .map(agent => (
-                          <option key={agent.id} value={agent.id}>{agent.name}</option>
-                        ))}
-                      </select>
+                        agents={agents.filter((agent) => {
+                          if (
+                            !ticket.category ||
+                            ticket.category.toLowerCase() === "autre"
+                          )
+                            return true;
+                          if (agent.it_domains && agent.it_domains.length > 0) {
+                            return agent.it_domains.some(
+                              (d) =>
+                                d.toLowerCase() ===
+                                ticket.category.toLowerCase(),
+                            );
+                          }
+                          return false;
+                        })}
+                        isUpdating={isAnalyzing}
+                        onUpdate={(val) =>
+                          setEditForm((prev) => ({ ...prev, assigned_to: val }))
+                        }
+                      />
                     ) : (
-                      <span className="text-xs font-semibold block mt-0.5">{ticket.assigned_to || "Non assigné"}</span>
+                      <span className="text-xs font-semibold block mt-0.5">
+                        {ticket.assigned_to || "Non assigné"}
+                      </span>
                     )}
                   </div>
                 </div>
                 {ticket.sla_deadline && (
                   <div className="p-3 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))] flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${slaInfo.color}15` }}>
+                    <div
+                      className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                      style={{ background: `${slaInfo.color}15` }}
+                    >
                       <Clock size={14} style={{ color: slaInfo.color }} />
                     </div>
                     <div>
-                      <span className="block text-[0.65rem] font-semibold opacity-50 uppercase tracking-wide">Deadline SLA</span>
-                      <span className="text-xs font-semibold">{formatFullDate(ticket.sla_deadline)}</span>
+                      <span className="block text-[0.65rem] font-semibold opacity-50 uppercase tracking-wide">
+                        Deadline SLA
+                      </span>
+                      <span className="text-xs font-semibold">
+                        {formatFullDate(ticket.sla_deadline)}
+                      </span>
                     </div>
                   </div>
                 )}
@@ -841,7 +1355,6 @@ export default function TicketDetailsModal({
                 Comportement conditionnel selon isEditing
             ══════════════════════════════════════ */}
             <div className="space-y-3">
-
               {/* En-tête section */}
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))] flex items-center gap-2">
@@ -870,9 +1383,10 @@ export default function TicketDetailsModal({
                   onClick={() => !isUploading && fileInputRef.current?.click()}
                   className={`
                     border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all duration-200 animate-fade-in
-                    ${isDragging
-                      ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.08)] scale-[1.01]"
-                      : "border-[hsl(var(--border))] hover:border-[hsl(var(--primary)/0.4)] hover:bg-[hsl(var(--muted)/0.3)]"
+                    ${
+                      isDragging
+                        ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.08)] scale-[1.01]"
+                        : "border-[hsl(var(--border))] hover:border-[hsl(var(--primary)/0.4)] hover:bg-[hsl(var(--muted)/0.3)]"
                     }
                     ${isUploading ? "pointer-events-none opacity-60" : ""}
                   `}
@@ -883,16 +1397,33 @@ export default function TicketDetailsModal({
                     multiple
                     className="hidden"
                     accept={ALLOWED_TYPES.join(",")}
-                    onChange={(e) => e.target.files && uploadFiles(e.target.files)}
+                    onChange={(e) =>
+                      e.target.files && uploadFiles(e.target.files)
+                    }
                   />
                   <div className="flex items-center justify-center gap-3">
-                    {isUploading
-                      ? <Loader2 size={20} className="text-[hsl(var(--primary))] animate-spin" />
-                      : <Upload size={18} className={isDragging ? "text-[hsl(var(--primary))]" : "text-[hsl(var(--muted-foreground))]"} />
-                    }
+                    {isUploading ? (
+                      <Loader2
+                        size={20}
+                        className="text-[hsl(var(--primary))] animate-spin"
+                      />
+                    ) : (
+                      <Upload
+                        size={18}
+                        className={
+                          isDragging
+                            ? "text-[hsl(var(--primary))]"
+                            : "text-[hsl(var(--muted-foreground))]"
+                        }
+                      />
+                    )}
                     <div className="text-left">
                       <p className="text-sm font-semibold">
-                        {isUploading ? "Upload en cours..." : isDragging ? "Déposez ici" : "Ajouter des fichiers"}
+                        {isUploading
+                          ? "Upload en cours..."
+                          : isDragging
+                            ? "Déposez ici"
+                            : "Ajouter des fichiers"}
                       </p>
                       <p className="text-xs text-[hsl(var(--muted-foreground))]">
                         Images, PDF, Word, Excel, TXT, ZIP — max 10 Mo
@@ -917,14 +1448,16 @@ export default function TicketDetailsModal({
               {/* ── LISTE DES FICHIERS — toujours visible ── */}
               {attachLoading ? (
                 <div className="flex items-center justify-center py-6">
-                  <Loader2 size={20} className="text-[hsl(var(--muted-foreground))] animate-spin" />
+                  <Loader2
+                    size={20}
+                    className="text-[hsl(var(--muted-foreground))] animate-spin"
+                  />
                 </div>
               ) : attachments.length === 0 ? (
                 <div className="text-center py-5 text-[hsl(var(--muted-foreground))] text-xs border border-dashed border-[hsl(var(--border))] rounded-xl">
                   {isEditing
                     ? "Utilisez la zone ci-dessus pour ajouter des fichiers."
-                    : "Aucune pièce jointe pour ce ticket."
-                  }
+                    : "Aucune pièce jointe pour ce ticket."}
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -933,9 +1466,10 @@ export default function TicketDetailsModal({
                       key={att.id}
                       className={`
                         flex items-center gap-3 p-3 rounded-xl border transition-colors
-                        ${isEditing
-                          ? "border-[hsl(var(--primary)/0.15)] bg-[hsl(var(--primary)/0.03)] hover:border-[hsl(var(--primary)/0.3)]"
-                          : "border-[hsl(var(--border))] bg-[hsl(var(--card))] hover:bg-[hsl(var(--muted)/0.2)]"
+                        ${
+                          isEditing
+                            ? "border-[hsl(var(--primary)/0.15)] bg-[hsl(var(--primary)/0.03)] hover:border-[hsl(var(--primary)/0.3)]"
+                            : "border-[hsl(var(--border))] bg-[hsl(var(--card))] hover:bg-[hsl(var(--muted)/0.2)]"
                         }
                       `}
                     >
@@ -946,7 +1480,10 @@ export default function TicketDetailsModal({
                             src={`${FLASK_BASE}${att.url}`}
                             alt={att.name}
                             className="w-full h-full object-cover"
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display =
+                                "none";
+                            }}
                           />
                         ) : (
                           getFileIcon(att.mimetype, 18)
@@ -955,10 +1492,13 @@ export default function TicketDetailsModal({
 
                       {/* Infos */}
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold truncate">{att.name}</p>
+                        <p className="text-sm font-semibold truncate">
+                          {att.name}
+                        </p>
                         <p className="text-xs text-[hsl(var(--muted-foreground))]">
                           {formatBytes(att.file_size)}
-                          {att.create_date && ` · ${formatDate(att.create_date)}`}
+                          {att.create_date &&
+                            ` · ${formatDate(att.create_date)}`}
                         </p>
                       </div>
 
@@ -984,10 +1524,11 @@ export default function TicketDetailsModal({
                             className="w-7 h-7 rounded-md flex items-center justify-center text-[hsl(var(--muted-foreground))] hover:text-red-500 hover:bg-red-500/10 disabled:opacity-40 transition-colors animate-fade-in"
                             title="Supprimer ce fichier"
                           >
-                            {deletingId === att.id
-                              ? <Loader2 size={13} className="animate-spin" />
-                              : <Trash2 size={13} />
-                            }
+                            {deletingId === att.id ? (
+                              <Loader2 size={13} className="animate-spin" />
+                            ) : (
+                              <Trash2 size={13} />
+                            )}
                           </button>
                         )}
                       </div>
@@ -1000,10 +1541,14 @@ export default function TicketDetailsModal({
             {/* ── Info IA en mode édition ── */}
             {isEditing && (
               <div className="flex items-start gap-2.5 p-3 rounded-xl bg-[hsl(var(--primary)/0.05)] border border-[hsl(var(--primary)/0.1)] animate-fade-in">
-                <Sparkles size={14} className="text-[hsl(var(--primary))] flex-shrink-0 mt-0.5" />
+                <Sparkles
+                  size={14}
+                  className="text-[hsl(var(--primary))] flex-shrink-0 mt-0.5"
+                />
                 <p className="text-xs text-[hsl(var(--primary))] leading-relaxed">
-                  À l&apos;enregistrement, la <strong>catégorie</strong> et la <strong>priorité</strong> seront
-                  automatiquement réévaluées par l&apos;IA selon la nouvelle description.
+                  À l&apos;enregistrement, la <strong>catégorie</strong> et la{" "}
+                  <strong>priorité</strong> seront automatiquement réévaluées
+                  par l&apos;IA selon la nouvelle description.
                 </p>
               </div>
             )}
@@ -1022,17 +1567,34 @@ export default function TicketDetailsModal({
                 </button>
                 <button
                   type="submit"
-                  disabled={isAnalyzing}
-                  className="btn-primary disabled:opacity-50 min-w-[150px]"
+                  disabled={isAnalyzing || !hasChanges}
+                  className={`min-w-[150px] flex items-center justify-center gap-2 h-10 px-5 rounded-xl text-sm font-bold transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed
+                    ${
+                      saveSuccess
+                        ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 scale-105"
+                        : hasChanges
+                          ? "bg-[hsl(var(--primary))] text-white hover:bg-[hsl(var(--primary)/0.85)] shadow-md shadow-[hsl(var(--primary)/0.2)]"
+                          : "bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]"
+                    }`}
                 >
-                  {isAnalyzing
-                    ? <><Loader2 size={15} className="animate-spin" /> Analyse IA...</>
-                    : <><Save size={15} /> Enregistrer</>
-                  }
+                  {isAnalyzing ? (
+                    <>
+                      <Loader2 size={15} className="animate-spin" />{" "}
+                      Sauvegarde...
+                    </>
+                  ) : saveSuccess ? (
+                    <>
+                      <CheckCircle2 size={15} className="animate-bounce-in" />{" "}
+                      Enregistré !
+                    </>
+                  ) : (
+                    <>
+                      <Save size={15} /> Enregistrer
+                    </>
+                  )}
                 </button>
               </div>
             )}
-
           </form>
 
           {/* ══════════════════════════════════════
@@ -1050,7 +1612,10 @@ export default function TicketDetailsModal({
 
             {commentsLoading ? (
               <div className="flex justify-center py-4">
-                <Loader2 size={20} className="text-[hsl(var(--muted-foreground))] animate-spin" />
+                <Loader2
+                  size={20}
+                  className="text-[hsl(var(--muted-foreground))] animate-spin"
+                />
               </div>
             ) : comments.length === 0 ? (
               <div className="text-center py-5 text-[hsl(var(--muted-foreground))] text-xs rounded-xl bg-[hsl(var(--muted)/0.2)] border border-[hsl(var(--border)/0.5)]">
@@ -1061,13 +1626,17 @@ export default function TicketDetailsModal({
                 {comments.map((c) => (
                   <div key={c.id} className="flex gap-3">
                     <div className="w-8 h-8 rounded-full bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))] flex items-center justify-center font-bold text-xs flex-shrink-0 uppercase">
-                      {c.author_name ? c.author_name.substring(0, 2).toUpperCase() : '??'}
+                      {c.author_name
+                        ? c.author_name.substring(0, 2).toUpperCase()
+                        : "??"}
                     </div>
                     <div className="flex-1 bg-[hsl(var(--card))] border border-[hsl(var(--border)/0.5)] rounded-xl rounded-tl-none p-4 shadow-sm">
                       <div className="flex items-center justify-between mb-1.5">
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-sm tracking-tight">{c.author_name}</span>
-                          {c.x_support_role === 'admin' ? (
+                          <span className="font-bold text-sm tracking-tight">
+                            {c.author_name}
+                          </span>
+                          {c.x_support_role === "admin" ? (
                             <span className="px-1.5 py-0.5 rounded-md text-[0.6rem] font-bold uppercase tracking-wide bg-red-500/10 text-red-500 border border-red-500/20">
                               Administrateur
                             </span>
@@ -1078,12 +1647,17 @@ export default function TicketDetailsModal({
                           )}
                         </div>
                         <span className="text-[0.65rem] text-[hsl(var(--muted-foreground))] font-medium bg-[hsl(var(--muted)/0.3)] px-1.5 py-0.5 rounded-md">
-                          {c.date ? new Date(c.date).toLocaleString('fr-FR', {
-                            day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
-                          }) : ''}
+                          {c.date
+                            ? new Date(c.date).toLocaleString("fr-FR", {
+                                day: "2-digit",
+                                month: "short",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : ""}
                         </span>
                       </div>
-                      <div 
+                      <div
                         className="text-sm text-[hsl(var(--foreground))] whitespace-pre-wrap leading-relaxed opacity-90 prose prose-sm max-w-none prose-p:my-1 prose-a:text-[hsl(var(--primary))]"
                         dangerouslySetInnerHTML={{ __html: c.body }}
                       />
@@ -1095,7 +1669,10 @@ export default function TicketDetailsModal({
 
             {/* Zone d'ajout de commentaire */}
             {!isEditing && (
-              <form onSubmit={handlePostComment} className="flex gap-3 mt-5 items-start">
+              <form
+                onSubmit={handlePostComment}
+                className="flex gap-3 mt-5 items-start"
+              >
                 <div className="flex-1">
                   <textarea
                     required
@@ -1112,7 +1689,11 @@ export default function TicketDetailsModal({
                   disabled={postingComment || !newComment.trim()}
                   className="btn-primary h-[60px] px-5 flex-shrink-0 disabled:opacity-50 flex items-center justify-center rounded-xl font-bold shadow-sm"
                 >
-                  {postingComment ? <Loader2 size={16} className="animate-spin" /> : "Envoyer"}
+                  {postingComment ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    "Envoyer"
+                  )}
                 </button>
               </form>
             )}

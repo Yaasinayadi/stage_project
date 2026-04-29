@@ -118,7 +118,7 @@ function Dashboard() {
         setCategories(["Logiciel", "Matériel", "Accès", "Réseau", "Messagerie", "Sécurité", "Infrastructure", "Autre"]);
       }
     }).catch((e) => {
-      console.error(e);
+      console.warn("Categories fetch failed, using fallback:", e.message);
       setCategories(["Logiciel", "Matériel", "Accès", "Réseau", "Messagerie", "Sécurité", "Infrastructure", "Autre"]);
     });
     

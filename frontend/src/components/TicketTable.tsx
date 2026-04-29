@@ -117,7 +117,6 @@ export default function TicketTable({
           ticket={selectedTicket as any}
           onClose={() => setSelectedTicket(null)}
           onRefresh={onRefresh}
-          categories={categories}
         />
       )}
     </>

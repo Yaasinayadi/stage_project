@@ -862,9 +862,9 @@ function QueuePage() {
                       {PRIORITY_MAP[techTicket.priority]?.label ||
                         techTicket.priority}
                     </span>
-                    {techTicket.ai_classification && (
+                    {techTicket.category && (
                       <span className="inline-flex items-center gap-1.5 text-[11px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2.5 py-1 rounded-lg font-bold">
-                        <Tag size={12} /> {techTicket.ai_classification}
+                        <Tag size={12} /> {techTicket.category}
                       </span>
                     )}
                   </div>
