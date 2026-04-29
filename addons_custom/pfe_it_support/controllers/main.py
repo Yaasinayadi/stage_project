@@ -1081,8 +1081,13 @@ class SupportTicketController(http.Controller):
             resolved_tickets = env.search(domain + [('state', 'in', ('resolved', 'closed'))])
             total_duration_hours = 0
             sla_ok_count = 0
+            tech_resolved_t_count = 0
             
             for rt in resolved_tickets:
+                if not rt.assigned_to_id or rt.assigned_to_id.x_support_role not in ['tech', 'agent']:
+                    continue
+                    
+                tech_resolved_t_count += 1
                 # Utilise write_date par defaut car date_done n'est pas encore dans la BDD
                 final_date = getattr(rt, 'date_done', rt.write_date) if hasattr(rt, 'date_done') else rt.write_date
                 if rt.create_date and final_date:
@@ -1093,13 +1098,12 @@ class SupportTicketController(http.Controller):
             
             mttr = 0
             sla_compliance = 0
-            resolved_t_count = len(resolved_tickets)
             
-            if resolved_t_count > 0:
-                mttr = round(total_duration_hours / resolved_t_count, 1)
-                sla_compliance = round((sla_ok_count / resolved_t_count) * 100, 1)
+            if tech_resolved_t_count > 0:
+                mttr = round(total_duration_hours / tech_resolved_t_count, 1)
+                sla_compliance = round((sla_ok_count / tech_resolved_t_count) * 100, 1)
             else:
-                sla_compliance = 0 # Par défaut si aucun ticket résolu
+                sla_compliance = 0 # Par défaut si aucun ticket résolu par technicien
             
             data = {
                 'counters': {
@@ -1120,6 +1124,77 @@ class SupportTicketController(http.Controller):
         except Exception as e:
             import traceback
             _logger.error("Error in admin stats: %s", traceback.format_exc())
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
+
+    @http.route('/api/admin/technicians/performance', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
+    def tech_performance(self, **kw):
+        """Récupère la performance détaillée SLA par technicien pour le drill-down."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+            
+        try:
+            period = kw.get('period', 'all')
+            domain = []
+            now = datetime.utcnow()
+            
+            if period == 'today':
+                domain.append(('create_date', '>=', now - timedelta(days=1)))
+            elif period == 'week':
+                domain.append(('create_date', '>=', now - timedelta(days=7)))
+            elif period == 'month':
+                domain.append(('create_date', '>=', now - timedelta(days=30)))
+
+            # Agents have role 'tech'
+            techs = request.env['res.users'].sudo().search([
+                ('x_support_role', '=', 'tech'),
+                ('active', '=', True)
+            ])
+            
+            data = []
+            env = request.env['support.ticket'].sudo()
+            
+            for tech in techs:
+                # Calculer les stats de résolution pour ce technicien
+                # On ne filtre PAS par période ici pour le volume total si on veut la perf globale, 
+                # ou on applique le domaine temporel si on veut la perf sur la période.
+                # L'énoncé dit "Cohérence avec le dashboard global", donc on applique le domaine.
+                tech_domain = domain + [('assigned_to_id', '=', tech.id), ('state', 'in', ('resolved', 'closed'))]
+                resolved_tickets = env.search(tech_domain)
+                
+                total_duration_hours = 0
+                sla_ok_count = 0
+                count = len(resolved_tickets)
+                
+                for rt in resolved_tickets:
+                    # Sécurité : date_done est le champ officiel de fin de SLA
+                    final_date = getattr(rt, 'date_done', rt.write_date) if hasattr(rt, 'date_done') and rt.date_done else rt.write_date
+                    if rt.create_date and final_date:
+                        diff = final_date - rt.create_date
+                        total_duration_hours += diff.total_seconds() / 3600.0
+                    
+                    # Le statut SLA est déjà calculé par Odoo
+                    if rt.sla_status == 'on_track':
+                        sla_ok_count += 1
+                        
+                mttr = round(total_duration_hours / count, 1) if count > 0 else 0
+                sla_score = round((sla_ok_count / count) * 100, 1) if count > 0 else 0
+                
+                avatar_url = f"/web/image/res.users/{tech.id}/avatar_128"
+                
+                data.append({
+                    'id': tech.id,
+                    'name': tech.name,
+                    'avatar_url': avatar_url,
+                    'volume': count,
+                    'sla_score': sla_score,
+                    'mttr': mttr,
+                })
+                
+            # Tri par score SLA décroissant, puis par volume
+            data.sort(key=lambda x: (x['sla_score'], x['volume']), reverse=True)
+            
+            return self._json_response({'status': 200, 'data': data})
+        except Exception as e:
             return self._json_response({'status': 500, 'message': str(e)}, 500)
 
     @http.route('/api/tech/stats', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)

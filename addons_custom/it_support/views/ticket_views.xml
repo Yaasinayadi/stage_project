@@ -81,5 +81,5 @@
         <field name="view_mode">list,form,kanban</field>
     </record>
 
-    <menuitem id="menu_it_tickets" name="Tickets (V1)" parent="pfe_it_support.menu_root" action="action_tickets"/>
+    <!-- <menuitem id="menu_it_tickets" name="Tickets (V1)" parent="pfe_it_support.menu_root" action="action_tickets"/> -->
 </odoo>

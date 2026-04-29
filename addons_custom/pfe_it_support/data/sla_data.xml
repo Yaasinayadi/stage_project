@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="sla_basse" model="support.sla">
+        <field name="name">SLA Priorité Basse</field>
+        <field name="priority">0</field>
+        <field name="max_hours">48.0</field>
+    </record>
+
+    <record id="sla_moyenne" model="support.sla">
+        <field name="name">SLA Priorité Moyenne</field>
+        <field name="priority">1</field>
+        <field name="max_hours">24.0</field>
+    </record>
+
+    <record id="sla_haute" model="support.sla">
+        <field name="name">SLA Priorité Haute</field>
+        <field name="priority">2</field>
+        <field name="max_hours">8.0</field>
+    </record>
+
+    <record id="sla_critique" model="support.sla">
+        <field name="name">SLA Priorité Critique</field>
+        <field name="priority">3</field>
+        <field name="max_hours">2.0</field>
+    </record>
+</odoo>

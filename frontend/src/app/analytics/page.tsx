@@ -5,6 +5,7 @@ import axios from "axios";
 import { Ticket, Clock, CheckCircle2, AlertTriangle, BarChart3, Calendar, Shield, Activity, Target, TrendingUp } from "lucide-react";
 import StatsCard from "@/components/StatsCard";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import SlaPerformanceModal from "@/components/SlaPerformanceModal";
 import { useAuth } from "@/lib/auth";
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -20,6 +21,7 @@ function AnalyticsDashboard() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState("all");
+  const [isSlaModalOpen, setIsSlaModalOpen] = useState(false);
   const [data, setData] = useState({
     counters: { total: 0, overdue: 0, at_risk: 0, in_progress: 0, resolved: 0 },
     categories: [],
@@ -119,7 +121,16 @@ function AnalyticsDashboard() {
         <StatsCard title="Total Tickets" value={data.counters.total} icon={<Ticket size={20} />} color="#6366f1" loading={loading} delay={0} />
         <StatsCard title="En Traitement" value={(data.counters.overdue || 0) + (data.counters.at_risk || 0) + (data.counters.in_progress || 0)} icon={<Activity size={20} />} color="#f59e0b" loading={loading} delay={80} />
         <StatsCard title="MTTR (Heures)" value={data.kpis.mttr_hours || 0} icon={<Clock size={20} />} color="#ff6d5a" loading={loading} delay={160} />
-        <StatsCard title="SLA Respecté" value={`${data.kpis.sla_compliance || 0}%`} icon={<Shield size={20} />} color="#10b981" loading={loading} delay={240} />
+        <StatsCard 
+          title="SLA Respecté" 
+          value={`${data.kpis.sla_compliance || 0}%`} 
+          icon={<Shield size={20} />} 
+          color="#10b981" 
+          loading={loading} 
+          delay={240} 
+          onClick={!isTechUser ? () => setIsSlaModalOpen(true) : undefined}
+          tooltip={!isTechUser ? "Ce taux représente le pourcentage de tickets résolus avant la deadline par l'équipe technique uniquement (Calcul : Tickets dans les temps / Total tickets résolus)." : undefined}
+        />
       </div>
 
       {/* CHARTS ROW 1 */}
@@ -222,6 +233,12 @@ function AnalyticsDashboard() {
           </div>
         </div>
       </div>
+
+      <SlaPerformanceModal 
+        isOpen={isSlaModalOpen} 
+        onClose={() => setIsSlaModalOpen(false)} 
+        period={period} 
+      />
     </div>
   );
 }
