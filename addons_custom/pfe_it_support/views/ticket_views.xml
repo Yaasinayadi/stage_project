@@ -37,9 +37,9 @@
                     <group>
                         <group>
                             <field name="user_id"/>
-                            <field name="ai_classification"/>
+                            <field name="ai_classification" widget="selection"/>
                             <field name="assigned_to_id"
-                                domain="[('x_support_role', '=', 'tech'), ('it_domain_ids.name', '=', ai_classification)]"
+                                domain="[('x_support_role', '=', 'tech'), ('it_domain_ids', '=', ai_classification)]"
                                 options="{'no_create': True, 'no_quick_create': True}"/>
                             <field name="priority"/>
                         </group>

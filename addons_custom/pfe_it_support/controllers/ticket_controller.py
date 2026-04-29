@@ -48,12 +48,12 @@ class TicketController(http.Controller):
 
             domain = [('state', 'not in', ['resolved', 'closed'])]
             if not is_admin:
-                expertise_list = calling_user.it_domain_ids.mapped('name') if hasattr(calling_user, 'it_domain_ids') else []
-                _logger.info(f"QUEUE DEBUG: expertise={expertise_list}")
+                expertise_ids = calling_user.it_domain_ids.ids if hasattr(calling_user, 'it_domain_ids') else []
+                _logger.info(f"QUEUE DEBUG: expertise={expertise_ids}")
                 domain = [
                     '|',
                     '&', ('assigned_to_id', '=', calling_user.id), ('x_accepted', '=', False),
-                    '&', ('assigned_to_id', '=', False), ('ai_classification', 'in', expertise_list)
+                    '&', ('assigned_to_id', '=', False), ('ai_classification', 'in', expertise_ids)
                 ] + domain
                 # Hide tickets escalated by this tech
                 domain = ['|', ('escalated_by_id', '=', False), ('escalated_by_id', '!=', calling_user.id)] + domain
@@ -81,7 +81,7 @@ class TicketController(http.Controller):
                     'sla_deadline': str(t.sla_deadline) if t.sla_deadline else None,
                     'sla_status': t.sla_status or None,
                     'user_id': t.user_id.name if t.user_id else None,
-                    'ai_classification': t.ai_classification or None,
+                    'category': t.ai_classification.name if t.ai_classification else None,
                 })
             
             priorities_list = sorted(list(priority_counts.values()), key=lambda x: str(x['id']), reverse=True)
@@ -326,8 +326,10 @@ class TicketController(http.Controller):
                 
             if resp.status_code == 200:
                 ai_data = resp.json()
+                ai_cat_name = ai_data.get('category')
+                domain_rec = request.env['pfe.it.domain'].sudo().search([('name', '=ilike', ai_cat_name)], limit=1)
                 ticket.write({
-                    'ai_classification': ai_data.get('category'),
+                    'ai_classification': domain_rec.id if domain_rec else False,
                     'ai_confidence': ai_data.get('confidence'),
                     'ai_suggested_solution': ai_data.get('suggested_solution')
                 })
@@ -368,7 +370,7 @@ class TicketController(http.Controller):
                 request.env['support.knowledge'].sudo().create({
                     'name': ticket.name,
                     'solution': resolution_text,
-                    'category': ticket.ai_classification or 'Support',
+                    'category': ticket.ai_classification.name if ticket.ai_classification else 'Support',
                     'ticket_id': ticket.id
                 })
                 

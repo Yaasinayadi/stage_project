@@ -67,7 +67,7 @@ type QueueTicket = {
   state: string;
   x_accepted: boolean;
   assigned_to_id: number | null;
-  ai_classification?: string | null;
+  category?: string | null;
   create_date: string | null;
   sla_deadline: string | null;
   sla_status?: string | null;
@@ -190,7 +190,7 @@ function QueuePage() {
     setLoadingAgents(true);
     try {
       const res = await axios.get(`${ODOO_URL}/api/agents/suggest`, {
-        params: { category: ticket.ai_classification || "", ticket_id: ticket.id },
+        params: { category: ticket.category || "", ticket_id: ticket.id },
         withCredentials: true,
       });
       if (res.data.status === "success") setAgents(res.data.data);
@@ -486,10 +486,10 @@ function QueuePage() {
                         </div>
                       )}
                       <div className="flex items-center">
-                        {ticket.ai_classification && (
+                        {ticket.category && (
                           <span className="inline-flex items-center bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2 py-0.5 rounded text-[10px] font-bold uppercase mr-2 tracking-wider">
                             <Tag size={10} className="mr-1" />
-                            {ticket.ai_classification}
+                            {ticket.category}
                           </span>
                         )}
                         <Tag className="w-3.5 h-3.5 mr-1" />
@@ -610,9 +610,9 @@ function QueuePage() {
                       Classification
                     </p>
                     <div className="flex items-center gap-2 flex-wrap">
-                      {dispatchTicket.ai_classification && (
+                      {dispatchTicket.category && (
                         <span className="inline-flex items-center gap-1 text-[11px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2.5 py-0.5 rounded-full">
-                          <Tag size={10} /> {dispatchTicket.ai_classification}
+                          <Tag size={10} /> {dispatchTicket.category}
                         </span>
                       )}
                       {(() => {

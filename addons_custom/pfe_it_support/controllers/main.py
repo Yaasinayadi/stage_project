@@ -56,6 +56,12 @@ class SupportTicketController(http.Controller):
 
             # Générer un token simple
             token = secrets.token_hex(32)
+            
+            # Nombre de tickets résolus
+            resolved_tickets = request.env['support.ticket'].sudo().search_count([
+                ('assigned_to_id', '=', user.id),
+                ('state', '=', 'resolved')
+            ])
 
             return self._json_response({
                 'status': 200,
@@ -63,7 +69,10 @@ class SupportTicketController(http.Controller):
                     'id': user.id,
                     'name': user.name,
                     'email': user.email or user.login,
+                    'phone': user.phone or '',
                     'x_support_role': x_support_role,
+                    'it_domains': [d.name for d in user.it_domain_ids],
+                    'resolved_tickets': resolved_tickets,
                     'token': token,
                 }
             })
@@ -142,6 +151,12 @@ class SupportTicketController(http.Controller):
                 return self._json_response({'status': 404, 'message': 'Utilisateur non trouvé.'}, 404)
 
             x_support_role = user.x_support_role or 'user'
+            
+            # Nombre de tickets résolus
+            resolved_tickets = request.env['support.ticket'].sudo().search_count([
+                ('assigned_to_id', '=', user.id),
+                ('state', '=', 'resolved')
+            ])
 
             return self._json_response({
                 'status': 200,
@@ -149,10 +164,87 @@ class SupportTicketController(http.Controller):
                     'id': user.id,
                     'name': user.name,
                     'email': user.email or user.login,
+                    'phone': user.phone or '',
                     'x_support_role': x_support_role,
+                    'it_domains': [d.name for d in user.it_domain_ids],
+                    'resolved_tickets': resolved_tickets,
                 }
             })
 
+        except Exception as e:
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
+
+    @http.route('/api/auth/update_profile', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
+    def update_profile(self, **kw):
+        """Met à jour les informations du profil de l'utilisateur."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+        try:
+            post = json.loads(request.httprequest.data.decode('utf-8'))
+            user_id = post.get('user_id')
+            
+            if not user_id:
+                return self._json_response({'status': 400, 'message': 'user_id requis.'}, 400)
+                
+            user = request.env['res.users'].sudo().browse(int(user_id))
+            if not user.exists():
+                return self._json_response({'status': 404, 'message': 'Utilisateur non trouvé.'}, 404)
+                
+            vals = {}
+            if 'name' in post:
+                vals['name'] = post['name'].strip()
+            if 'phone' in post:
+                vals['phone'] = post['phone'].strip()
+                
+            if vals:
+                user.write(vals)
+                
+            return self._json_response({
+                'status': 200,
+                'message': 'Profil mis à jour avec succès.',
+                'data': {
+                    'name': user.name,
+                    'phone': user.phone or '',
+                }
+            })
+        except Exception as e:
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
+
+    @http.route('/api/auth/change_password', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
+    def change_password(self, **kw):
+        """Change le mot de passe de l'utilisateur."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+        try:
+            post = json.loads(request.httprequest.data.decode('utf-8'))
+            user_id = post.get('user_id')
+            old_password = post.get('old_password')
+            new_password = post.get('new_password')
+            
+            if not user_id or not old_password or not new_password:
+                return self._json_response({'status': 400, 'message': 'Paramètres manquants.'}, 400)
+                
+            user = request.env['res.users'].sudo().browse(int(user_id))
+            if not user.exists():
+                return self._json_response({'status': 404, 'message': 'Utilisateur non trouvé.'}, 404)
+                
+            # Vérifier l'ancien mot de passe
+            login = user.login or user.email
+            try:
+                credential = {'type': 'password', 'login': login, 'password': old_password}
+                uid = request.env['res.users'].sudo().authenticate(credential, {})
+                if not uid:
+                    raise Exception("Access Denied")
+            except Exception:
+                return self._json_response({'status': 401, 'message': 'Ancien mot de passe incorrect.'}, 401)
+                
+            if len(new_password) < 6:
+                return self._json_response({'status': 400, 'message': 'Le nouveau mot de passe doit contenir au moins 6 caractères.'}, 400)
+                
+            user.write({'password': new_password})
+            
+            return self._json_response({'status': 200, 'message': 'Mot de passe modifié avec succès.'})
+            
         except Exception as e:
             return self._json_response({'status': 500, 'message': str(e)}, 500)
 
@@ -192,7 +284,7 @@ class SupportTicketController(http.Controller):
             domain.append(('x_accepted', '=', True))
             
         if category:
-            domain.append(('ai_classification', '=', category))
+            domain.append(('ai_classification.name', '=ilike', category))
 
         tickets = env.search(domain, order='create_date desc')
         data = [{
@@ -201,7 +293,7 @@ class SupportTicketController(http.Controller):
             'description': t.description,
             'state': t.state,
             'priority': t.priority,
-            'category': t.ai_classification,
+            'category': t.ai_classification.name if t.ai_classification else None,
             'x_accepted': t.x_accepted,
             'user_id': t.user_id.id if t.user_id else None,
             'user_name': t.user_id.name if t.user_id else None,
@@ -244,9 +336,13 @@ class SupportTicketController(http.Controller):
             vals = {
                 'name': name,
                 'description': description,
-                'ai_classification': ai_category,
+                'ai_classification': False,
                 'priority': priority
             }
+            if ai_category:
+                domain_rec = request.env['pfe.it.domain'].sudo().search([('name', '=ilike', ai_category)], limit=1)
+                if domain_rec:
+                    vals['ai_classification'] = domain_rec.id
 
             # Associer le ticket à l'utilisateur connecté
             if user_id and str(user_id).isdigit():
@@ -304,7 +400,10 @@ class SupportTicketController(http.Controller):
         if 'name' in post: vals['name'] = post['name']
         if 'description' in post: vals['description'] = post['description']
         if 'priority' in post: vals['priority'] = post['priority']
-        if 'category' in post: vals['ai_classification'] = post['category']
+        if 'category' in post:
+            domain_name = post['category']
+            domain_rec = request.env['pfe.it.domain'].sudo().search([('name', '=ilike', domain_name)], limit=1)
+            vals['ai_classification'] = domain_rec.id if domain_rec else False
         if 'state' in post: vals['state'] = post['state']
         if 'assigned_to_id' in post:
             vals['assigned_to_id'] = int(post['assigned_to_id']) if post['assigned_to_id'] else False
@@ -353,8 +452,9 @@ class SupportTicketController(http.Controller):
                 try:
                     request.env['support.knowledge'].sudo().create({
                         'title': f"[Résolu] {ticket.name}",
-                        'content': resolution_note,
-                        'category': ticket.ai_classification or 'Général',
+                        'solution': resolution_note,
+                        'category': ticket.ai_classification.name if ticket.ai_classification else 'Général',
+                        'ticket_id': ticket.id
                     })
                 except Exception as kb_err:
                     _logger.warning("KB publish failed: %s", kb_err)
@@ -593,7 +693,7 @@ class SupportTicketController(http.Controller):
                     
                     # 1. Filtrage Strict par Catégorie
                     if ticket.ai_classification:
-                        domain.append(('category', '=ilike', ticket.ai_classification))
+                        domain.append(('category', '=ilike', ticket.ai_classification.name))
                         
                     # 2. Recherche Textuelle ciblée avec ilike sur le Titre (logique OU pour éviter les faux négatifs)
                     if keywords:
@@ -1030,10 +1130,11 @@ class SupportTicketController(http.Controller):
             cats_group = env.read_group(domain, ['ai_classification'], ['ai_classification'])
             cat_map = {}
             for cg in cats_group:
-                cat_name = cg.get('ai_classification')
+                cat_val = cg.get('ai_classification')
+                cat_name = cat_val[1] if cat_val else 'Non classé'
                 count = cg.get('ai_classification_count', cg.get('__count', 0))
                 
-                if not cat_name:
+                if cat_name == 'Non classé':
                     norm_name = "Non classé"
                 else:
                     import unicodedata
@@ -1234,10 +1335,11 @@ class SupportTicketController(http.Controller):
             cats_group = env.read_group(domain, ['ai_classification'], ['ai_classification'])
             cat_map = {}
             for cg in cats_group:
-                cat_name = cg.get('ai_classification')
+                cat_val = cg.get('ai_classification')
+                cat_name = cat_val[1] if cat_val else 'Non classé'
                 count = cg.get('ai_classification_count', cg.get('__count', 0))
                 
-                if not cat_name:
+                if cat_name == 'Non classé':
                     norm_name = "Non classé"
                 else:
                     import unicodedata

@@ -19,7 +19,10 @@ export type User = {
   id: number;
   name: string;
   email: string;
+  phone?: string;
   x_support_role: UserRole;
+  it_domains?: string[];
+  resolved_tickets?: number;
   token?: string;
 };
 
@@ -78,11 +81,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           token: local.token,
         };
         // Only update if something changed to avoid unnecessary re-renders
-        if (
-          merged.name !== local.name ||
-          merged.x_support_role !== local.x_support_role ||
-          merged.email !== local.email
-        ) {
+        // Using JSON.stringify for deep comparison of the new fields
+        if (JSON.stringify(merged) !== JSON.stringify(local)) {
           persistUser(merged);
         }
       }

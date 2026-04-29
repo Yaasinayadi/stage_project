@@ -147,7 +147,7 @@ export default function Sidebar() {
       <div className="px-3 py-3 border-t border-[hsl(var(--border)/0.5)] space-y-2 flex-shrink-0">
         {/* User Info */}
         {user && (
-          <div className={`flex items-center gap-3 px-2 py-2 ${collapsed ? "justify-center" : ""}`}>
+          <Link href="/profile" className={`flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-[hsl(var(--muted)/0.5)] transition-colors ${collapsed ? "justify-center" : ""}`}>
             <div
               className="w-8 h-8 rounded-lg accent-gradient flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
               title={user.name}
@@ -162,7 +162,7 @@ export default function Sidebar() {
                 </p>
               </div>
             )}
-          </div>
+          </Link>
         )}
 
         {/* Theme + Collapse row */}

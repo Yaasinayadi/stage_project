@@ -49,7 +49,7 @@ class SupportTicket(models.Model):
     date_done = fields.Datetime(string='Date de Résolution')
     
     # Le microservice IA remplira ces champs via l'API
-    ai_classification = fields.Char(string='Catégorie (par IA)')
+    ai_classification = fields.Many2one('pfe.it.domain', string='Catégorie (par IA)')
     ai_confidence = fields.Float(string='Confiance IA (%)')
     ai_suggested_solution = fields.Text(string='Solution Suggérée (IA)')
 

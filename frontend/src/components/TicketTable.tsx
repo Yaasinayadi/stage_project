@@ -1,7 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { getCategoryIcon, getCategoryColor, getPriorityBadge, getStatusInfo, formatTicketRef } from "./TicketCard";
+import {
+  getCategoryIcon,
+  getCategoryColor,
+  getPriorityBadge,
+  getStatusInfo,
+  formatTicketRef,
+} from "./TicketCard";
 import TicketDetailsModal from "./TicketDetailsModal";
 
 type Ticket = {
@@ -21,9 +27,14 @@ type Ticket = {
 type TicketTableProps = {
   tickets: Ticket[];
   onRefresh?: () => void;
+  categories?: string[];
 };
 
-export default function TicketTable({ tickets, onRefresh }: TicketTableProps) {
+export default function TicketTable({
+  tickets,
+  onRefresh,
+  categories,
+}: TicketTableProps) {
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
 
   return (
@@ -62,7 +73,9 @@ export default function TicketTable({ tickets, onRefresh }: TicketTableProps) {
                     {/* Ticket Info */}
                     <td>
                       <div>
-                        <p className="font-semibold text-sm leading-snug mb-0.5">{ticket.name}</p>
+                        <p className="font-semibold text-sm leading-snug mb-0.5">
+                          {ticket.name}
+                        </p>
                         <p className="text-xs text-[hsl(var(--muted-foreground))] line-clamp-1">
                           {ticket.description}
                         </p>
@@ -72,8 +85,12 @@ export default function TicketTable({ tickets, onRefresh }: TicketTableProps) {
                     {/* Category */}
                     <td>
                       <div className="flex items-center gap-2">
-                        <span style={{ color: catColor }}>{getCategoryIcon(ticket.category)}</span>
-                        <span className="text-sm">{ticket.category || "Non classé"}</span>
+                        <span style={{ color: catColor }}>
+                          {getCategoryIcon(ticket.category)}
+                        </span>
+                        <span className="text-sm">
+                          {ticket.category || "Non classé"}
+                        </span>
                       </div>
                     </td>
 
@@ -100,6 +117,7 @@ export default function TicketTable({ tickets, onRefresh }: TicketTableProps) {
           ticket={selectedTicket as any}
           onClose={() => setSelectedTicket(null)}
           onRefresh={onRefresh}
+          categories={categories}
         />
       )}
     </>

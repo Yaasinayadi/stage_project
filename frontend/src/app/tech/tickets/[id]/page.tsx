@@ -148,7 +148,7 @@ type Ticket = {
   user_email: string | null;
   assigned_to_id?: number | null;
   assigned_to?: string | null;
-  ai_classification?: string | null;
+  category?: string | null;
   ai_suggested_solution?: string | null;
   ai_confidence?: number | null;
   resolution?: string | null;
@@ -266,7 +266,7 @@ function TicketDetailPage() {
           // Pre-load AI suggestion from stored data if any
           if (found.ai_suggested_solution) {
             setAiSuggestion({
-              category: found.ai_classification ?? undefined,
+              category: found.category ?? undefined,
               confidence: found.ai_confidence ?? undefined,
               suggested_solution: found.ai_suggested_solution,
             });
@@ -645,10 +645,10 @@ function TicketDetailPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                {ticket.ai_classification && (
-                  <span className="flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full border bg-blue-500/10 text-blue-500 border-blue-500/20 uppercase tracking-wider">
-                    <Tag size={12} />
-                    {ticket.ai_classification}
+                {ticket.category && (
+                  <span className="inline-flex items-center gap-1 text-[11px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2.5 py-0.5 rounded-full">
+                    <Tag size={10} />
+                    {ticket.category}
                   </span>
                 )}
                 <span
