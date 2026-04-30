@@ -764,7 +764,7 @@ export default function TicketDetailsModal({
     if (!hasChanges) return;
     setIsAnalyzing(true);
     try {
-      let changesMsg = [];
+      const changesMsg = [];
       const fieldUpdates: any = {};
 
       if (editForm.name !== ticket.name) {

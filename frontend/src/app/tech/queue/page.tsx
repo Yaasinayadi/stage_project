@@ -23,10 +23,8 @@ import {
   ClipboardCheck,
   UserCog
 } from "lucide-react";
-import SlaBadge from "@/components/SlaBadge";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAuth } from "@/lib/auth";
-import Link from "next/link";
 
 import { ODOO_URL } from "@/lib/config";
 
@@ -106,6 +104,7 @@ function QueuePage() {
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [loadingAgents, setLoadingAgents] = useState(false);
   const [dispatching, setDispatching] = useState(false);
+  const [assigning, setAssigning] = useState<number | null>(null);
 
   // Modale technicien
   const [techTicket, setTechTicket] = useState<QueueTicket | null>(null);
@@ -125,16 +124,32 @@ function QueuePage() {
       }
     } catch (e: any) {
       console.error("Erreur chargement file d'attente", e?.message || e);
+    }
+  }, [user]);
+
+  // Separate fetch for initial load and polling (no loading spinner)
+  const fetchQueueSilent = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const res = await axios.get(`${ODOO_URL}/api/tickets/queue`, {
+        params: { user_id: user.id, role: user.x_support_role },
+        withCredentials: true,
+      });
+      if (res.data.status === "success") {
+        setTickets(res.data.data);
+      }
+    } catch (e: any) {
+      console.error("Erreur chargement file d'attente", e?.message || e);
     } finally {
       setLoading(false);
     }
   }, [user]);
 
   useEffect(() => {
-    fetchQueue();
-    const id = setInterval(fetchQueue, 20000);
+    fetchQueueSilent();
+    const id = setInterval(fetchQueueSilent, 20000);
     return () => clearInterval(id);
-  }, [fetchQueue]);
+  }, [fetchQueueSilent]);
 
   const handleAssign = async (ticketId: number) => {
     setAssigning(ticketId);
@@ -329,7 +344,11 @@ function QueuePage() {
               </span>
             )}
             <button
-              onClick={fetchQueue}
+              onClick={async () => {
+                setLoading(true);
+                await Promise.all([fetchQueue(), new Promise(r => setTimeout(r, 500))]);
+                setLoading(false);
+              }}
               className="btn-ghost flex items-center gap-2 text-sm"
               title="Actualiser"
             >
@@ -416,8 +435,8 @@ function QueuePage() {
             </p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {sorted.map((ticket) => {
+          <div className="space-y-3 animate-fade-in">
+            {sorted.map((ticket, idx) => {
               const pCfg = PRIORITY_MAP[ticket.priority] || {
                 border: "border-l-gray-500",
                 badge: "bg-gray-500/10 text-gray-500 border-gray-500/20",
@@ -431,7 +450,8 @@ function QueuePage() {
                       ? () => openDispatch(ticket)
                       : () => openTechModal(ticket)
                   }
-                  className={`flex flex-col p-4 bg-[hsl(var(--secondary)/0.2)] border border-[hsl(var(--border)/0.5)] rounded-xl transition-all duration-200 shadow-sm border-l-4 ${pCfg.border} group cursor-pointer
+                  style={{ animationDelay: `${idx * 40}ms` }}
+                  className={`animate-fade-in flex flex-col p-4 bg-[hsl(var(--secondary)/0.2)] border border-[hsl(var(--border)/0.5)] rounded-xl transition-all duration-200 shadow-sm border-l-4 ${pCfg.border} group cursor-pointer
                     ${
                       isAdmin
                         ? "hover:bg-[hsl(var(--primary)/0.06)] hover:border-[hsl(var(--primary)/0.3)] hover:shadow-md"

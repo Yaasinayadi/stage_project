@@ -20,7 +20,7 @@ import KnowledgeCard, { type KbArticle } from "@/components/KnowledgeCard";
 import KnowledgeReadModal from "@/components/KnowledgeReadModal";
 import KnowledgeModal from "@/components/KnowledgeModal";
 
-const ODOO_URL = "http://localhost:8069";
+import { ODOO_URL } from "@/lib/config";
 
 const CATEGORIES = [
   "Réseau",
@@ -186,6 +186,7 @@ function KnowledgePage() {
           <button
             onClick={() => fetchArticles(page)}
             className="btn-ghost flex items-center gap-2 text-sm"
+            title="Actualiser"
           >
             <RefreshCw size={14} />
             Actualiser

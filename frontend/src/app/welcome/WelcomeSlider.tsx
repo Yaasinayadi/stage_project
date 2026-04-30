@@ -81,7 +81,7 @@ export default function WelcomeSlider({ onOpenTicketModal, onOpenChatbot }: Welc
   const handleCta = (action: SlideAction) => {
     if (action === "ticket") onOpenTicketModal();
     else if (action === "chatbot") onOpenChatbot();
-    else if (action === "knowledge") window.location.href = "/tech/knowledge";
+    else if (action === "knowledge") window.location.assign("/tech/knowledge");
   };
 
   return (

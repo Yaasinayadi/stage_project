@@ -43,7 +43,7 @@ import { ODOO_URL } from "@/lib/config";
 import { toast } from "sonner";
 import KnowledgeModal from "@/components/KnowledgeModal";
 
-// @ts-ignore
+// @ts-expect-error: Ignore missing types
 
 
 
