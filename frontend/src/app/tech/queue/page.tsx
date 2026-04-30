@@ -94,7 +94,7 @@ function QueuePage() {
   const { user } = useAuth();
   const isAdmin = user?.x_support_role === "admin";
   const [tickets, setTickets] = useState<QueueTicket[]>([]);
-  const [activeTab, setActiveTab] = useState<"expertise" | "missions">("expertise");
+  const [activeTab, setActiveTab] = useState<"expertise" | "missions">("missions");
   const [loading, setLoading] = useState(true);
   const [selectedPriority, setSelectedPriority] = useState<string | null>(null);
 
@@ -343,16 +343,6 @@ function QueuePage() {
         {!isAdmin && (
           <div className="flex bg-[hsl(var(--muted)/0.5)] p-1 rounded-xl w-fit">
             <button
-              onClick={() => { setActiveTab("expertise"); setSelectedPriority(null); }}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === "expertise" ? "bg-[hsl(var(--card))] text-[hsl(var(--primary))] shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              <Inbox size={16} />
-              Flux Expertise
-              <span className="bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))] px-2 py-0.5 rounded-full text-xs ml-1">
-                {tickets.filter(t => !t.assigned_to_id).length}
-              </span>
-            </button>
-            <button
               onClick={() => { setActiveTab("missions"); setSelectedPriority(null); }}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === "missions" ? "bg-[hsl(var(--card))] text-[hsl(var(--primary))] shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
             >
@@ -360,6 +350,16 @@ function QueuePage() {
               Missions Admin
               <span className="bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))] px-2 py-0.5 rounded-full text-xs ml-1">
                 {tickets.filter(t => t.assigned_to_id === user?.id).length}
+              </span>
+            </button>
+            <button
+              onClick={() => { setActiveTab("expertise"); setSelectedPriority(null); }}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === "expertise" ? "bg-[hsl(var(--card))] text-[hsl(var(--primary))] shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              <Inbox size={16} />
+              Flux Expertise
+              <span className="bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))] px-2 py-0.5 rounded-full text-xs ml-1">
+                {tickets.filter(t => !t.assigned_to_id).length}
               </span>
             </button>
           </div>

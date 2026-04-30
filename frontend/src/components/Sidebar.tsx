@@ -43,7 +43,6 @@ export default function Sidebar() {
       { id: "queue", label: "File d'attente", href: "/tech/queue", icon: <Inbox size={20} /> },
       { id: "knowledge", label: "Base de connaissances", href: "/tech/knowledge", icon: <BookOpen size={20} /> },
       { id: "users", label: "Équipe & Rôles", href: "/users", icon: <Settings size={20} /> },
-      { id: "settings", label: "Paramètres", href: "#", icon: <Settings size={20} />, disabled: true },
     ];
   } else if (user?.x_support_role === "tech") {
     navItems = [

@@ -6,9 +6,10 @@ import { useAuth } from "@/lib/auth";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import {
   User, Shield, Briefcase, Ban, CheckCircle2, Search,
-  Loader2, Filter, ChevronDown, XCircle, Check, X
+  Loader2, Filter, ChevronDown, XCircle, Check, X, UserCheck, UserX
 } from "lucide-react";
 import { ODOO_URL as ODOO } from "@/lib/config";
+import { toast } from "sonner";
 
 
 /* ─────────────────────────────────────────────────────── types ── */
@@ -32,32 +33,7 @@ const ROLE_META: Record<string, { label: string; color: string; bg: string; bord
   user:  { label: "Utilisateur",    color: "text-slate-400",  bg: "bg-slate-500/10",  border: "border-slate-500/25",  dot: "bg-slate-400"  },
 };
 
-/* ─────────── tiny toast ─────────── */
-type Toast = { id: number; msg: string; ok: boolean };
 
-function Toaster({ toasts, remove }: { toasts: Toast[]; remove: (id: number) => void }) {
-  return (
-    <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-2 pointer-events-none">
-      {toasts.map(t => (
-        <div
-          key={t.id}
-          className={`pointer-events-auto flex items-center gap-2.5 px-4 py-2.5 rounded-xl shadow-2xl border text-sm font-semibold animate-fade-in backdrop-blur-md
-            ${t.ok
-              ? "bg-[hsl(var(--card))] border-emerald-500/30 text-emerald-400"
-              : "bg-[hsl(var(--card))] border-red-500/30 text-red-400"
-            }`}
-          style={{ minWidth: 220 }}
-        >
-          {t.ok ? <Check size={15} /> : <X size={15} />}
-          {t.msg}
-          <button className="ml-auto opacity-60 hover:opacity-100" onClick={() => remove(t.id)}>
-            <X size={12} />
-          </button>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 /* ─────────── InlineRoleSelect ─────────── */
 function InlineRoleSelect({
@@ -264,16 +240,6 @@ function UsersManagement() {
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<number | null>(null);
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  const toastId = useRef(0);
-
-  const addToast = useCallback((msg: string, ok: boolean) => {
-    const id = ++toastId.current;
-    setToasts(p => [...p, { id, msg, ok }]);
-    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 3500);
-  }, []);
-
-  const removeToast = useCallback((id: number) => setToasts(p => p.filter(t => t.id !== id)), []);
 
   const [activeFilters, setActiveFilters] = useState<{
     search: string; roles: string[]; statuses: string[]; domains: string[];
@@ -319,12 +285,12 @@ function UsersManagement() {
           ...(freshRole ? { role: freshRole === "admin" ? "admin" : freshRole === "tech" ? "agent" : "user" } : {}),
         };
       }));
-      addToast("Modification enregistrée ✓", true);
+      toast.success("Modification enregistrée", { icon: <UserCheck size={18} /> });
     } catch (e: any) {
-      addToast(e?.response?.data?.message || e?.message || "Erreur serveur", false);
+      toast.error(e?.response?.data?.message || e?.message || "Erreur serveur", { icon: <UserX size={18} /> });
       fetchUsers();
     } finally { setUpdating(null); }
-  }, [user?.id, addToast]);
+  }, [user?.id]);
 
   const filteredUsers = users.filter(u => {
     const s = activeFilters.search.toLowerCase();
@@ -348,7 +314,7 @@ function UsersManagement() {
 
   return (
     <>
-      <Toaster toasts={toasts} remove={removeToast} />
+
 
       <div className="p-6 lg:p-8 max-w-[1400px] mx-auto space-y-6" onClick={() => setOpenHeaderDropdown(null)}>
 

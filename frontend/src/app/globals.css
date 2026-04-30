@@ -1,9 +1,5 @@
 @import "tailwindcss";
 
-/* ───────────────────────────────────────────────
-   n8n-Inspired Design System
-   Premium dark-first palette with glassmorphism
-   ─────────────────────────────────────────────── */
 
 @layer base {
   :root {
@@ -120,6 +116,36 @@
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--muted-foreground) / 0.4);
   }
+}
+
+/* ─── Unification de l'interactivité (Cursor Pointer) ─── */
+button,
+[role="button"],
+[role="tab"],
+a,
+select,
+label,
+input[type="checkbox"],
+input[type="radio"],
+.cursor-pointer,
+.btn-primary,
+.btn-ghost,
+.btn-danger,
+tr.group,
+tr[class*="hover:bg-"],
+.glass-card[class*="hover:-translate-y-"],
+.glass-card[class*="hover:border-"],
+.glass-card[class*="hover:shadow-"] {
+  cursor: pointer !important;
+}
+
+/* Disable pointer for disabled elements */
+button:disabled,
+input:disabled,
+select:disabled,
+.cursor-not-allowed,
+[disabled] {
+  cursor: not-allowed !important;
 }
 
 /* ─── Animations ─── */
