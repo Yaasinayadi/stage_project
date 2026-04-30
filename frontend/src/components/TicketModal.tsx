@@ -397,7 +397,7 @@ export default function TicketModal({ isOpen, onClose, onSuccess }: TicketModalP
                 </p>
                 {pendingFiles.length > 0 && (
                   <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
-                    ✅ {pendingFiles.length} fichier{pendingFiles.length > 1 ? "s" : ""} joint{pendingFiles.length > 1 ? "s" : ""}
+                    <CheckCircle2 size={12} className="inline mr-1" /> {pendingFiles.length} fichier{pendingFiles.length > 1 ? "s" : ""} joint{pendingFiles.length > 1 ? "s" : ""}
                   </p>
                 )}
               </div>

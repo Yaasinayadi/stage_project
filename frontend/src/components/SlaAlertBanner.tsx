@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import { useAuth } from "@/lib/auth";
-import { AlertTriangle, X, ChevronRight } from "lucide-react";
+import { AlertTriangle, X, ChevronRight, ShieldAlert, Clock } from "lucide-react";
 import Link from "next/link";
 import { ODOO_URL } from "@/lib/config";
 
@@ -61,12 +61,12 @@ export default function SlaAlertBanner() {
       <div className="flex-1 flex flex-wrap items-center gap-x-4 gap-y-1 min-w-0">
         {breached.length > 0 && (
           <span className="font-bold">
-            🚨 {breached.length} ticket{breached.length > 1 ? "s" : ""} SLA dépassé{breached.length > 1 ? "s" : ""} !
+            <ShieldAlert size={16} className="inline mr-1" /> {breached.length} ticket{breached.length > 1 ? "s" : ""} SLA dépassé{breached.length > 1 ? "s" : ""} !
           </span>
         )}
         {atRisk.length > 0 && (
           <span>
-            ⚠️ {atRisk.length} ticket{atRisk.length > 1 ? "s" : ""} à risque
+            <Clock size={16} className="inline mr-1" /> {atRisk.length} ticket{atRisk.length > 1 ? "s" : ""} à risque
           </span>
         )}
 

@@ -32,12 +32,15 @@ import {
   AlertTriangle,
   ExternalLink,
   ShieldAlert,
+  ShieldCheck,
+  UploadCloud
 } from "lucide-react";
 import SlaBadge from "@/components/SlaBadge";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAuth } from "@/lib/auth";
 import Link from "next/link";
 import { ODOO_URL } from "@/lib/config";
+import { toast } from "sonner";
 import KnowledgeModal from "@/components/KnowledgeModal";
 
 // @ts-ignore
@@ -244,15 +247,7 @@ function TicketDetailPage() {
 
   // Action states
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [toast, setToast] = useState<{
-    msg: string;
-    type: "ok" | "err";
-  } | null>(null);
-
-  const showToast = (msg: string, type: "ok" | "err") => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 4000);
-  };
+  // Removed custom showToast
 
   const fetchTicket = useCallback(async () => {
     try {
@@ -337,8 +332,7 @@ function TicketDetailPage() {
       );
       setNewComment("");
       fetchComments();
-    } catch {
-      showToast("Erreur lors de l'envoi du commentaire.", "err");
+      toast.error("Erreur lors de l'envoi du commentaire.");
     } finally {
       setPostingComment(false);
     }
@@ -359,7 +353,7 @@ function TicketDetailPage() {
         },
       );
       if (res.data.status === 201) {
-        showToast(`✅ ${res.data.data.length} fichier(s) ajouté(s)`, "ok");
+        toast.success(`${res.data.data.length} fichier(s) ajouté(s)`, { icon: <UploadCloud size={18} /> });
         fetchAttachments();
       }
     } catch {
@@ -379,13 +373,13 @@ function TicketDetailPage() {
       });
       if (res.data.status === "success") {
         setAiSuggestion(res.data.data);
-        showToast("✨ Diagnostic IA généré avec succès", "ok");
+        toast.success("Diagnostic IA généré avec succès", { icon: <Sparkles size={18} /> });
       } else {
-        showToast("L'IA n'a pas pu analyser ce ticket.", "err");
+        toast.error("L'IA n'a pas pu analyser ce ticket.");
       }
     } catch (err) {
       console.error("AI Analysis Error:", err);
-      showToast("Erreur lors de l'analyse IA.", "err");
+      toast.error("Erreur lors de l'analyse IA.");
     } finally {
       setAiLoading(false);
     }
@@ -399,10 +393,10 @@ function TicketDetailPage() {
         { tech_id: user?.id },
         { withCredentials: true },
       );
-      showToast("⬆️ Ticket escaladé. L'admin a été notifié.", "ok");
+      toast.success("Ticket escaladé. L'admin a été notifié.", { icon: <ArrowUpCircle size={18} /> });
       fetchTicket();
     } catch {
-      showToast("Erreur lors de l'escalade.", "err");
+      toast.error("Erreur lors de l'escalade.");
     } finally {
       setActionLoading(null);
     }
@@ -416,11 +410,11 @@ function TicketDetailPage() {
         { user_id: user?.id },
         { withCredentials: true },
       );
-      showToast("L'escalade a été annulée. Vous avez repris la main sur le ticket.", "ok");
+      toast.success("L'escalade a été annulée. Vous avez repris la main sur le ticket.");
       fetchTicket();
       fetchComments();
     } catch {
-      showToast("Erreur lors de l'annulation de l'escalade.", "err");
+      toast.error("Erreur lors de l'annulation de l'escalade.");
     } finally {
       setActionLoading(null);
     }
@@ -440,14 +434,14 @@ function TicketDetailPage() {
         { justification: waitJustification, user_id: user?.id },
         { withCredentials: true },
       );
-      showToast("⏸️ Ticket mis en attente. Notification envoyée.", "ok");
+      toast.success("Ticket mis en attente. Notification envoyée.", { icon: <Clock size={18} /> });
       setShowWaitModal(false);
       setWaitJustification("");
       fetchTicket();
       fetchComments();
     } catch (err) {
       console.error("Wait Error:", err);
-      showToast("Erreur lors de la mise en attente.", "err");
+      toast.error("Erreur lors de la mise en attente.");
     } finally {
       setWaiting(false);
     }
@@ -462,12 +456,12 @@ function TicketDetailPage() {
         { user_id: user?.id },
         { withCredentials: true },
       );
-      showToast("▶️ Travail repris sur le ticket.", "ok");
+      toast.success("Travail repris sur le ticket.", { icon: <RefreshCw size={18} /> });
       fetchTicket();
       fetchComments();
     } catch (err) {
       console.error("Resume Error:", err);
-      showToast("Erreur lors de la reprise du travail.", "err");
+      toast.error("Erreur lors de la reprise du travail.");
     } finally {
       setActionLoading(null);
     }
@@ -494,7 +488,7 @@ function TicketDetailPage() {
           "<h3>📋 Description du problème</h3>",
           `<p>${ticket.description.replace(/\n/g, "<br/>")}</p>`,
           "<hr/>",
-          "<h3>✅ Solution apportée</h3>",
+          "<h3>Solution apportée</h3>",
           `<p>${resolution.replace(/\n/g, "<br/>")}</p>`,
         ].join("\n");
 
@@ -507,10 +501,10 @@ function TicketDetailPage() {
 
         // Refresh ticket state in background
         fetchTicket();
-        showToast("✅ Ticket résolu — Rédigez votre article KB ci-dessous !", "ok");
+        toast.success("Ticket résolu — Rédigez votre article KB ci-dessous !", { icon: <ShieldCheck size={18} /> });
       } else {
         // ── Cas 1 (Toggle OFF) : Comportement classique ──
-        showToast("✅ Ticket résolu !", "ok");
+        toast.success("Ticket résolu !", { icon: <ShieldCheck size={18} /> });
         setResolution("");
         setAddToKb(false);
         sessionStorage.setItem("resolved_ticket_id", String(id));
@@ -518,7 +512,7 @@ function TicketDetailPage() {
       }
     } catch (err) {
       console.error("Resolve Error:", err);
-      showToast("Erreur lors de la résolution.", "err");
+      toast.error("Erreur lors de la résolution.");
     } finally {
       setResolving(false);
     }
@@ -526,7 +520,7 @@ function TicketDetailPage() {
 
   const handleKbSaved = (toastMsg?: string) => {
     setKbDraftData(null);
-    showToast(toastMsg ?? "✅ Article KB enregistré !", "ok");
+    toast.success(toastMsg ?? "Article KB enregistré !", { icon: <ShieldCheck size={18} /> });
     // Navigate to tickets list after KB is saved
     sessionStorage.setItem("resolved_ticket_id", String(id));
     setTimeout(() => router.push("/tech/tickets"), 1500);
@@ -597,15 +591,6 @@ function TicketDetailPage() {
 
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-4">
-      {/* Toast */}
-      {toast && (
-        <div
-          className={`fixed top-5 right-5 z-[200] px-5 py-3 rounded-xl shadow-xl text-sm font-semibold animate-fade-in
-          ${toast.type === "ok" ? "bg-emerald-600 text-white" : "bg-red-600 text-white"}`}
-        >
-          {toast.msg}
-        </div>
-      )}
 
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-xs text-[hsl(var(--muted-foreground))]">

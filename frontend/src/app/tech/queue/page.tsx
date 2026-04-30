@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { toast } from "sonner";
 import axios from "axios";
 import {
   Inbox,
@@ -19,6 +20,8 @@ import {
   ChevronRight,
   ArrowUpCircle,
   Globe,
+  ClipboardCheck,
+  UserCog
 } from "lucide-react";
 import SlaBadge from "@/components/SlaBadge";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -67,6 +70,8 @@ type QueueTicket = {
   state: string;
   x_accepted: boolean;
   assigned_to_id: number | null;
+  assigned_by_id?: number | null;
+  assigned_by?: string | null;
   category?: string | null;
   create_date: string | null;
   sla_deadline: string | null;
@@ -89,16 +94,9 @@ function QueuePage() {
   const { user } = useAuth();
   const isAdmin = user?.x_support_role === "admin";
   const [tickets, setTickets] = useState<QueueTicket[]>([]);
-  const [priorities, setPriorities] = useState<
-    { id: string; label: string; count: number }[]
-  >([]);
+  const [activeTab, setActiveTab] = useState<"expertise" | "missions">("expertise");
   const [loading, setLoading] = useState(true);
-  const [assigning, setAssigning] = useState<number | null>(null);
   const [selectedPriority, setSelectedPriority] = useState<string | null>(null);
-  const [toast, setToast] = useState<{
-    msg: string;
-    type: "ok" | "err";
-  } | null>(null);
 
   // Dispatch modal state
   const [dispatchTicket, setDispatchTicket] = useState<QueueTicket | null>(
@@ -113,10 +111,7 @@ function QueuePage() {
   const [techTicket, setTechTicket] = useState<QueueTicket | null>(null);
   const [techLoading, setTechLoading] = useState(false);
 
-  const showToast = (msg: string, type: "ok" | "err") => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3500);
-  };
+  // Removed custom showToast
 
   const fetchQueue = useCallback(async () => {
     if (!user?.id) return;
@@ -127,7 +122,6 @@ function QueuePage() {
       });
       if (res.data.status === "success") {
         setTickets(res.data.data);
-        if (res.data.priorities) setPriorities(res.data.priorities);
       }
     } catch (e: any) {
       console.error("Erreur chargement file d'attente", e?.message || e);
@@ -151,13 +145,13 @@ function QueuePage() {
         { withCredentials: true },
       );
       if (res.data.status === "success") {
-        showToast(`✅ ${res.data.message}`, "ok");
+        toast.success(res.data.message, { icon: <ClipboardCheck size={18} /> });
         fetchQueue();
       } else {
-        showToast("Erreur lors de l'assignation", "err");
+        toast.error("Erreur lors de l'assignation");
       }
     } catch {
-      showToast("Impossible de contacter le serveur", "err");
+      toast.error("Impossible de contacter le serveur");
     } finally {
       setAssigning(null);
     }
@@ -172,13 +166,13 @@ function QueuePage() {
         { withCredentials: true },
       );
       if (res.data.status === "success") {
-        showToast(`✅ ${res.data.message}`, "ok");
+        toast.success(res.data.message, { icon: <ClipboardCheck size={18} /> });
         fetchQueue();
       } else {
-        showToast("Erreur lors de l'acceptation", "err");
+        toast.error("Erreur lors de l'acceptation");
       }
     } catch {
-      showToast("Impossible de contacter le serveur", "err");
+      toast.error("Impossible de contacter le serveur");
     } finally {
       setAssigning(null);
     }
@@ -217,14 +211,14 @@ function QueuePage() {
         { withCredentials: true },
       );
       if (res.data.status === "success") {
-        showToast(`✅ ${res.data.message}`, "ok");
+        toast.success(res.data.message, { icon: <UserCog size={18} /> });
         closeDispatch();
         fetchQueue();
       } else {
-        showToast("Erreur lors de l'assignation", "err");
+        toast.error("Erreur lors de l'assignation");
       }
     } catch {
-      showToast("Impossible de contacter le serveur", "err");
+      toast.error("Impossible de contacter le serveur");
     } finally {
       setDispatching(false);
     }
@@ -245,16 +239,16 @@ function QueuePage() {
       );
       if (res.data.status === "success") {
         closeTechModal();
-        showToast(
-          `✅ Vous êtes désormais responsable du ticket TK-${String(techTicket.id).padStart(4, "0")}. Retrouvez-le dans votre espace "Mes Tickets".`,
-          "ok",
+        toast.success(
+          `Vous êtes désormais responsable du ticket TK-${String(techTicket.id).padStart(4, "0")}. Retrouvez-le dans votre espace "Mes Tickets".`,
+          { icon: <ClipboardCheck size={18} /> }
         );
         fetchQueue();
       } else {
-        showToast("Erreur lors de l'assignation", "err");
+        toast.error("Erreur lors de l'assignation");
       }
     } catch {
-      showToast("Impossible de contacter le serveur", "err");
+      toast.error("Impossible de contacter le serveur");
     } finally {
       setTechLoading(false);
     }
@@ -271,24 +265,41 @@ function QueuePage() {
       );
       if (res.data.status === "success") {
         closeTechModal();
-        showToast(
-          `✅ Mission acceptée — TK-${String(techTicket.id).padStart(4, "0")} est maintenant dans vos "Mes Tickets".`,
-          "ok",
+        toast.success(
+          `Mission acceptée — TK-${String(techTicket.id).padStart(4, "0")} est maintenant dans vos "Mes Tickets".`,
+          { icon: <ClipboardCheck size={18} /> }
         );
         fetchQueue();
       } else {
-        showToast("Erreur lors de l'acceptation", "err");
+        toast.error("Erreur lors de l'acceptation");
       }
     } catch {
-      showToast("Impossible de contacter le serveur", "err");
+      toast.error("Impossible de contacter le serveur");
     } finally {
       setTechLoading(false);
     }
   };
 
+  // Derive current tab tickets
+  const currentTabTickets = isAdmin 
+    ? tickets 
+    : activeTab === "expertise"
+      ? tickets.filter(t => !t.assigned_to_id)
+      : tickets.filter(t => t.assigned_to_id === user?.id);
+
+  // Calculate priorities manually based on current tab tickets
+  const tabPriorities = Object.keys(PRIORITY_MAP)
+    .map(pId => ({
+      id: pId,
+      label: PRIORITY_MAP[pId].label,
+      count: currentTabTickets.filter(t => t.priority === pId).length
+    }))
+    .filter(p => p.count > 0 || selectedPriority === p.id)
+    .sort((a, b) => parseInt(b.id) - parseInt(a.id));
+
   const filteredTickets = selectedPriority
-    ? tickets.filter((t) => t.priority === selectedPriority)
-    : tickets;
+    ? currentTabTickets.filter((t) => t.priority === selectedPriority)
+    : currentTabTickets;
 
   const sorted = [...filteredTickets].sort(
     (a, b) => parseInt(b.priority) - parseInt(a.priority),
@@ -297,15 +308,6 @@ function QueuePage() {
   return (
     <>
       <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
-        {/* Toast */}
-        {toast && (
-          <div
-            className={`fixed top-5 right-5 z-[200] px-5 py-3 rounded-xl shadow-xl text-sm font-semibold animate-fade-in
-          ${toast.type === "ok" ? "bg-emerald-600 text-white" : "bg-red-600 text-white"}`}
-          >
-            {toast.msg}
-          </div>
-        )}
 
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -337,9 +339,35 @@ function QueuePage() {
           </div>
         </div>
 
+        {/* Tabs Technicien */}
+        {!isAdmin && (
+          <div className="flex bg-[hsl(var(--muted)/0.5)] p-1 rounded-xl w-fit">
+            <button
+              onClick={() => { setActiveTab("expertise"); setSelectedPriority(null); }}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === "expertise" ? "bg-[hsl(var(--card))] text-[hsl(var(--primary))] shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              <Inbox size={16} />
+              Flux Expertise
+              <span className="bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))] px-2 py-0.5 rounded-full text-xs ml-1">
+                {tickets.filter(t => !t.assigned_to_id).length}
+              </span>
+            </button>
+            <button
+              onClick={() => { setActiveTab("missions"); setSelectedPriority(null); }}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === "missions" ? "bg-[hsl(var(--card))] text-[hsl(var(--primary))] shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              <Briefcase size={16} />
+              Missions Admin
+              <span className="bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))] px-2 py-0.5 rounded-full text-xs ml-1">
+                {tickets.filter(t => t.assigned_to_id === user?.id).length}
+              </span>
+            </button>
+          </div>
+        )}
+
         {/* Stats rapides */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {priorities.map((p) => {
+          {tabPriorities.map((p) => {
             const cfg = PRIORITY_MAP[p.id] || {
               badge: "bg-gray-500/10 text-gray-500 border-gray-500/20",
               dot: "bg-gray-500",
@@ -504,19 +532,27 @@ function QueuePage() {
                     </div>
 
                     {/* Right: Indicator */}
-                    <div className="flex-shrink-0 ml-4">
+                    <div className="flex flex-col gap-2 flex-shrink-0 ml-4 items-end">
                       {!ticket.assigned_to_id ? (
                         <span className="flex items-center gap-1.5 px-2 py-1 rounded-full border text-[10px] font-black uppercase tracking-widest bg-sky-500/10 text-sky-500 border-sky-500/20">
                           <Globe size={12} />
                           OUVERT
                         </span>
-                      ) : ticket.assigned_to_id === user?.id &&
-                        !ticket.x_accepted ? (
+                      ) : ticket.assigned_to_id === user?.id && !ticket.x_accepted ? (
                         <span className="flex items-center gap-1.5 px-2 py-1 rounded-full border text-[10px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-500 border-emerald-500/20 animate-pulse">
                           <ArrowUpCircle size={12} />
                           MISSION ASSIGNÉE
                         </span>
                       ) : null}
+                      
+                      {/* Affichage traçabilité origin Assignateur si assigné */}
+                      {ticket.assigned_to_id && (
+                         <span className="text-[10px] font-semibold italic text-muted-foreground">
+                           {ticket.assigned_by_id === ticket.assigned_to_id 
+                             ? "Auto-assigné" 
+                             : `Assigné par: ${ticket.assigned_by || 'Admin'}`}
+                         </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -876,9 +912,13 @@ function QueuePage() {
             <div className="p-6 border-t border-[hsl(var(--border))] bg-[hsl(var(--card))] rounded-b-2xl">
               {techTicket.assigned_to_id && !techTicket.x_accepted ? (
                 <div className="space-y-4">
-                  <p className="text-xs text-center text-emerald-500 font-medium bg-emerald-500/10 py-2 px-3 rounded-lg border border-emerald-500/20">
-                    🎯 Cet article vous a été spécifiquement attribué par
-                    l&apos;administration.
+                  <p className="text-xs text-center text-emerald-500 font-medium bg-emerald-500/10 py-2 px-3 rounded-lg border border-emerald-500/20 mb-1">
+                    🎯 Cette mission vous a été confiée par l&apos;administration.
+                  </p>
+                  <p className="text-center text-[10px] text-muted-foreground italic mb-2">
+                    {techTicket.assigned_by_id === techTicket.assigned_to_id 
+                      ? "Auto-assigné" 
+                      : `Assigné par : ${techTicket.assigned_by || 'Admin'}`}
                   </p>
                   <button
                     disabled={techLoading}

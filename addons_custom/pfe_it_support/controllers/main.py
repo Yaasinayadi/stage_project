@@ -306,6 +306,8 @@ class SupportTicketController(http.Controller):
             'user_email': t.user_id.email or t.user_id.login if t.user_id else None,
             'assigned_to_id': t.assigned_to_id.id if t.assigned_to_id else None,
             'assigned_to': t.assigned_to_id.name if t.assigned_to_id else None,
+            'assigned_by_id': t.assigned_by_id.id if t.assigned_by_id else None,
+            'assigned_by': t.assigned_by_id.name if t.assigned_by_id else None,
             'escalated_by_id': t.escalated_by_id.id if t.escalated_by_id else None,
             'sla_deadline': str(t.sla_deadline) if t.sla_deadline else None,
             'sla_status': t.sla_status or None,

@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { MessageCircle, X, Send, Bot, User, Sparkles } from "lucide-react";
+import { MessageCircle, X, Send, Bot, User, Sparkles, AlertTriangle } from "lucide-react";
 import axios from "axios";
 
-type Message = { sender: "user" | "bot"; text: string };
+type Message = { sender: "user" | "bot"; text: React.ReactNode };
 
 type ChatbotProps = {
   /** When true, open the panel immediately (controlled from outside) */
@@ -57,7 +57,7 @@ export default function Chatbot({ defaultOpen = false, onClose }: ChatbotProps) 
       });
       setMessages(prev => [...prev, { sender: "bot", text: res.data.bot_reply }]);
     } catch {
-      setMessages(prev => [...prev, { sender: "bot", text: "⚠️ Erreur de connexion au service IA. Veuillez réessayer." }]);
+      setMessages(prev => [...prev, { sender: "bot", text: <><AlertTriangle size={14} className="inline mr-1" /> Erreur de connexion au service IA. Veuillez réessayer.</> }]);
     } finally {
       setIsLoading(false);
     }

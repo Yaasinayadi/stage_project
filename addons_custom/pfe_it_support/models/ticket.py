@@ -36,6 +36,9 @@ class SupportTicket(models.Model):
     
     # Technicien qui a déclenché l'escalade
     escalated_by_id = fields.Many2one('res.users', string='Escaladé par')
+
+    # Administrateur ou système ayant assigné le ticket
+    assigned_by_id = fields.Many2one('res.users', string='Assigné par', tracking=True)
     
     # SLA
     sla_id = fields.Many2one('support.sla', string='Règle SLA', compute='_compute_sla', store=True)

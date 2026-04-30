@@ -77,6 +77,7 @@ class TicketController(http.Controller):
                     'state': t.state,
                     'x_accepted': t.x_accepted,
                     'assigned_to_id': t.assigned_to_id.id if t.assigned_to_id else None,
+                    'assigned_by_id': t.assigned_by_id.id if t.assigned_by_id else None,
                     'create_date': str(t.create_date) if t.create_date else None,
                     'sla_deadline': str(t.sla_deadline) if t.sla_deadline else None,
                     'sla_status': t.sla_status or None,
@@ -133,6 +134,7 @@ class TicketController(http.Controller):
             # Tech takes an unassigned ticket themselves: assign + auto-accept
             ticket.write({
                 'assigned_to_id': user_id,
+                'assigned_by_id': user_id,
                 'x_accepted': True,
                 'state': 'in_progress'
             })
@@ -228,6 +230,7 @@ class TicketController(http.Controller):
             
             body = json.loads(request.httprequest.data.decode('utf-8')) if request.httprequest.data else {}
             target_user_id = int(body.get('target_user_id', 0))
+            caller_user_id = body.get('caller_user_id')
             if not target_user_id:
                 headers.append(('Content-Type', 'application/json'))
                 return request.make_response(
@@ -237,6 +240,7 @@ class TicketController(http.Controller):
             
             ticket.write({
                 'assigned_to_id': target_user_id,
+                'assigned_by_id': int(caller_user_id) if caller_user_id else request.env.user.id,
                 'x_accepted': False,
                 'state': 'assigned'
             })
@@ -734,6 +738,7 @@ class TicketController(http.Controller):
         try:
             body = json.loads(request.httprequest.data.decode('utf-8')) if request.httprequest.data else {}
             target_user_id = body.get('target_user_id')
+            caller_user_id = body.get('caller_user_id')
             
             if not target_user_id:
                 return request.make_response(json.dumps({'status': 'error', 'message': 'target_user_id requis'}), headers=headers, status=400)
@@ -746,6 +751,7 @@ class TicketController(http.Controller):
             
             ticket.write({
                 'assigned_to_id': target_user.id,
+                'assigned_by_id': int(caller_user_id) if caller_user_id else request.env.user.id,
                 'state': 'assigned',
                 'x_accepted': False
             })

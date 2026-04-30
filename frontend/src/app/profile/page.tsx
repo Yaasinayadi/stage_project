@@ -3,10 +3,10 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
-import { ArrowLeft, User as UserIcon, Shield, Star, CheckCircle, Loader2, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, User as UserIcon, Shield, Star, CheckCircle, Loader2, Eye, EyeOff, UserCheck, Save } from "lucide-react";
 import axios from "axios";
 import { ODOO_URL } from "@/lib/config";
-import { toast, Toaster } from "sonner";
+import { toast } from "sonner";
 import { useTheme } from "next-themes";
 
 export default function ProfilePage() {
@@ -93,7 +93,7 @@ export default function ProfilePage() {
       });
       
       if (res.data.status === 200) {
-        toast.success("Profil mis à jour avec succès");
+        toast.success("Profil mis à jour avec succès", { icon: <UserCheck size={18} /> });
         await refreshUser();
       } else {
         toast.error(res.data.message || "Erreur lors de la mise à jour");
@@ -128,7 +128,7 @@ export default function ProfilePage() {
       });
       
       if (res.data.status === 200) {
-        toast.success("Mot de passe modifié avec succès");
+        toast.success("Mot de passe modifié avec succès", { icon: <Save size={18} /> });
         setOldPassword("");
         setNewPassword("");
         setConfirmPassword("");
@@ -151,7 +151,6 @@ export default function ProfilePage() {
 
   return (
     <div className="flex-1 flex flex-col h-screen overflow-y-auto custom-scrollbar bg-[hsl(var(--background))]">
-      <Toaster position="top-right" theme={toasterTheme as any} />
       
       {/* Header Area */}
       <header className="h-16 flex items-center px-6 border-b border-[hsl(var(--border)/0.5)] flex-shrink-0 sticky top-0 bg-[hsl(var(--background)/0.8)] backdrop-blur-md z-10">

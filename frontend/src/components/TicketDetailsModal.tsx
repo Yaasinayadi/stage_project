@@ -50,6 +50,8 @@ type Ticket = {
   category: string;
   assigned_to_id?: number | null;
   assigned_to?: string | null;
+  assigned_by_id?: number | null;
+  assigned_by?: string | null;
   create_date?: string | null;
   write_date?: string | null;
   sla_deadline?: string | null;
@@ -1323,9 +1325,16 @@ export default function TicketDetailsModal({
                         }
                       />
                     ) : (
-                      <span className="text-xs font-semibold block mt-0.5">
-                        {ticket.assigned_to || "Non assigné"}
-                      </span>
+                      <div className="flex flex-col mt-0.5 gap-0.5">
+                        <span className="text-xs font-semibold">{ticket.assigned_to || "Non assigné"}</span>
+                        {ticket.assigned_to && (
+                          <span className="text-[10px] text-muted-foreground/80 font-medium italic">
+                            {ticket.assigned_by_id === ticket.assigned_to_id 
+                              ? "Auto-assigné" 
+                              : `Assigné par : ${ticket.assigned_by || 'Admin'}`}
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
