@@ -15,6 +15,7 @@
         'security/ir.model.access.csv',
         'data/it_domain_data.xml',
         'data/sla_data.xml',
+        'data/user_data.xml',        # Comptes de démo (user / tech / admin) — noupdate=1
         'views/ticket_views.xml',
         'views/sla_views.xml',
         'views/users_views.xml',

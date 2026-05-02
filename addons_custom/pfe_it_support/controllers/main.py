@@ -106,7 +106,11 @@ class SupportTicketController(http.Controller):
             ], limit=1)
 
             if existing:
-                return self._json_response({'status': 409, 'message': 'Cet email est déjà utilisé.'}, 409)
+                return self._json_response({
+                    'status': 409,
+                    'message': f"Un compte existe déjà avec l'adresse \"{email}\". Veuillez vous connecter ou utiliser une autre adresse.",
+                    'email_exists': True,
+                }, 409)
 
             # Assigner le groupe "utilisateur interne" pour que l'utilisateur soit
             # gérable comme tous les autres dans Odoo (Internal User, non Portal).
