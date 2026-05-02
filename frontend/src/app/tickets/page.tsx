@@ -29,7 +29,6 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAuth } from "@/lib/auth";
 import { ODOO_URL } from "@/lib/config";
 
-
 type TicketType = {
   id: number;
   name: string;
@@ -51,7 +50,14 @@ type AgentType = {
   role?: string;
 };
 
-const ACTIVE_STATES  = ["new", "assigned", "in_progress", "waiting", "blocked", "escalated"];
+const ACTIVE_STATES = [
+  "new",
+  "assigned",
+  "in_progress",
+  "waiting",
+  "blocked",
+  "escalated",
+];
 const RESOLVED_STATES = ["resolved", "closed"];
 
 function Dashboard() {
@@ -77,7 +83,9 @@ function Dashboard() {
     priorities: [],
   });
 
-  const [openDropdown, setOpenDropdown] = useState<"status" | "priority" | "agent" | null>(null);
+  const [openDropdown, setOpenDropdown] = useState<
+    "status" | "priority" | "agent" | null
+  >(null);
 
   const [agents, setAgents] = useState<AgentType[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<string>("");
@@ -88,7 +96,7 @@ function Dashboard() {
     { value: "0", label: "Basse" },
     { value: "1", label: "Moyenne" },
     { value: "2", label: "Haute" },
-    { value: "3", label: "Critique" }
+    { value: "3", label: "Critique" },
   ];
 
   const fetchTickets = async () => {
@@ -110,23 +118,46 @@ function Dashboard() {
 
   useEffect(() => {
     // Fetch categories dynamically
-    axios.get(`${ODOO_URL}/api/categories`).then(res => {
+    axios
+      .get(`${ODOO_URL}/api/categories`)
+      .then((res) => {
+        if (res.data.status === 200) {
+          setCategories(res.data.data);
+        } else {
+          setCategories([
+            "Logiciel",
+            "Matériel",
+            "Accès",
+            "Réseau",
+            "Messagerie",
+            "Sécurité",
+            "Infrastructure",
+            "Autre",
+          ]);
+        }
+      })
+      .catch((e) => {
+        console.warn("Categories fetch failed, using fallback:", e.message);
+        setCategories([
+          "Logiciel",
+          "Matériel",
+          "Accès",
+          "Réseau",
+          "Messagerie",
+          "Sécurité",
+          "Infrastructure",
+          "Autre",
+        ]);
+      });
 
-      if (res.data.status === 200) {
-        setCategories(res.data.data);
-      } else {
-        setCategories(["Logiciel", "Matériel", "Accès", "Réseau", "Messagerie", "Sécurité", "Infrastructure", "Autre"]);
-      }
-    }).catch((e) => {
-      console.warn("Categories fetch failed, using fallback:", e.message);
-      setCategories(["Logiciel", "Matériel", "Accès", "Réseau", "Messagerie", "Sécurité", "Infrastructure", "Autre"]);
-    });
-    
     // Fetch all users list (for admin / tech views to filter by any person)
     if (user?.x_support_role !== "user") {
-      axios.get(`${ODOO_URL}/api/admin/users`).then(res => {
-        if (res.data.status === 200) setAgents(res.data.data);
-      }).catch(() => {});
+      axios
+        .get(`${ODOO_URL}/api/admin/users`)
+        .then((res) => {
+          if (res.data.status === 200) setAgents(res.data.data);
+        })
+        .catch(() => {});
     }
 
     fetchTickets();
@@ -136,9 +167,10 @@ function Dashboard() {
   useEffect(() => {
     const poll = async () => {
       try {
-        const url = user?.x_support_role === "user"
-          ? `${ODOO_URL}/api/tickets?user_id=${user.id}`
-          : `${ODOO_URL}/api/tickets`;
+        const url =
+          user?.x_support_role === "user"
+            ? `${ODOO_URL}/api/tickets?user_id=${user.id}`
+            : `${ODOO_URL}/api/tickets`;
 
         const res = await axios.get(url);
         if (res.data.status === 200) {
@@ -153,7 +185,10 @@ function Dashboard() {
     return () => clearInterval(interval);
   }, [user]);
 
-  const toggleFilter = (key: "categories" | "statuses" | "priorities", value: string) => {
+  const toggleFilter = (
+    key: "categories" | "statuses" | "priorities",
+    value: string,
+  ) => {
     setActiveFilters((prev) => {
       const current = prev[key];
       const updated = current.includes(value)
@@ -164,7 +199,12 @@ function Dashboard() {
   };
 
   const resetFilters = () => {
-    setActiveFilters({ search: "", categories: [], statuses: [], priorities: [] });
+    setActiveFilters({
+      search: "",
+      categories: [],
+      statuses: [],
+      priorities: [],
+    });
     setSelectedAgent("");
     setOpenDropdown(null);
   };
@@ -182,13 +222,18 @@ function Dashboard() {
     const safeName = (ticket.name || "").toLowerCase();
     const safeDesc = (ticket.description || "").toLowerCase();
     const safeSearch = activeFilters.search.toLowerCase();
-    const matchesSearch = !safeSearch || safeName.includes(safeSearch) || safeDesc.includes(safeSearch);
+    const matchesSearch =
+      !safeSearch ||
+      safeName.includes(safeSearch) ||
+      safeDesc.includes(safeSearch);
 
     // 2. Categories (Already filtered by the backend if one is selected, but kept for consistency)
     const ticketCat = ticket.category ? ticket.category.toLowerCase() : "autre";
     const matchesCategory =
       activeFilters.categories.length === 0 ||
-      activeFilters.categories.some((cat) => ticketCat.includes(cat.toLowerCase()));
+      activeFilters.categories.some((cat) =>
+        ticketCat.includes(cat.toLowerCase()),
+      );
 
     // 3. Statuses
     const sInfo = getStatusInfo(ticket.state);
@@ -208,34 +253,59 @@ function Dashboard() {
         ? !ticket.assigned_to
         : ticket.assigned_to === selectedAgent);
 
-    return matchesSearch && matchesCategory && matchesStatus && matchesPriority && matchesAgent;
+    return (
+      matchesSearch &&
+      matchesCategory &&
+      matchesStatus &&
+      matchesPriority &&
+      matchesAgent
+    );
   });
 
   // ── Tab split ────────────────────────────────────────────────────────────
-  const activeTabTickets   = filteredTickets.filter(t => ACTIVE_STATES.includes(t.state));
-  const resolvedTabTickets = filteredTickets.filter(t => RESOLVED_STATES.includes(t.state));
-  const tabFilteredTickets = activeTab === "active" ? activeTabTickets : resolvedTabTickets;
+  const activeTabTickets = filteredTickets.filter((t) =>
+    ACTIVE_STATES.includes(t.state),
+  );
+  const resolvedTabTickets = filteredTickets.filter((t) =>
+    RESOLVED_STATES.includes(t.state),
+  );
+  const tabFilteredTickets =
+    activeTab === "active" ? activeTabTickets : resolvedTabTickets;
 
   // KPI calculations
   const totalTickets = tickets.length;
-  const resolvedCount = tickets.filter((t) => ["resolved", "closed"].includes(t.state)).length;
-  const breachedCount = tickets.filter((t) => !["resolved", "closed"].includes(t.state) && t.sla_status === "breached").length;
-  const inProgressCount = tickets.filter((t) => !["resolved", "closed"].includes(t.state) && t.sla_status !== "breached").length;
+  const resolvedCount = tickets.filter((t) =>
+    ["resolved", "closed"].includes(t.state),
+  ).length;
+  const breachedCount = tickets.filter(
+    (t) =>
+      !["resolved", "closed"].includes(t.state) && t.sla_status === "breached",
+  ).length;
+  const inProgressCount = tickets.filter(
+    (t) =>
+      !["resolved", "closed"].includes(t.state) && t.sla_status !== "breached",
+  ).length;
   const escalatedCount = tickets.filter((t) => t.state === "escalated").length;
 
   const isUser = user?.x_support_role === "user" || !user?.x_support_role;
 
   return (
-    <div className="p-6 lg:p-8 max-w-[1400px] mx-auto space-y-6" onClick={() => setOpenDropdown(null)}>
+    <div
+      className="p-6 lg:p-8 max-w-[1400px] mx-auto space-y-6"
+      onClick={() => setOpenDropdown(null)}
+    >
       {/* ─── Header ─── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-in">
         <div>
-
           <h1 className="text-2xl font-bold tracking-tight">
-            {user ? `Bonjour, ${user.name.split(" ")[0].charAt(0).toUpperCase() + user.name.split(" ")[0].slice(1)} ` : "Mes Tickets"}
+            {user
+              ? `Bonjour, ${user.name.split(" ")[0].charAt(0).toUpperCase() + user.name.split(" ")[0].slice(1)} `
+              : "Mes Tickets"}
           </h1>
           <br />
-          <h1 className="text-2xl font-bold tracking-tight">Gestion des Tickets</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Gestion des Tickets
+          </h1>
 
           <p className="text-sm text-[hsl(var(--muted-foreground))] mt-0.5">
             Gérez vos demandes de support IT
@@ -252,28 +322,72 @@ function Dashboard() {
       </div>
 
       {/* ─── KPI Stats Row ─── */}
-      <div className={`grid gap-4 ${isUser ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-2 lg:grid-cols-5"}`}>
-        <StatsCard title="Total Tickets" value={totalTickets} icon={<Ticket size={20} />} color="#6366f1" loading={loading} delay={0} />
-        <StatsCard title="Dépassé" value={breachedCount} icon={<AlertTriangle size={20} />} color="#ef4444" loading={loading} delay={80} />
+      <div
+        className={`grid gap-4 ${isUser ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-2 lg:grid-cols-5"}`}
+      >
+        <StatsCard
+          title="Total Tickets"
+          value={totalTickets}
+          icon={<Ticket size={20} />}
+          color="#6366f1"
+          loading={loading}
+          delay={0}
+        />
+        <StatsCard
+          title="Dépassé"
+          value={breachedCount}
+          icon={<AlertTriangle size={20} />}
+          color="#ef4444"
+          loading={loading}
+          delay={80}
+        />
         {!isUser && (
-          <StatsCard title="Tickets Escaladés" value={escalatedCount} icon={<ArrowUpRight size={20} />} color="#f59e0b" loading={loading} delay={160} />
+          <StatsCard
+            title="Tickets Escaladés"
+            value={escalatedCount}
+            icon={<ArrowUpRight size={20} />}
+            color="#f59e0b"
+            loading={loading}
+            delay={160}
+          />
         )}
-        <StatsCard title="En Cours" value={inProgressCount} icon={<Activity size={20} />} color="#3b82f6" loading={loading} delay={isUser ? 160 : 240} />
-        <StatsCard title="Résolus" value={resolvedCount} icon={<CheckCircle2 size={20} />} color="#10b981" loading={loading} delay={isUser ? 240 : 320} />
+        <StatsCard
+          title="En Cours"
+          value={inProgressCount}
+          icon={<Activity size={20} />}
+          color="#3b82f6"
+          loading={loading}
+          delay={isUser ? 160 : 240}
+        />
+        <StatsCard
+          title="Résolus"
+          value={resolvedCount}
+          icon={<CheckCircle2 size={20} />}
+          color="#10b981"
+          loading={loading}
+          delay={isUser ? 240 : 320}
+        />
       </div>
 
       {/* ─── Filters Bar ─── */}
-      <div className="glass-card relative z-50 p-4 space-y-4 shadow-sm animate-fade-in" style={{ animationDelay: "0.2s" }}>
+      <div
+        className="glass-card relative z-50 p-4 space-y-4 shadow-sm animate-fade-in"
+        style={{ animationDelay: "0.2s" }}
+      >
         <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
-
           {/* Top Row: Search & View Toggle */}
           <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto flex-1">
             <div className="relative flex-1 w-full max-w-md">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" size={16} />
+              <Search
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]"
+                size={16}
+              />
               <input
                 type="text"
                 value={activeFilters.search}
-                onChange={(e) => setActiveFilters({ ...activeFilters, search: e.target.value })}
+                onChange={(e) =>
+                  setActiveFilters({ ...activeFilters, search: e.target.value })
+                }
                 placeholder="Rechercher un ticket..."
                 className="input-field focus-ring !pl-11 h-10 bg-[hsl(var(--background)/0.5)]"
                 id="search-input"
@@ -286,20 +400,32 @@ function Dashboard() {
             <div className="flex flex-wrap gap-2 items-center">
               <div className="relative" onClick={(e) => e.stopPropagation()}>
                 <button
-                  onClick={() => setOpenDropdown(openDropdown === "status" ? null : "status")}
-                  className={`flex items-center gap-1.5 h-10 px-3.5 rounded-lg text-sm font-semibold transition-all duration-200 border ${activeFilters.statuses.length > 0 || openDropdown === "status"
+                  onClick={() =>
+                    setOpenDropdown(openDropdown === "status" ? null : "status")
+                  }
+                  className={`flex items-center gap-1.5 h-10 px-3.5 rounded-lg text-sm font-semibold transition-all duration-200 border ${
+                    activeFilters.statuses.length > 0 ||
+                    openDropdown === "status"
                       ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
                       : "bg-transparent border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)] hover:text-[hsl(var(--foreground))]"
-                    }`}
+                  }`}
                 >
                   <Filter size={14} />
-                  Statut {activeFilters.statuses.length > 0 && `(${activeFilters.statuses.length})`}
-                  <ChevronDown size={14} className={`transition-transform ${openDropdown === "status" ? "rotate-180" : ""}`} />
+                  Statut{" "}
+                  {activeFilters.statuses.length > 0 &&
+                    `(${activeFilters.statuses.length})`}
+                  <ChevronDown
+                    size={14}
+                    className={`transition-transform ${openDropdown === "status" ? "rotate-180" : ""}`}
+                  />
                 </button>
                 {openDropdown === "status" && (
                   <div className="absolute top-11 right-0 sm:left-0 sm:right-auto mt-1 w-56 bg-white dark:bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl shadow-xl z-[100] animate-fade-in flex flex-col gap-1 p-2">
-                    {statuses.map(st => (
-                      <label key={st} className="flex items-center gap-2.5 p-2 hover:bg-[hsl(var(--muted))] rounded-md cursor-pointer text-sm font-medium transition-colors">
+                    {statuses.map((st) => (
+                      <label
+                        key={st}
+                        className="flex items-center gap-2.5 p-2 hover:bg-[hsl(var(--muted))] rounded-md cursor-pointer text-sm font-medium transition-colors"
+                      >
                         <input
                           type="checkbox"
                           checked={activeFilters.statuses.includes(st)}
@@ -315,24 +441,42 @@ function Dashboard() {
 
               <div className="relative" onClick={(e) => e.stopPropagation()}>
                 <button
-                  onClick={() => setOpenDropdown(openDropdown === "priority" ? null : "priority")}
-                  className={`flex items-center gap-1.5 h-10 px-3.5 rounded-lg text-sm font-semibold transition-all duration-200 border ${activeFilters.priorities.length > 0 || openDropdown === "priority"
+                  onClick={() =>
+                    setOpenDropdown(
+                      openDropdown === "priority" ? null : "priority",
+                    )
+                  }
+                  className={`flex items-center gap-1.5 h-10 px-3.5 rounded-lg text-sm font-semibold transition-all duration-200 border ${
+                    activeFilters.priorities.length > 0 ||
+                    openDropdown === "priority"
                       ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
                       : "bg-transparent border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)] hover:text-[hsl(var(--foreground))]"
-                    }`}
+                  }`}
                 >
                   <AlertTriangle size={14} />
-                  Priorité {activeFilters.priorities.length > 0 && `(${activeFilters.priorities.length})`}
-                  <ChevronDown size={14} className={`transition-transform ${openDropdown === "priority" ? "rotate-180" : ""}`} />
+                  Priorité{" "}
+                  {activeFilters.priorities.length > 0 &&
+                    `(${activeFilters.priorities.length})`}
+                  <ChevronDown
+                    size={14}
+                    className={`transition-transform ${openDropdown === "priority" ? "rotate-180" : ""}`}
+                  />
                 </button>
                 {openDropdown === "priority" && (
                   <div className="absolute top-11 right-0 w-56 bg-white dark:bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl shadow-xl z-[100] animate-fade-in flex flex-col gap-1 p-2">
-                    {priorities.map(prio => (
-                      <label key={prio.value} className="flex items-center gap-2.5 p-2 hover:bg-[hsl(var(--muted))] rounded-md cursor-pointer text-sm font-medium transition-colors">
+                    {priorities.map((prio) => (
+                      <label
+                        key={prio.value}
+                        className="flex items-center gap-2.5 p-2 hover:bg-[hsl(var(--muted))] rounded-md cursor-pointer text-sm font-medium transition-colors"
+                      >
                         <input
                           type="checkbox"
-                          checked={activeFilters.priorities.includes(prio.value)}
-                          onChange={() => toggleFilter("priorities", prio.value)}
+                          checked={activeFilters.priorities.includes(
+                            prio.value,
+                          )}
+                          onChange={() =>
+                            toggleFilter("priorities", prio.value)
+                          }
                           className="accent-[hsl(var(--primary))] w-4 h-4 cursor-pointer"
                         />
                         {prio.label}
@@ -346,7 +490,9 @@ function Dashboard() {
               {!isUser && agents.length > 0 && (
                 <div className="relative" onClick={(e) => e.stopPropagation()}>
                   <button
-                    onClick={() => setOpenDropdown(openDropdown === "agent" ? null : "agent")}
+                    onClick={() =>
+                      setOpenDropdown(openDropdown === "agent" ? null : "agent")
+                    }
                     className={`flex items-center gap-1.5 h-10 px-3.5 rounded-lg text-sm font-semibold transition-all duration-200 border ${
                       selectedAgent !== "" || openDropdown === "agent"
                         ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
@@ -356,75 +502,123 @@ function Dashboard() {
                   >
                     <Users size={14} />
                     Agent {selectedAgent !== "" && `(•)`}
-                    <ChevronDown size={14} className={`transition-transform ${openDropdown === "agent" ? "rotate-180" : ""}`} />
+                    <ChevronDown
+                      size={14}
+                      className={`transition-transform ${openDropdown === "agent" ? "rotate-180" : ""}`}
+                    />
                   </button>
                   {openDropdown === "agent" && (
                     <div className="absolute top-11 right-0 sm:left-0 sm:right-auto mt-1 w-56 bg-white dark:bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl shadow-xl z-[100] animate-fade-in flex flex-col gap-1 p-2">
                       {/* Option: tous */}
                       <button
-                        onClick={() => { setSelectedAgent(""); setOpenDropdown(null); }}
+                        onClick={() => {
+                          setSelectedAgent("");
+                          setOpenDropdown(null);
+                        }}
                         className={`flex items-center gap-2 w-full text-left px-2.5 py-2 rounded-md text-sm font-medium transition-colors ${
                           selectedAgent === ""
                             ? "bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]"
                             : "hover:bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]"
                         }`}
                       >
-                        <span className="w-5 h-5 rounded-full bg-[hsl(var(--muted))] flex items-center justify-center text-[9px] font-bold">✓</span>
+                        <span className="w-5 h-5 rounded-full bg-[hsl(var(--muted))] flex items-center justify-center text-[9px] font-bold">
+                          ✓
+                        </span>
                         Tous les agents
                       </button>
                       {/* Option: non assigné */}
                       <button
-                        onClick={() => { setSelectedAgent("__unassigned__"); setOpenDropdown(null); }}
+                        onClick={() => {
+                          setSelectedAgent("__unassigned__");
+                          setOpenDropdown(null);
+                        }}
                         className={`flex items-center gap-2 w-full text-left px-2.5 py-2 rounded-md text-sm font-medium transition-colors ${
                           selectedAgent === "__unassigned__"
                             ? "bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]"
                             : "hover:bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]"
                         }`}
                       >
-                        <span className="w-5 h-5 rounded-full border-2 border-dashed border-[hsl(var(--border))] flex items-center justify-center text-[9px]">−</span>
+                        <span className="w-5 h-5 rounded-full border-2 border-dashed border-[hsl(var(--border))] flex items-center justify-center text-[9px]">
+                          −
+                        </span>
                         <span className="italic">Non assigné</span>
                       </button>
                       <div className="my-1 border-t border-[hsl(var(--border)/0.5)]" />
                       {agents
-                        .filter(agent => agent.role === 'admin' || agent.role === 'agent' || agent.role === 'tech')
-                        .map(agent => {
-                        const initials = agent.name.trim().split(" ").filter(Boolean).map((p: any) => p[0]).join("").toUpperCase().slice(0, 2);
-                        const colors = ["#6366f1","#8b5cf6","#ec4899","#10b981","#f59e0b","#06b6d4","#3b82f6","#ef4444"];
-                        let hash = 0; for (let i=0;i<agent.name.length;i++) hash = agent.name.charCodeAt(i) + ((hash<<5)-hash);
-                        const color = colors[Math.abs(hash) % colors.length];
-                        
-                        const roleLabel = agent.role === 'admin' ? 'ADMINISTRATEUR' : 'TECHNICIEN';
-                        const roleColor = agent.role === 'admin' ? 'text-indigo-500 dark:text-indigo-400' : 'text-emerald-500 dark:text-emerald-400';
+                        .filter(
+                          (agent) =>
+                            agent.role === "admin" ||
+                            agent.role === "agent" ||
+                            agent.role === "tech",
+                        )
+                        .map((agent) => {
+                          const initials = agent.name
+                            .trim()
+                            .split(" ")
+                            .filter(Boolean)
+                            .map((p: any) => p[0])
+                            .join("")
+                            .toUpperCase()
+                            .slice(0, 2);
+                          const colors = [
+                            "#6366f1",
+                            "#8b5cf6",
+                            "#ec4899",
+                            "#10b981",
+                            "#f59e0b",
+                            "#06b6d4",
+                            "#3b82f6",
+                            "#ef4444",
+                          ];
+                          let hash = 0;
+                          for (let i = 0; i < agent.name.length; i++)
+                            hash =
+                              agent.name.charCodeAt(i) + ((hash << 5) - hash);
+                          const color = colors[Math.abs(hash) % colors.length];
 
-                        return (
-                          <button
-                            key={agent.id}
-                            onClick={() => { setSelectedAgent(agent.name); setOpenDropdown(null); }}
-                            className={`flex items-center gap-2 w-full text-left px-2.5 py-2 rounded-md text-sm font-medium transition-colors ${
-                              selectedAgent === agent.name
-                                ? "bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]"
-                                : "hover:bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]"
-                            }`}
-                          >
-                            <span
-                              className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
-                              style={{ background: color }}
-                            >{initials}</span>
-                            <div className="flex flex-col min-w-0">
-                              <span className="truncate">{agent.name}</span>
-                              <span className={`text-[9px] uppercase font-bold tracking-wider ${roleColor}`}>
-                                {roleLabel}
+                          const roleLabel =
+                            agent.role === "admin"
+                              ? "ADMINISTRATEUR"
+                              : "TECHNICIEN";
+                          const roleColor =
+                            agent.role === "admin"
+                              ? "text-indigo-500 dark:text-indigo-400"
+                              : "text-emerald-500 dark:text-emerald-400";
+
+                          return (
+                            <button
+                              key={agent.id}
+                              onClick={() => {
+                                setSelectedAgent(agent.name);
+                                setOpenDropdown(null);
+                              }}
+                              className={`flex items-center gap-2 w-full text-left px-2.5 py-2 rounded-md text-sm font-medium transition-colors ${
+                                selectedAgent === agent.name
+                                  ? "bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]"
+                                  : "hover:bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]"
+                              }`}
+                            >
+                              <span
+                                className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
+                                style={{ background: color }}
+                              >
+                                {initials}
                               </span>
-                            </div>
-                          </button>
-                        );
-                      })}
+                              <div className="flex flex-col min-w-0">
+                                <span className="truncate">{agent.name}</span>
+                                <span
+                                  className={`text-[9px] uppercase font-bold tracking-wider ${roleColor}`}
+                                >
+                                  {roleLabel}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
                     </div>
                   )}
                 </div>
               )}
-
-
             </div>
 
             {/* View Toggle */}
@@ -456,10 +650,11 @@ function Dashboard() {
                 <button
                   key={cat}
                   onClick={() => toggleFilter("categories", cat)}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 cursor-pointer border ${isSelected
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 cursor-pointer border ${
+                    isSelected
                       ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
                       : "bg-[hsl(var(--background)/0.5)] border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)] hover:text-[hsl(var(--foreground))]"
-                    }`}
+                  }`}
                 >
                   {cat}
                 </button>
@@ -470,7 +665,11 @@ function Dashboard() {
           {/* Reset Button & Dynamic Counter */}
           <div className="flex items-center gap-4 w-full sm:w-auto ml-auto">
             <span className="text-xs font-medium text-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted)/0.5)] px-3 py-1.5 rounded-md">
-              <span className="text-[hsl(var(--foreground))] font-bold">{filteredTickets.length}</span> ticket{filteredTickets.length !== 1 ? 's' : ''} {hasActiveFilters && "trouvé(s)"}
+              <span className="text-[hsl(var(--foreground))] font-bold">
+                {filteredTickets.length}
+              </span>{" "}
+              ticket{filteredTickets.length !== 1 ? "s" : ""}{" "}
+              {hasActiveFilters && "trouvé(s)"}
             </span>
 
             {hasActiveFilters && (
@@ -489,14 +688,18 @@ function Dashboard() {
                 onClick={() => setActiveTab("active")}
                 title="En attente de traitement"
                 className={`flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-semibold transition-all duration-150
-                  ${activeTab === "active"
-                    ? "bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm"
-                    : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"}`}
+                  ${
+                    activeTab === "active"
+                      ? "bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm"
+                      : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+                  }`}
               >
                 <ClipboardList size={13} />
                 <span className="hidden sm:inline">En attente</span>
-                <span className={`text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full transition-colors
-                  ${activeTab === "active" ? "bg-[hsl(var(--primary))] text-white" : "bg-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]"}`}>
+                <span
+                  className={`text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full transition-colors
+                  ${activeTab === "active" ? "bg-[hsl(var(--primary))] text-white" : "bg-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]"}`}
+                >
                   {activeTabTickets.length}
                 </span>
               </button>
@@ -504,14 +707,18 @@ function Dashboard() {
                 onClick={() => setActiveTab("resolved")}
                 title="Terminés / Résolus"
                 className={`flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-semibold transition-all duration-150
-                  ${activeTab === "resolved"
-                    ? "bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm"
-                    : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"}`}
+                  ${
+                    activeTab === "resolved"
+                      ? "bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm"
+                      : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+                  }`}
               >
                 <History size={13} />
                 <span className="hidden sm:inline">Terminés</span>
-                <span className={`text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full transition-colors
-                  ${activeTab === "resolved" ? "bg-emerald-500 text-white" : "bg-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]"}`}>
+                <span
+                  className={`text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full transition-colors
+                  ${activeTab === "resolved" ? "bg-emerald-500 text-white" : "bg-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]"}`}
+                >
                   {resolvedTabTickets.length}
                 </span>
               </button>
@@ -522,32 +729,56 @@ function Dashboard() {
 
       {/* ─── Ticket List ─── */}
       {tabFilteredTickets.length === 0 ? (
-        <div className="glass-card flex flex-col items-center justify-center py-20 text-center animate-fade-in" style={{ animationDelay: "0.3s" }}>
+        <div
+          className="glass-card flex flex-col items-center justify-center py-20 text-center animate-fade-in"
+          style={{ animationDelay: "0.3s" }}
+        >
           <div className="w-16 h-16 rounded-2xl bg-[hsl(var(--muted))] flex items-center justify-center mb-4">
-            {activeTab === "active"
-              ? <ClipboardList size={28} className="text-[hsl(var(--muted-foreground)/0.5)]" />
-              : <History size={28} className="text-[hsl(var(--muted-foreground)/0.5)]" />}
+            {activeTab === "active" ? (
+              <ClipboardList
+                size={28}
+                className="text-[hsl(var(--muted-foreground)/0.5)]"
+              />
+            ) : (
+              <History
+                size={28}
+                className="text-[hsl(var(--muted-foreground)/0.5)]"
+              />
+            )}
           </div>
           <h3 className="text-lg font-semibold mb-1">
-            {activeTab === "active" ? "Aucun ticket actif" : "Aucun ticket résolu"}
+            {activeTab === "active"
+              ? "Aucun ticket actif"
+              : "Aucun ticket résolu"}
           </h3>
           <p className="text-sm text-[hsl(var(--muted-foreground))] max-w-sm">
             {tickets.length === 0
-              ? "Créez votre premier ticket en cliquant sur le bouton \"Nouveau ticket\" ci-dessus."
+              ? 'Créez votre premier ticket en cliquant sur le bouton "Nouveau ticket" ci-dessus.'
               : activeTab === "active"
-              ? "Tous les tickets sont résolus ou aucun ne correspond à vos filtres."
-              : "Aucun ticket résolu ne correspond à vos filtres."}
+                ? "Tous les tickets sont résolus ou aucun ne correspond à vos filtres."
+                : "Aucun ticket résolu ne correspond à vos filtres."}
           </p>
           {hasActiveFilters && (
-            <button onClick={resetFilters} className="mt-6 btn-ghost text-sm font-semibold text-[hsl(var(--primary))] hover:text-[hsl(var(--primary)/0.9)] hover:bg-[hsl(var(--primary)/0.1)] border border-[hsl(var(--primary)/0.2)]">
+            <button
+              onClick={resetFilters}
+              className="mt-6 btn-ghost text-sm font-semibold text-[hsl(var(--primary))] hover:text-[hsl(var(--primary)/0.9)] hover:bg-[hsl(var(--primary)/0.1)] border border-[hsl(var(--primary)/0.2)]"
+            >
               Effacer tous les filtres
             </button>
           )}
         </div>
       ) : viewMode === "cards" ? (
-        <div key={activeTab} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div
+          key={activeTab}
+          className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
+        >
           {tabFilteredTickets.map((ticket, idx) => (
-            <TicketCard key={ticket.id} ticket={ticket} index={idx} onRefresh={fetchTickets} />
+            <TicketCard
+              key={ticket.id}
+              ticket={ticket}
+              index={idx}
+              onRefresh={fetchTickets}
+            />
           ))}
         </div>
       ) : (

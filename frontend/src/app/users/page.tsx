@@ -5,12 +5,23 @@ import axios from "axios";
 import { useAuth } from "@/lib/auth";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import {
-  User, Shield, Briefcase, Ban, CheckCircle2, Search,
-  Loader2, Filter, ChevronDown, XCircle, Check, X, UserCheck, UserX
+  User,
+  Shield,
+  Briefcase,
+  Ban,
+  CheckCircle2,
+  Search,
+  Loader2,
+  Filter,
+  ChevronDown,
+  XCircle,
+  Check,
+  X,
+  UserCheck,
+  UserX,
 } from "lucide-react";
 import { ODOO_URL as ODOO } from "@/lib/config";
 import { toast } from "sonner";
-
 
 /* ─────────────────────────────────────────────────────── types ── */
 type UserData = {
@@ -24,23 +35,56 @@ type UserData = {
 
 /* ─────────────────────────────────────────────────────── consts ── */
 
+const DOMAINS = [
+  "Réseau",
+  "Logiciel",
+  "Matériel",
+  "Accès",
+  "Messagerie",
+  "Infrastructure",
+  "Sécurité",
+  "Autre",
+];
 
-const DOMAINS = ["Réseau", "Logiciel", "Matériel", "Accès", "Messagerie", "Infrastructure", "Sécurité", "Autre"];
-
-const ROLE_META: Record<string, { label: string; color: string; bg: string; border: string; dot: string }> = {
-  admin: { label: "Administrateur", color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/25", dot: "bg-purple-400" },
-  agent: { label: "Technicien",     color: "text-sky-400",    bg: "bg-sky-500/10",    border: "border-sky-500/25",    dot: "bg-sky-400"    },
-  user:  { label: "Utilisateur",    color: "text-slate-400",  bg: "bg-slate-500/10",  border: "border-slate-500/25",  dot: "bg-slate-400"  },
+const ROLE_META: Record<
+  string,
+  { label: string; color: string; bg: string; border: string; dot: string }
+> = {
+  admin: {
+    label: "Administrateur",
+    color: "text-purple-400",
+    bg: "bg-purple-500/10",
+    border: "border-purple-500/25",
+    dot: "bg-purple-400",
+  },
+  agent: {
+    label: "Technicien",
+    color: "text-sky-400",
+    bg: "bg-sky-500/10",
+    border: "border-sky-500/25",
+    dot: "bg-sky-400",
+  },
+  user: {
+    label: "Utilisateur",
+    color: "text-slate-400",
+    bg: "bg-slate-500/10",
+    border: "border-slate-500/25",
+    dot: "bg-slate-400",
+  },
 };
-
-
 
 /* ─────────── InlineRoleSelect ─────────── */
 function InlineRoleSelect({
-  userId, currentRole, selfId, updating,
+  userId,
+  currentRole,
+  selfId,
+  updating,
   onUpdate,
 }: {
-  userId: number; currentRole: string; selfId?: number; updating: number | null;
+  userId: number;
+  currentRole: string;
+  selfId?: number;
+  updating: number | null;
   onUpdate: (id: number, updates: Partial<UserData>) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -52,7 +96,8 @@ function InlineRoleSelect({
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -60,7 +105,7 @@ function InlineRoleSelect({
 
   const handleOpen = () => {
     setDraftRole(currentRole);
-    setOpen(p => !p);
+    setOpen((p) => !p);
   };
 
   const handleSave = () => {
@@ -78,12 +123,18 @@ function InlineRoleSelect({
           ${!isSelf && !isBusy ? "hover:brightness-110 cursor-pointer" : "opacity-60 cursor-not-allowed"}
         `}
       >
-        {isBusy
-          ? <Loader2 size={11} className="animate-spin" />
-          : <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
-        }
+        {isBusy ? (
+          <Loader2 size={11} className="animate-spin" />
+        ) : (
+          <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
+        )}
         {meta.label}
-        {!isSelf && <ChevronDown size={11} className={`transition-transform ${open ? "rotate-180" : ""}`} />}
+        {!isSelf && (
+          <ChevronDown
+            size={11}
+            className={`transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        )}
       </button>
 
       {open && (
@@ -94,12 +145,15 @@ function InlineRoleSelect({
                 key={val}
                 onClick={() => setDraftRole(val)}
                 className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-bold transition-all
-                  ${val === draftRole
-                    ? `${m.bg} ${m.color} ${m.border} border`
-                    : "hover:bg-[hsl(var(--muted)/0.6)] text-[hsl(var(--foreground))]"
+                  ${
+                    val === draftRole
+                      ? `${m.bg} ${m.color} ${m.border} border`
+                      : "hover:bg-[hsl(var(--muted)/0.6)] text-[hsl(var(--foreground))]"
                   }`}
               >
-                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${m.dot}`} />
+                <span
+                  className={`w-2 h-2 rounded-full flex-shrink-0 ${m.dot}`}
+                />
                 {m.label}
                 {val === draftRole && <Check size={13} className="ml-auto" />}
               </button>
@@ -122,9 +176,16 @@ function InlineRoleSelect({
 
 /* ─────────── InlineDomainSelect ─────────── */
 function InlineDomainSelect({
-  userId, domains, role, updating, onUpdate,
+  userId,
+  domains,
+  role,
+  updating,
+  onUpdate,
 }: {
-  userId: number; domains: string[]; role: string; updating: number | null;
+  userId: number;
+  domains: string[];
+  role: string;
+  updating: number | null;
   onUpdate: (id: number, updates: Partial<UserData>) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -135,7 +196,8 @@ function InlineDomainSelect({
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -143,7 +205,7 @@ function InlineDomainSelect({
 
   const handleOpen = () => {
     setDraftDomains(domains);
-    setOpen(p => !p);
+    setOpen((p) => !p);
   };
 
   const handleSave = () => {
@@ -157,21 +219,30 @@ function InlineDomainSelect({
   };
 
   const toggleDraft = (domain: string) => {
-    setDraftDomains(prev => prev.includes(domain) ? prev.filter(d => d !== domain) : [...prev, domain]);
+    setDraftDomains((prev) =>
+      prev.includes(domain)
+        ? prev.filter((d) => d !== domain)
+        : [...prev, domain],
+    );
   };
 
   if (!isTech) {
-    return <span className="text-[0.65rem] text-[hsl(var(--muted-foreground))] font-semibold">N/A</span>;
+    return (
+      <span className="text-[0.65rem] text-[hsl(var(--muted-foreground))] font-semibold">
+        N/A
+      </span>
+    );
   }
 
   // Check if draft has changed compared to original domains
-  const hasChanges = [...domains].sort().join(",") !== [...draftDomains].sort().join(",");
+  const hasChanges =
+    [...domains].sort().join(",") !== [...draftDomains].sort().join(",");
 
   return (
     <div ref={ref} className="relative">
       {/* Badges row + add button */}
       <div className="flex flex-wrap gap-1 items-center max-w-[200px]">
-        {domains.map(d => (
+        {domains.map((d) => (
           <span
             key={d}
             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[0.6rem] font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20"
@@ -184,7 +255,14 @@ function InlineDomainSelect({
           onClick={handleOpen}
           className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[0.6rem] font-bold border border-dashed border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-sky-500/40 hover:text-sky-400 hover:bg-sky-500/5 transition-all outline-none"
         >
-          {isBusy ? <Loader2 size={9} className="animate-spin" /> : <ChevronDown size={9} className={`transition-transform ${open ? "rotate-180" : ""}`} />}
+          {isBusy ? (
+            <Loader2 size={9} className="animate-spin" />
+          ) : (
+            <ChevronDown
+              size={9}
+              className={`transition-transform ${open ? "rotate-180" : ""}`}
+            />
+          )}
           Modifier
         </button>
       </div>
@@ -198,21 +276,24 @@ function InlineDomainSelect({
             </p>
           </div>
           <div className="p-2 space-y-1 max-h-56 overflow-y-auto custom-scrollbar">
-            {DOMAINS.map(d => {
+            {DOMAINS.map((d) => {
               const selected = draftDomains.includes(d);
               return (
                 <button
                   key={d}
                   onClick={() => toggleDraft(d)}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all
-                    ${selected
-                      ? "bg-sky-500/10 text-sky-400 border border-sky-500/20"
-                      : "hover:bg-[hsl(var(--muted)/0.5)] text-[hsl(var(--foreground))] border border-transparent"
+                    ${
+                      selected
+                        ? "bg-sky-500/10 text-sky-400 border border-sky-500/20"
+                        : "hover:bg-[hsl(var(--muted)/0.5)] text-[hsl(var(--foreground))] border border-transparent"
                     }`}
                 >
                   {d}
-                  <div className={`w-4 h-4 rounded-md border flex items-center justify-center flex-shrink-0 transition-all
-                    ${selected ? "bg-sky-500 border-sky-500" : "border-[hsl(var(--border))]"}`}>
+                  <div
+                    className={`w-4 h-4 rounded-md border flex items-center justify-center flex-shrink-0 transition-all
+                    ${selected ? "bg-sky-500 border-sky-500" : "border-[hsl(var(--border))]"}`}
+                  >
                     {selected && <Check size={10} className="text-white" />}
                   </div>
                 </button>
@@ -242,86 +323,159 @@ function UsersManagement() {
   const [updating, setUpdating] = useState<number | null>(null);
 
   const [activeFilters, setActiveFilters] = useState<{
-    search: string; roles: string[]; statuses: string[]; domains: string[];
+    search: string;
+    roles: string[];
+    statuses: string[];
+    domains: string[];
   }>({ search: "", roles: [], statuses: [], domains: [] });
 
-  const [openHeaderDropdown, setOpenHeaderDropdown] = useState<"role" | "status" | null>(null);
+  const [openHeaderDropdown, setOpenHeaderDropdown] = useState<
+    "role" | "status" | null
+  >(null);
 
-  const roles   = [{ value: "user", label: "Utilisateur" }, { value: "agent", label: "Technicien" }, { value: "admin", label: "Administrateur" }];
-  const statuses = [{ value: "active", label: "Actif" }, { value: "banned", label: "Banni" }];
+  const roles = [
+    { value: "user", label: "Utilisateur" },
+    { value: "agent", label: "Technicien" },
+    { value: "admin", label: "Administrateur" },
+  ];
+  const statuses = [
+    { value: "active", label: "Actif" },
+    { value: "banned", label: "Banni" },
+  ];
 
-  const toggleFilter = (key: "roles" | "statuses" | "domains", value: string) => {
-    setActiveFilters(prev => {
+  const toggleFilter = (
+    key: "roles" | "statuses" | "domains",
+    value: string,
+  ) => {
+    setActiveFilters((prev) => {
       const curr = prev[key];
-      return { ...prev, [key]: curr.includes(value) ? curr.filter(v => v !== value) : [...curr, value] };
+      return {
+        ...prev,
+        [key]: curr.includes(value)
+          ? curr.filter((v) => v !== value)
+          : [...curr, value],
+      };
     });
   };
 
-  const resetFilters = () => { setActiveFilters({ search: "", roles: [], statuses: [], domains: [] }); setOpenHeaderDropdown(null); };
-  const hasActiveFilters = activeFilters.search !== "" || activeFilters.roles.length > 0 || activeFilters.statuses.length > 0 || activeFilters.domains.length > 0;
+  const resetFilters = () => {
+    setActiveFilters({ search: "", roles: [], statuses: [], domains: [] });
+    setOpenHeaderDropdown(null);
+  };
+  const hasActiveFilters =
+    activeFilters.search !== "" ||
+    activeFilters.roles.length > 0 ||
+    activeFilters.statuses.length > 0 ||
+    activeFilters.domains.length > 0;
 
   const fetchUsers = async () => {
     try {
       const res = await axios.get(`${ODOO}/api/admin/users`);
       if (res.data.status === 200) setUsers(res.data.data);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { if (user?.x_support_role === "admin") fetchUsers(); }, [user]);
+  useEffect(() => {
+    if (user?.x_support_role === "admin") fetchUsers();
+  }, [user]);
 
-  const updateUser = useCallback(async (userId: number, updates: Partial<UserData>) => {
-    setUpdating(userId);
-    try {
-      const payload = { ...updates, caller_user_id: user?.id };
-      const res = await axios.put(`${ODOO}/api/admin/users/${userId}`, payload);
-      if (res.data.status !== 200) throw new Error(res.data.message || "Échec");
+  const updateUser = useCallback(
+    async (userId: number, updates: Partial<UserData>) => {
+      setUpdating(userId);
+      try {
+        const payload = { ...updates, caller_user_id: user?.id };
+        const res = await axios.put(
+          `${ODOO}/api/admin/users/${userId}`,
+          payload,
+        );
+        if (res.data.status !== 200)
+          throw new Error(res.data.message || "Échec");
 
-      const freshRole = res.data.x_support_role;
-      setUsers(prev => prev.map(u => {
-        if (u.id !== userId) return u;
-        return {
-          ...u, ...updates,
-          ...(freshRole ? { role: freshRole === "admin" ? "admin" : freshRole === "tech" ? "agent" : "user" } : {}),
-        };
-      }));
-      toast.success("Modification enregistrée", { icon: <UserCheck size={18} /> });
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || "Erreur serveur", { icon: <UserX size={18} /> });
-      fetchUsers();
-    } finally { setUpdating(null); }
-  }, [user?.id]);
+        const freshRole = res.data.x_support_role;
+        setUsers((prev) =>
+          prev.map((u) => {
+            if (u.id !== userId) return u;
+            return {
+              ...u,
+              ...updates,
+              ...(freshRole
+                ? {
+                    role:
+                      freshRole === "admin"
+                        ? "admin"
+                        : freshRole === "tech"
+                          ? "agent"
+                          : "user",
+                  }
+                : {}),
+            };
+          }),
+        );
+        toast.success("Modification enregistrée", {
+          icon: <UserCheck size={18} />,
+        });
+      } catch (e: any) {
+        toast.error(
+          e?.response?.data?.message || e?.message || "Erreur serveur",
+          { icon: <UserX size={18} /> },
+        );
+        fetchUsers();
+      } finally {
+        setUpdating(null);
+      }
+    },
+    [user?.id],
+  );
 
-  const filteredUsers = users.filter(u => {
+  const filteredUsers = users.filter((u) => {
     const s = activeFilters.search.toLowerCase();
-    if (s && !(u.name?.toLowerCase().includes(s) || u.email?.toLowerCase().includes(s))) return false;
-    if (activeFilters.roles.length > 0 && !activeFilters.roles.includes(u.role)) return false;
+    if (
+      s &&
+      !(u.name?.toLowerCase().includes(s) || u.email?.toLowerCase().includes(s))
+    )
+      return false;
+    if (activeFilters.roles.length > 0 && !activeFilters.roles.includes(u.role))
+      return false;
     const sv = u.active ? "active" : "banned";
-    if (activeFilters.statuses.length > 0 && !activeFilters.statuses.includes(sv)) return false;
+    if (
+      activeFilters.statuses.length > 0 &&
+      !activeFilters.statuses.includes(sv)
+    )
+      return false;
     if (activeFilters.domains.length > 0) {
-      const noneMatch = activeFilters.domains.includes("none") && u.it_domains.length === 0;
-      const domMatch  = u.it_domains.some(d => activeFilters.domains.includes(d));
+      const noneMatch =
+        activeFilters.domains.includes("none") && u.it_domains.length === 0;
+      const domMatch = u.it_domains.some((d) =>
+        activeFilters.domains.includes(d),
+      );
       if (!noneMatch && !domMatch) return false;
     }
     return true;
   });
 
-  if (user?.x_support_role !== "admin") return (
-    <div className="p-8 flex items-center justify-center h-full">
-      <p className="text-red-500 font-bold">Accès non autorisé.</p>
-    </div>
-  );
+  if (user?.x_support_role !== "admin")
+    return (
+      <div className="p-8 flex items-center justify-center h-full">
+        <p className="text-red-500 font-bold">Accès non autorisé.</p>
+      </div>
+    );
 
   return (
     <>
-
-
-      <div className="p-6 lg:p-8 max-w-[1400px] mx-auto space-y-6" onClick={() => setOpenHeaderDropdown(null)}>
-
+      <div
+        className="p-6 lg:p-8 max-w-[1400px] mx-auto space-y-6"
+        onClick={() => setOpenHeaderDropdown(null)}
+      >
         {/* ── Header ── */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-in">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Gestion de l&apos;Équipe &amp; Utilisateurs</h1>
+            <h1 className="text-2xl font-bold tracking-tight">
+              Gestion de l&apos;Équipe &amp; Utilisateurs
+            </h1>
             <p className="text-sm text-[hsl(var(--muted-foreground))] mt-0.5">
               Gérez les rôles, spécialisations et accès au portail IT.
             </p>
@@ -329,14 +483,23 @@ function UsersManagement() {
         </div>
 
         {/* ── Filters ── */}
-        <div className="glass-card relative z-50 p-4 space-y-4 shadow-sm animate-fade-in" style={{ animationDelay: "0.1s" }}>
+        <div
+          className="glass-card relative z-50 p-4 space-y-4 shadow-sm animate-fade-in"
+          style={{ animationDelay: "0.1s" }}
+        >
           <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
             {/* Search */}
             <div className="relative flex-1 w-full lg:max-w-md">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" size={16} />
+              <Search
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]"
+                size={16}
+              />
               <input
-                type="text" value={activeFilters.search}
-                onChange={e => setActiveFilters({ ...activeFilters, search: e.target.value })}
+                type="text"
+                value={activeFilters.search}
+                onChange={(e) =>
+                  setActiveFilters({ ...activeFilters, search: e.target.value })
+                }
                 placeholder="Rechercher par nom ou email..."
                 className="w-full bg-[hsl(var(--background)/0.5)] border border-[hsl(var(--border))] focus:border-[hsl(var(--primary)/0.5)] rounded-lg text-sm pl-11 pr-4 h-10 outline-none transition-all"
               />
@@ -344,30 +507,57 @@ function UsersManagement() {
 
             <div className="flex items-center gap-2">
               {/* Role filter */}
-              {(["role", "status"] as const).map(key => {
+              {(["role", "status"] as const).map((key) => {
                 const isRole = key === "role";
-                const count = isRole ? activeFilters.roles.length : activeFilters.statuses.length;
+                const count = isRole
+                  ? activeFilters.roles.length
+                  : activeFilters.statuses.length;
                 const items = isRole ? roles : statuses;
-                const filterKey: "roles" | "statuses" = isRole ? "roles" : "statuses";
+                const filterKey: "roles" | "statuses" = isRole
+                  ? "roles"
+                  : "statuses";
                 return (
-                  <div key={key} className="relative" onClick={e => e.stopPropagation()}>
+                  <div
+                    key={key}
+                    className="relative"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <button
-                      onClick={() => setOpenHeaderDropdown(openHeaderDropdown === key ? null : key)}
+                      onClick={() =>
+                        setOpenHeaderDropdown(
+                          openHeaderDropdown === key ? null : key,
+                        )
+                      }
                       className={`flex items-center gap-1.5 h-10 px-3.5 rounded-lg text-sm font-semibold transition-all border
-                        ${count > 0 || openHeaderDropdown === key
-                          ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
-                          : "bg-transparent border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)]"
+                        ${
+                          count > 0 || openHeaderDropdown === key
+                            ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
+                            : "bg-transparent border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)]"
                         }`}
                     >
                       {isRole ? <Shield size={14} /> : <Filter size={14} />}
                       {isRole ? "Rôle" : "Statut"} {count > 0 && `(${count})`}
-                      <ChevronDown size={13} className={`transition-transform ${openHeaderDropdown === key ? "rotate-180" : ""}`} />
+                      <ChevronDown
+                        size={13}
+                        className={`transition-transform ${openHeaderDropdown === key ? "rotate-180" : ""}`}
+                      />
                     </button>
                     {openHeaderDropdown === key && (
                       <div className="absolute top-11 left-0 z-[200] w-52 bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl shadow-2xl animate-fade-in p-1.5 space-y-0.5">
-                        {items.map(it => (
-                          <label key={it.value} className="flex items-center gap-2.5 p-2 hover:bg-[hsl(var(--muted)/0.5)] rounded-lg cursor-pointer text-sm font-medium transition-colors">
-                            <input type="checkbox" checked={(isRole ? activeFilters.roles : activeFilters.statuses).includes(it.value)} onChange={() => toggleFilter(filterKey, it.value)} className="accent-[hsl(var(--primary))] w-4 h-4 cursor-pointer" />
+                        {items.map((it) => (
+                          <label
+                            key={it.value}
+                            className="flex items-center gap-2.5 p-2 hover:bg-[hsl(var(--muted)/0.5)] rounded-lg cursor-pointer text-sm font-medium transition-colors"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={(isRole
+                                ? activeFilters.roles
+                                : activeFilters.statuses
+                              ).includes(it.value)}
+                              onChange={() => toggleFilter(filterKey, it.value)}
+                              className="accent-[hsl(var(--primary))] w-4 h-4 cursor-pointer"
+                            />
                             {it.label}
                           </label>
                         ))}
@@ -382,14 +572,21 @@ function UsersManagement() {
           {/* Domain pills */}
           <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[hsl(var(--border)/0.5)]">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[hsl(var(--muted-foreground))] text-xs font-semibold">Domaines:</span>
-              {["none", ...DOMAINS].map(cat => {
+              <span className="text-[hsl(var(--muted-foreground))] text-xs font-semibold">
+                Domaines:
+              </span>
+              {["none", ...DOMAINS].map((cat) => {
                 const sel = activeFilters.domains.includes(cat);
                 return (
-                  <button key={cat} onClick={() => toggleFilter("domains", cat)}
+                  <button
+                    key={cat}
+                    onClick={() => toggleFilter("domains", cat)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border cursor-pointer
-                      ${sel ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
-                             : "bg-[hsl(var(--background)/0.5)] border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)]"}`}
+                      ${
+                        sel
+                          ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
+                          : "bg-[hsl(var(--background)/0.5)] border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)]"
+                      }`}
                   >
                     {cat === "none" ? "Aucun" : cat}
                   </button>
@@ -398,10 +595,17 @@ function UsersManagement() {
             </div>
             <div className="flex items-center gap-3">
               <span className="text-xs font-medium text-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted)/0.5)] px-3 py-1.5 rounded-md">
-                <span className="text-[hsl(var(--foreground))] font-bold">{filteredUsers.length}</span> util.{filteredUsers.length !== 1 ? "s" : ""} {hasActiveFilters && "trouvé(s)"}
+                <span className="text-[hsl(var(--foreground))] font-bold">
+                  {filteredUsers.length}
+                </span>{" "}
+                util.{filteredUsers.length !== 1 ? "s" : ""}{" "}
+                {hasActiveFilters && "trouvé(s)"}
               </span>
               {hasActiveFilters && (
-                <button onClick={resetFilters} className="flex items-center gap-1.5 text-xs font-semibold text-red-500 hover:text-red-600 bg-red-500/10 hover:bg-red-500/20 px-3 py-1.5 rounded-md transition-colors">
+                <button
+                  onClick={resetFilters}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-red-500 hover:text-red-600 bg-red-500/10 hover:bg-red-500/20 px-3 py-1.5 rounded-md transition-colors"
+                >
                   <XCircle size={14} /> Réinitialiser
                 </button>
               )}
@@ -410,10 +614,16 @@ function UsersManagement() {
         </div>
 
         {/* ── Table ── */}
-        <div className="glass-card overflow-hidden animate-fade-in" style={{ animationDelay: "0.2s" }}>
+        <div
+          className="glass-card overflow-hidden animate-fade-in"
+          style={{ animationDelay: "0.2s" }}
+        >
           {loading ? (
             <div className="flex justify-center p-12">
-              <Loader2 className="animate-spin text-[hsl(var(--primary))]" size={32} />
+              <Loader2
+                className="animate-spin text-[hsl(var(--primary))]"
+                size={32}
+              />
             </div>
           ) : (
             <div className="overflow-x-auto custom-scrollbar">
@@ -428,9 +638,11 @@ function UsersManagement() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[hsl(var(--border)/0.4)]">
-                  {filteredUsers.map(u => (
-                    <tr key={u.id} className={`transition-colors hover:bg-[hsl(var(--muted)/0.15)] ${!u.active ? "opacity-55" : ""}`}>
-
+                  {filteredUsers.map((u) => (
+                    <tr
+                      key={u.id}
+                      className={`transition-colors hover:bg-[hsl(var(--muted)/0.15)] ${!u.active ? "opacity-55" : ""}`}
+                    >
                       {/* Avatar + name */}
                       <td className="p-4 pl-5">
                         <div className="flex items-center gap-3">
@@ -438,8 +650,12 @@ function UsersManagement() {
                             {u.name.substring(0, 2).toUpperCase()}
                           </div>
                           <div>
-                            <p className="font-bold text-[hsl(var(--foreground))] whitespace-nowrap">{u.name}</p>
-                            <p className="text-[0.65rem] text-[hsl(var(--muted-foreground))]">{u.email}</p>
+                            <p className="font-bold text-[hsl(var(--foreground))] whitespace-nowrap">
+                              {u.name}
+                            </p>
+                            <p className="text-[0.65rem] text-[hsl(var(--muted-foreground))]">
+                              {u.email}
+                            </p>
                           </div>
                         </div>
                       </td>
@@ -468,9 +684,15 @@ function UsersManagement() {
 
                       {/* Status badge */}
                       <td className="p-4">
-                        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[0.65rem] font-bold uppercase tracking-wider
-                          ${u.active ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}>
-                          {u.active ? <CheckCircle2 size={11} /> : <Ban size={11} />}
+                        <div
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[0.65rem] font-bold uppercase tracking-wider
+                          ${u.active ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}
+                        >
+                          {u.active ? (
+                            <CheckCircle2 size={11} />
+                          ) : (
+                            <Ban size={11} />
+                          )}
                           {u.active ? "Actif" : "Banni"}
                         </div>
                       </td>
@@ -479,15 +701,24 @@ function UsersManagement() {
                       <td className="p-4 text-center">
                         <button
                           disabled={updating === u.id || u.id === user?.id}
-                          onClick={() => updateUser(u.id, { active: !u.active })}
+                          onClick={() =>
+                            updateUser(u.id, { active: !u.active })
+                          }
                           className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border
-                            ${u.active
-                              ? "text-red-400 border-red-500/20 hover:bg-red-500/10"
-                              : "text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/10"
+                            ${
+                              u.active
+                                ? "text-red-400 border-red-500/20 hover:bg-red-500/10"
+                                : "text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/10"
                             } disabled:opacity-40 disabled:cursor-not-allowed`}
                           title={u.active ? "Bannir" : "Réactiver"}
                         >
-                          {updating === u.id ? <Loader2 size={13} className="animate-spin" /> : (u.active ? "Bannir" : "Réactiver")}
+                          {updating === u.id ? (
+                            <Loader2 size={13} className="animate-spin" />
+                          ) : u.active ? (
+                            "Bannir"
+                          ) : (
+                            "Réactiver"
+                          )}
                         </button>
                       </td>
                     </tr>
