@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+        Comptes de démonstration PFE IT Support
+        ─────────────────────────────────────────────────────────────────────
+        noupdate="1" → ces enregistrements ne sont JAMAIS écrasés lors d'un
+        `odoo -u pfe_it_support`.  Si un utilisateur existe déjà avec le même
+        login (ex. user@gmail.com), Odoo l'ignore complètement : ses tickets,
+        son mot de passe et son nom restent intacts.
+        ─────────────────────────────────────────────────────────────────────
+    -->
+    <data noupdate="1">
+
+        <!-- ── 1. Utilisateur standard (rôle : user) ──────────────────── -->
+        <record id="demo_user_standard" model="res.users">
+            <field name="name">Demo User</field>
+            <field name="login">user@gmail.com</field>
+            <field name="email">user@gmail.com</field>
+            <field name="password">12345678</field>
+            <!-- Internal User = base.group_user uniquement → rôle "user" -->
+            <field name="groups_id" eval="[(6, 0, [ref('base.group_user')])]"/>
+        </record>
+
+        <!-- ── 2. Technicien (rôle : tech) ────────────────────────────── -->
+        <record id="demo_user_tech" model="res.users">
+            <field name="name">Demo Technician</field>
+            <field name="login">tech@gmail.com</field>
+            <field name="email">tech@gmail.com</field>
+            <field name="password">12345678</field>
+            <!--
+                group_support_technician implique déjà base.group_user via
+                implied_ids défini dans security/security.xml.
+                On l'ajoute explicitement pour être sûr.
+            -->
+            <field name="groups_id" eval="[(6, 0, [
+                ref('base.group_user'),
+                ref('pfe_it_support.group_support_technician')
+            ])]"/>
+        </record>
+
+        <!-- ── 3. Administrateur (rôle : admin) ───────────────────────── -->
+        <record id="demo_user_admin" model="res.users">
+            <field name="name">Demo Admin</field>
+            <field name="login">admin@gmail.com</field>
+            <field name="email">admin@gmail.com</field>
+            <field name="password">12345678</field>
+            <!--
+                base.group_system = Administrator Odoo (Settings > Technical).
+                C'est ce groupe qui est mappé au rôle "admin" dans x_support_role.
+            -->
+            <field name="groups_id" eval="[(6, 0, [
+                ref('base.group_user'),
+                ref('base.group_system')
+            ])]"/>
+        </record>
+
+    </data>
+</odoo>
