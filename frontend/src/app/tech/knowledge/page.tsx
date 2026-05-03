@@ -73,12 +73,15 @@ function KnowledgePage() {
       const idParam = params.get("id");
       const ticketParam = params.get("fromTicket");
       if (idParam) {
-        axios.get(`${ODOO_URL}/api/knowledge/${idParam}`).then((res) => {
-          if (res.data.status === 200 || res.data.status === "200") {
-            setReadArticle(res.data.data);
-            if (ticketParam) setFromTicketId(ticketParam);
-          }
-        }).catch(console.error);
+        axios
+          .get(`${ODOO_URL}/api/knowledge/${idParam}`)
+          .then((res) => {
+            if (res.data.status === 200 || res.data.status === "200") {
+              setReadArticle(res.data.data);
+              if (ticketParam) setFromTicketId(ticketParam);
+            }
+          })
+          .catch(console.error);
       }
     }
   }, []);
@@ -156,7 +159,8 @@ function KnowledgePage() {
     setSortOrder("desc");
     fetchArticles(1, "", null);
   };
-  const hasFilters = search !== "" || catFilter !== null || sortOrder !== "desc";
+  const hasFilters =
+    search !== "" || catFilter !== null || sortOrder !== "desc";
 
   // ── Sorted articles (client-side, no re-fetch needed) ─────────────────────
   const sortedArticles = [...articles].sort((a, b) => {
@@ -264,7 +268,11 @@ function KnowledgePage() {
           {/* Sort toggle */}
           <button
             onClick={() => setSortOrder((o) => (o === "desc" ? "asc" : "desc"))}
-            title={sortOrder === "desc" ? "Plus récents d'abord" : "Plus anciens d'abord"}
+            title={
+              sortOrder === "desc"
+                ? "Plus récents d'abord"
+                : "Plus anciens d'abord"
+            }
             className={`ml-auto flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${
               sortOrder === "asc"
                 ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
@@ -272,9 +280,13 @@ function KnowledgePage() {
             }`}
           >
             {sortOrder === "desc" ? (
-              <><ArrowDown size={13} /> Plus récents</>  
+              <>
+                <ArrowDown size={13} /> Plus récents
+              </>
             ) : (
-              <><ArrowUp size={13} /> Plus anciens</>
+              <>
+                <ArrowUp size={13} /> Plus anciens
+              </>
             )}
           </button>
 
@@ -327,11 +339,14 @@ function KnowledgePage() {
               currentUserId={user?.id}
               currentUserRole={role}
               onRead={(a) => {
-                axios.get(`${ODOO_URL}/api/knowledge/${a.id}`).then((res) => {
-                  if (res.data.status === 200 || res.data.status === "200") {
-                    setReadArticle(res.data.data);
-                  }
-                }).catch(console.error);
+                axios
+                  .get(`${ODOO_URL}/api/knowledge/${a.id}`)
+                  .then((res) => {
+                    if (res.data.status === 200 || res.data.status === "200") {
+                      setReadArticle(res.data.data);
+                    }
+                  })
+                  .catch(console.error);
               }}
               onEdit={canWrite ? (a) => setEditArticle(a) : undefined}
               onDelete={role === "admin" ? handleDelete : undefined}

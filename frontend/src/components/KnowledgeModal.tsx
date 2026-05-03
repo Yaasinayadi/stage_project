@@ -7,7 +7,6 @@ import axios from "axios";
 import type { KbArticle, KbTag } from "./KnowledgeCard";
 import { ODOO_URL } from "@/lib/config";
 
-
 type Props = {
   article?: KbArticle | null;
   initialTitle?: string;
@@ -39,7 +38,9 @@ export default function KnowledgeModal({
   // ─── State ────────────────────────────────────────────────────────────────
   const [step, setStep] = useState<Step>("form");
   const [title, setTitle] = useState(article?.title ?? initialTitle ?? "");
-  const [category, setCategory] = useState(article?.category ?? initialCategory ?? "");
+  const [category, setCategory] = useState(
+    article?.category ?? initialCategory ?? "",
+  );
   const [tagInput, setTagInput] = useState(
     article?.tags.map((t) => t.name).join(", ") ?? "",
   );
@@ -150,7 +151,7 @@ export default function KnowledgeModal({
 
           const toastMsg =
             res.data.message ||
-            `L'article "${title}" a été ${isPublished ? 'publié' : 'sauvegardé en brouillon'} avec succès.`;
+            `L'article "${title}" a été ${isPublished ? "publié" : "sauvegardé en brouillon"} avec succès.`;
           setStep("success");
           setTimeout(() => {
             onSaved(toastMsg);
@@ -210,7 +211,8 @@ export default function KnowledgeModal({
                 Article pré-rempli depuis le ticket #{fromTicket}
               </p>
               <p className="text-[10px] text-emerald-600/70 mt-0.5">
-                Relisez, corrigez et structurez avant de publier ou sauvegarder en brouillon.
+                Relisez, corrigez et structurez avant de publier ou sauvegarder
+                en brouillon.
               </p>
             </div>
           </div>
@@ -222,7 +224,11 @@ export default function KnowledgeModal({
             </div>
             <div>
               <h2 className="text-base font-bold">
-                {isEditing ? "Modifier l'article" : fromTicket ? "Documenter la résolution" : "Nouvel article KB"}
+                {isEditing
+                  ? "Modifier l'article"
+                  : fromTicket
+                    ? "Documenter la résolution"
+                    : "Nouvel article KB"}
               </h2>
               <p className="text-[0.65rem] text-[hsl(var(--muted-foreground))]">
                 {isEditing
@@ -361,7 +367,11 @@ export default function KnowledgeModal({
                 type="submit"
                 className="btn-primary flex items-center gap-2"
               >
-                {isEditing ? "Enregistrer" : isPublished ? "Publier l'article" : "Sauvegarder en brouillon"}
+                {isEditing
+                  ? "Enregistrer"
+                  : isPublished
+                    ? "Publier l'article"
+                    : "Sauvegarder en brouillon"}
               </button>
             </div>
           </form>

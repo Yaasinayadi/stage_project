@@ -1265,6 +1265,7 @@ class SupportTicketController(http.Controller):
             
         try:
             period = kw.get('period', 'all')
+            tech_id = kw.get('tech_id')
             domain = []
             now = datetime.utcnow()
             
@@ -1276,10 +1277,14 @@ class SupportTicketController(http.Controller):
                 domain.append(('create_date', '>=', now - timedelta(days=30)))
 
             # Agents have role 'tech'
-            techs = request.env['res.users'].sudo().search([
+            search_domain = [
                 ('x_support_role', '=', 'tech'),
                 ('active', '=', True)
-            ])
+            ]
+            if tech_id:
+                search_domain.append(('id', '=', int(tech_id)))
+                
+            techs = request.env['res.users'].sudo().search(search_domain)
             
             data = []
             env = request.env['support.ticket'].sudo()
@@ -1317,6 +1322,7 @@ class SupportTicketController(http.Controller):
                     'name': tech.name,
                     'avatar_url': avatar_url,
                     'volume': count,
+                    'breached_volume': count - sla_ok_count,
                     'sla_score': sla_score,
                     'mttr': mttr,
                 })

@@ -33,7 +33,7 @@ import {
   ExternalLink,
   ShieldAlert,
   ShieldCheck,
-  UploadCloud
+  UploadCloud,
 } from "lucide-react";
 import SlaBadge from "@/components/SlaBadge";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -44,35 +44,36 @@ import { toast } from "sonner";
 import KnowledgeModal from "@/components/KnowledgeModal";
 
 // @ts-expect-error: Ignore missing types
-
-
-
 // Attachments are now handled directly by Odoo (ir.attachment) — no Flask needed here
 
 // ── Inline markdown renderer (no external dependency) ──────────────────────
 function renderMarkdown(text: string): string {
   if (!text) return "";
-  return text
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    // Headings
-    .replace(/^### (.+)$/gm, "<h3>$1</h3>")
-    .replace(/^## (.+)$/gm, "<h2>$1</h2>")
-    .replace(/^# (.+)$/gm, "<h1>$1</h1>")
-    // Bold & italic
-    .replace(/\*\*\*(.+?)\*\*\*/g, "<strong><em>$1</em></strong>")
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    // Bullet lists
-    .replace(/^[-*] (.+)$/gm, "<li>$1</li>")
-    .replace(/(<li>[\s\S]*?<\/li>)/g, "<ul>$1</ul>")
-    // Numbered lists
-    .replace(/^\d+\. (.+)$/gm, "<li>$1</li>")
-    // Code inline
-    .replace(/`(.+?)`/g, "<code>$1</code>")
-    // Line breaks
-    .replace(/\n\n/g, "</p><p>")
-    .replace(/\n/g, "<br/>")
-    .replace(/^(.+)$/, "<p>$1</p>");
+  return (
+    text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      // Headings
+      .replace(/^### (.+)$/gm, "<h3>$1</h3>")
+      .replace(/^## (.+)$/gm, "<h2>$1</h2>")
+      .replace(/^# (.+)$/gm, "<h1>$1</h1>")
+      // Bold & italic
+      .replace(/\*\*\*(.+?)\*\*\*/g, "<strong><em>$1</em></strong>")
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*(.+?)\*/g, "<em>$1</em>")
+      // Bullet lists
+      .replace(/^[-*] (.+)$/gm, "<li>$1</li>")
+      .replace(/(<li>[\s\S]*?<\/li>)/g, "<ul>$1</ul>")
+      // Numbered lists
+      .replace(/^\d+\. (.+)$/gm, "<li>$1</li>")
+      // Code inline
+      .replace(/`(.+?)`/g, "<code>$1</code>")
+      // Line breaks
+      .replace(/\n\n/g, "</p><p>")
+      .replace(/\n/g, "<br/>")
+      .replace(/^(.+)$/, "<p>$1</p>")
+  );
 }
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -332,6 +333,8 @@ function TicketDetailPage() {
       );
       setNewComment("");
       fetchComments();
+      toast.success("Commentaire envoyé !");
+    } catch {
       toast.error("Erreur lors de l'envoi du commentaire.");
     } finally {
       setPostingComment(false);
@@ -353,7 +356,9 @@ function TicketDetailPage() {
         },
       );
       if (res.data.status === 201) {
-        toast.success(`${res.data.data.length} fichier(s) ajouté(s)`, { icon: <UploadCloud size={18} /> });
+        toast.success(`${res.data.data.length} fichier(s) ajouté(s)`, {
+          icon: <UploadCloud size={18} />,
+        });
         fetchAttachments();
       }
     } catch {
@@ -373,7 +378,9 @@ function TicketDetailPage() {
       });
       if (res.data.status === "success") {
         setAiSuggestion(res.data.data);
-        toast.success("Diagnostic IA généré avec succès", { icon: <Sparkles size={18} /> });
+        toast.success("Diagnostic IA généré avec succès", {
+          icon: <Sparkles size={18} />,
+        });
       } else {
         toast.error("L'IA n'a pas pu analyser ce ticket.");
       }
@@ -393,7 +400,9 @@ function TicketDetailPage() {
         { tech_id: user?.id },
         { withCredentials: true },
       );
-      toast.success("Ticket escaladé. L'admin a été notifié.", { icon: <ArrowUpCircle size={18} /> });
+      toast.success("Ticket escaladé. L'admin a été notifié.", {
+        icon: <ArrowUpCircle size={18} />,
+      });
       fetchTicket();
     } catch {
       toast.error("Erreur lors de l'escalade.");
@@ -410,7 +419,9 @@ function TicketDetailPage() {
         { user_id: user?.id },
         { withCredentials: true },
       );
-      toast.success("L'escalade a été annulée. Vous avez repris la main sur le ticket.");
+      toast.success(
+        "L'escalade a été annulée. Vous avez repris la main sur le ticket.",
+      );
       fetchTicket();
       fetchComments();
     } catch {
@@ -434,7 +445,9 @@ function TicketDetailPage() {
         { justification: waitJustification, user_id: user?.id },
         { withCredentials: true },
       );
-      toast.success("Ticket mis en attente. Notification envoyée.", { icon: <Clock size={18} /> });
+      toast.success("Ticket mis en attente. Notification envoyée.", {
+        icon: <Clock size={18} />,
+      });
       setShowWaitModal(false);
       setWaitJustification("");
       fetchTicket();
@@ -456,7 +469,9 @@ function TicketDetailPage() {
         { user_id: user?.id },
         { withCredentials: true },
       );
-      toast.success("Travail repris sur le ticket.", { icon: <RefreshCw size={18} /> });
+      toast.success("Travail repris sur le ticket.", {
+        icon: <RefreshCw size={18} />,
+      });
       fetchTicket();
       fetchComments();
     } catch (err) {
@@ -501,7 +516,9 @@ function TicketDetailPage() {
 
         // Refresh ticket state in background
         fetchTicket();
-        toast.success("Ticket résolu — Rédigez votre article KB ci-dessous !", { icon: <ShieldCheck size={18} /> });
+        toast.success("Ticket résolu — Rédigez votre article KB ci-dessous !", {
+          icon: <ShieldCheck size={18} />,
+        });
       } else {
         // ── Cas 1 (Toggle OFF) : Comportement classique ──
         toast.success("Ticket résolu !", { icon: <ShieldCheck size={18} /> });
@@ -520,7 +537,9 @@ function TicketDetailPage() {
 
   const handleKbSaved = (toastMsg?: string) => {
     setKbDraftData(null);
-    toast.success(toastMsg ?? "Article KB enregistré !", { icon: <ShieldCheck size={18} /> });
+    toast.success(toastMsg ?? "Article KB enregistré !", {
+      icon: <ShieldCheck size={18} />,
+    });
     // Navigate to tickets list after KB is saved
     sessionStorage.setItem("resolved_ticket_id", String(id));
     setTimeout(() => router.push("/tech/tickets"), 1500);
@@ -591,7 +610,6 @@ function TicketDetailPage() {
 
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-4">
-
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-xs text-[hsl(var(--muted-foreground))]">
         <Link
@@ -748,7 +766,8 @@ function TicketDetailPage() {
                 )}
 
                 {/* Escalader / Annuler Escalade */}
-                {ticket.state === "escalated" && ticket.escalated_by_id === user?.id ? (
+                {ticket.state === "escalated" &&
+                ticket.escalated_by_id === user?.id ? (
                   <button
                     disabled={actionLoading === "unescalate"}
                     onClick={handleUnescalate}
@@ -762,20 +781,22 @@ function TicketDetailPage() {
                     )}
                     Annuler l'escalade
                   </button>
-                ) : ticket.state !== "escalated" && (
-                  <button
-                    disabled={actionLoading === "escalate"}
-                    onClick={handleEscalate}
-                    className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg border border-purple-500/30
+                ) : (
+                  ticket.state !== "escalated" && (
+                    <button
+                      disabled={actionLoading === "escalate"}
+                      onClick={handleEscalate}
+                      className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg border border-purple-500/30
                       bg-purple-500/10 text-purple-500 hover:bg-purple-500/20 transition-colors disabled:opacity-60"
-                  >
-                    {actionLoading === "escalate" ? (
-                      <Loader2 size={13} className="animate-spin" />
-                    ) : (
-                      <ArrowUpCircle size={13} />
-                    )}
-                    Escalader
-                  </button>
+                    >
+                      {actionLoading === "escalate" ? (
+                        <Loader2 size={13} className="animate-spin" />
+                      ) : (
+                        <ArrowUpCircle size={13} />
+                      )}
+                      Escalader
+                    </button>
+                  )
                 )}
 
                 {/* Résoudre */}
@@ -849,7 +870,9 @@ function TicketDetailPage() {
                 {aiSuggestion.analysis_markdown && (
                   <div
                     className="p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/10 prose prose-sm max-w-none prose-p:text-xs prose-p:leading-relaxed prose-headings:text-indigo-400 prose-headings:text-[10px] prose-headings:font-bold prose-headings:uppercase prose-li:text-xs"
-                    dangerouslySetInnerHTML={{ __html: renderMarkdown(aiSuggestion.analysis_markdown) }}
+                    dangerouslySetInnerHTML={{
+                      __html: renderMarkdown(aiSuggestion.analysis_markdown),
+                    }}
                   />
                 )}
 
@@ -962,9 +985,10 @@ function TicketDetailPage() {
                         })}
                       </span>
                     </div>
-                    <p className="text-xs leading-relaxed whitespace-pre-wrap">
-                      {c.body}
-                    </p>
+                    <div
+                      className="text-xs leading-relaxed prose prose-sm max-w-none prose-p:my-0 prose-p:leading-relaxed prose-a:text-blue-500"
+                      dangerouslySetInnerHTML={{ __html: c.body }}
+                    />
                   </div>
                 </div>
               ))
@@ -1195,16 +1219,19 @@ function TicketDetailPage() {
             <div
               onClick={() => setAddToKb((v) => !v)}
               className={`flex items-start gap-3 cursor-pointer p-4 rounded-xl border-2 transition-all duration-200
-                ${addToKb
-                  ? "border-emerald-500/40 bg-emerald-500/8 shadow-sm shadow-emerald-500/10"
-                  : "border-[hsl(var(--border))] bg-[hsl(var(--muted)/0.2)] hover:border-emerald-500/20 hover:bg-emerald-500/4"
+                ${
+                  addToKb
+                    ? "border-emerald-500/40 bg-emerald-500/8 shadow-sm shadow-emerald-500/10"
+                    : "border-[hsl(var(--border))] bg-[hsl(var(--muted)/0.2)] hover:border-emerald-500/20 hover:bg-emerald-500/4"
                 }`}
             >
               {/* Toggle switch */}
               <div className="relative flex-shrink-0 mt-0.5">
                 <div
                   className={`w-10 h-5.5 h-[22px] rounded-full transition-colors duration-300 flex items-center ${
-                    addToKb ? "bg-emerald-500" : "bg-[hsl(var(--muted-foreground)/0.3)]"
+                    addToKb
+                      ? "bg-emerald-500"
+                      : "bg-[hsl(var(--muted-foreground)/0.3)]"
                   }`}
                 >
                   <div
@@ -1217,9 +1244,13 @@ function TicketDetailPage() {
 
               {/* Text */}
               <div className="flex-1 min-w-0">
-                <p className={`text-sm font-bold flex items-center gap-1.5 transition-colors ${
-                  addToKb ? "text-emerald-600" : "text-[hsl(var(--foreground))]"
-                }`}>
+                <p
+                  className={`text-sm font-bold flex items-center gap-1.5 transition-colors ${
+                    addToKb
+                      ? "text-emerald-600"
+                      : "text-[hsl(var(--foreground))]"
+                  }`}
+                >
                   <BookOpen size={14} />
                   Transformer en article KB
                 </p>

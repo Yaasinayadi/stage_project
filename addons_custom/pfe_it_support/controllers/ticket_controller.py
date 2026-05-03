@@ -697,7 +697,7 @@ class TicketController(http.Controller):
             for tech in techs:
                 active_tickets = request.env['support.ticket'].sudo().search_count([
                     ('assigned_to_id', '=', tech.id),
-                    ('state', 'in', ['new', 'assigned', 'in_progress', 'escalated'])
+                    ('state', 'in', ['new', 'assigned', 'in_progress', 'waiting', 'blocked', 'escalated'])
                 ])
                 
                 is_expert = False

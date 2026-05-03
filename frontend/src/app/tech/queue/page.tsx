@@ -21,13 +21,12 @@ import {
   ArrowUpCircle,
   Globe,
   ClipboardCheck,
-  UserCog
+  UserCog,
 } from "lucide-react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAuth } from "@/lib/auth";
 
 import { ODOO_URL } from "@/lib/config";
-
 
 const PRIORITY_MAP: Record<
   string,
@@ -77,6 +76,7 @@ type QueueTicket = {
   user_id: number | null;
   user_name?: string | null;
   user_email?: string | null;
+  write_date?: string | null;
 };
 
 type Agent = {
@@ -92,7 +92,9 @@ function QueuePage() {
   const { user } = useAuth();
   const isAdmin = user?.x_support_role === "admin";
   const [tickets, setTickets] = useState<QueueTicket[]>([]);
-  const [activeTab, setActiveTab] = useState<"expertise" | "missions">("missions");
+  const [activeTab, setActiveTab] = useState<"expertise" | "missions">(
+    "missions",
+  );
   const [loading, setLoading] = useState(true);
   const [selectedPriority, setSelectedPriority] = useState<string | null>(null);
 
@@ -256,7 +258,7 @@ function QueuePage() {
         closeTechModal();
         toast.success(
           `Vous êtes désormais responsable du ticket TK-${String(techTicket.id).padStart(4, "0")}. Retrouvez-le dans votre espace "Mes Tickets".`,
-          { icon: <ClipboardCheck size={18} /> }
+          { icon: <ClipboardCheck size={18} /> },
         );
         fetchQueue();
       } else {
@@ -282,7 +284,7 @@ function QueuePage() {
         closeTechModal();
         toast.success(
           `Mission acceptée — TK-${String(techTicket.id).padStart(4, "0")} est maintenant dans vos "Mes Tickets".`,
-          { icon: <ClipboardCheck size={18} /> }
+          { icon: <ClipboardCheck size={18} /> },
         );
         fetchQueue();
       } else {
@@ -296,34 +298,37 @@ function QueuePage() {
   };
 
   // Derive current tab tickets
-  const currentTabTickets = isAdmin 
-    ? tickets 
+  const currentTabTickets = isAdmin
+    ? tickets
     : activeTab === "expertise"
-      ? tickets.filter(t => !t.assigned_to_id)
-      : tickets.filter(t => t.assigned_to_id === user?.id);
+      ? tickets.filter((t) => !t.assigned_to_id)
+      : tickets.filter((t) => t.assigned_to_id === user?.id);
 
   // Calculate priorities manually based on current tab tickets
   const tabPriorities = Object.keys(PRIORITY_MAP)
-    .map(pId => ({
+    .map((pId) => ({
       id: pId,
       label: PRIORITY_MAP[pId].label,
-      count: currentTabTickets.filter(t => t.priority === pId).length
+      count: currentTabTickets.filter((t) => t.priority === pId).length,
     }))
-    .filter(p => p.count > 0 || selectedPriority === p.id)
+    .filter((p) => p.count > 0 || selectedPriority === p.id)
     .sort((a, b) => parseInt(b.id) - parseInt(a.id));
 
   const filteredTickets = selectedPriority
     ? currentTabTickets.filter((t) => t.priority === selectedPriority)
     : currentTabTickets;
 
-  const sorted = [...filteredTickets].sort(
-    (a, b) => parseInt(b.priority) - parseInt(a.priority),
-  );
+  const sorted = [...filteredTickets].sort((a, b) => {
+    // Sort by last updated (write_date), fallback to id descending
+    const dateA = a.write_date ? new Date(a.write_date).getTime() : 0;
+    const dateB = b.write_date ? new Date(b.write_date).getTime() : 0;
+    if (dateA !== dateB) return dateB - dateA;
+    return b.id - a.id;
+  });
 
   return (
     <>
       <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
-
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -332,21 +337,26 @@ function QueuePage() {
               File d&apos;attente
             </h1>
             <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">
-              Tickets non assignés — triés par priorité décroissante
+              Tickets non assignés — triés par les plus récents
             </p>
           </div>
           <div className="flex items-center gap-4">
             {selectedPriority && (
               <span className="text-sm font-medium text-[hsl(var(--primary))] animate-fade-in">
-                {filteredTickets.length} ticket{filteredTickets.length > 1 ? "s" : ""}{" "}
+                {filteredTickets.length} ticket
+                {filteredTickets.length > 1 ? "s" : ""}{" "}
                 {PRIORITY_MAP[selectedPriority]?.label.toLowerCase()}
-                {filteredTickets.length > 1 ? "s" : ""} trouvé{filteredTickets.length > 1 ? "s" : ""}
+                {filteredTickets.length > 1 ? "s" : ""} trouvé
+                {filteredTickets.length > 1 ? "s" : ""}
               </span>
             )}
             <button
               onClick={async () => {
                 setLoading(true);
-                await Promise.all([fetchQueue(), new Promise(r => setTimeout(r, 500))]);
+                await Promise.all([
+                  fetchQueue(),
+                  new Promise((r) => setTimeout(r, 500)),
+                ]);
                 setLoading(false);
               }}
               className="btn-ghost flex items-center gap-2 text-sm"
@@ -362,23 +372,29 @@ function QueuePage() {
         {!isAdmin && (
           <div className="flex bg-[hsl(var(--muted)/0.5)] p-1 rounded-xl w-fit">
             <button
-              onClick={() => { setActiveTab("missions"); setSelectedPriority(null); }}
+              onClick={() => {
+                setActiveTab("missions");
+                setSelectedPriority(null);
+              }}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === "missions" ? "bg-[hsl(var(--card))] text-[hsl(var(--primary))] shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
             >
               <Briefcase size={16} />
               Missions Admin
               <span className="bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))] px-2 py-0.5 rounded-full text-xs ml-1">
-                {tickets.filter(t => t.assigned_to_id === user?.id).length}
+                {tickets.filter((t) => t.assigned_to_id === user?.id).length}
               </span>
             </button>
             <button
-              onClick={() => { setActiveTab("expertise"); setSelectedPriority(null); }}
+              onClick={() => {
+                setActiveTab("expertise");
+                setSelectedPriority(null);
+              }}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === "expertise" ? "bg-[hsl(var(--card))] text-[hsl(var(--primary))] shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
             >
               <Inbox size={16} />
               Flux Expertise
               <span className="bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))] px-2 py-0.5 rounded-full text-xs ml-1">
-                {tickets.filter(t => !t.assigned_to_id).length}
+                {tickets.filter((t) => !t.assigned_to_id).length}
               </span>
             </button>
           </div>
@@ -394,7 +410,9 @@ function QueuePage() {
             return (
               <div
                 key={p.id}
-                onClick={() => setSelectedPriority(selectedPriority === p.id ? null : p.id)}
+                onClick={() =>
+                  setSelectedPriority(selectedPriority === p.id ? null : p.id)
+                }
                 className={`glass-card px-4 py-3 flex items-center gap-3 border cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95
                   ${selectedPriority === p.id ? "ring-2 ring-[hsl(var(--primary))] border-transparent shadow-lg" : selectedPriority ? "opacity-40 grayscale-[0.5]" : "hover:border-[hsl(var(--primary)/0.5)]"}
                   ${cfg.badge}`}
@@ -558,20 +576,21 @@ function QueuePage() {
                           <Globe size={12} />
                           OUVERT
                         </span>
-                      ) : ticket.assigned_to_id === user?.id && !ticket.x_accepted ? (
+                      ) : ticket.assigned_to_id === user?.id &&
+                        !ticket.x_accepted ? (
                         <span className="flex items-center gap-1.5 px-2 py-1 rounded-full border text-[10px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-500 border-emerald-500/20 animate-pulse">
                           <ArrowUpCircle size={12} />
                           MISSION ASSIGNÉE
                         </span>
                       ) : null}
-                      
+
                       {/* Affichage traçabilité origin Assignateur si assigné */}
                       {ticket.assigned_to_id && (
-                         <span className="text-[10px] font-semibold italic text-muted-foreground">
-                           {ticket.assigned_by_id === ticket.assigned_to_id 
-                             ? "Auto-assigné" 
-                             : `Assigné par: ${ticket.assigned_by || 'Admin'}`}
-                         </span>
+                        <span className="text-[10px] font-semibold italic text-muted-foreground">
+                          {ticket.assigned_by_id === ticket.assigned_to_id
+                            ? "Auto-assigné"
+                            : `Assigné par: ${ticket.assigned_by || "Admin"}`}
+                        </span>
                       )}
                     </div>
                   </div>
@@ -733,8 +752,12 @@ function QueuePage() {
                 </h3>
 
                 {(() => {
-                  const availableTechs = agents.filter(tech => dispatchTicket?.state === 'escalated' ? tech.id !== dispatchTicket.user_id : true);
-                  
+                  const availableTechs = agents.filter((tech) =>
+                    dispatchTicket?.state === "escalated"
+                      ? tech.id !== dispatchTicket.user_id
+                      : true,
+                  );
+
                   return loadingAgents ? (
                     <div className="text-center text-sm text-muted-foreground py-8 flex items-center justify-center gap-2">
                       <RefreshCw size={14} className="animate-spin" />
@@ -933,12 +956,13 @@ function QueuePage() {
               {techTicket.assigned_to_id && !techTicket.x_accepted ? (
                 <div className="space-y-4">
                   <p className="text-xs text-center text-emerald-500 font-medium bg-emerald-500/10 py-2 px-3 rounded-lg border border-emerald-500/20 mb-1">
-                    🎯 Cette mission vous a été confiée par l&apos;administration.
+                    🎯 Cette mission vous a été confiée par
+                    l&apos;administration.
                   </p>
                   <p className="text-center text-[10px] text-muted-foreground italic mb-2">
-                    {techTicket.assigned_by_id === techTicket.assigned_to_id 
-                      ? "Auto-assigné" 
-                      : `Assigné par : ${techTicket.assigned_by || 'Admin'}`}
+                    {techTicket.assigned_by_id === techTicket.assigned_to_id
+                      ? "Auto-assigné"
+                      : `Assigné par : ${techTicket.assigned_by || "Admin"}`}
                   </p>
                   <button
                     disabled={techLoading}

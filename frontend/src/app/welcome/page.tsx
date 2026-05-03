@@ -25,7 +25,6 @@ import TicketModal from "@/components/TicketModal";
 import Chatbot from "@/components/Chatbot";
 import { ODOO_URL } from "@/lib/config";
 
-
 // ─── KPI hook ───────────────────────────────────────────────────────────────
 type DashboardStats = {
   enCours: number;
@@ -35,7 +34,10 @@ type DashboardStats = {
   loading: boolean;
 };
 
-function useDashboardStats(userId: number | undefined, role: string | undefined): DashboardStats {
+function useDashboardStats(
+  userId: number | undefined,
+  role: string | undefined,
+): DashboardStats {
   const [stats, setStats] = useState<DashboardStats>({
     enCours: 0,
     resolus: 0,
@@ -54,10 +56,7 @@ function useDashboardStats(userId: number | undefined, role: string | undefined)
 
     const knowledgeUrl = `${ODOO_URL}/api/knowledge?limit=1`;
 
-    Promise.all([
-      axios.get(ticketsUrl),
-      axios.get(knowledgeUrl)
-    ])
+    Promise.all([axios.get(ticketsUrl), axios.get(knowledgeUrl)])
       .then(([ticketsRes, knowledgeRes]) => {
         const tickets: { state?: string }[] = ticketsRes.data?.data || [];
         const enCours = tickets.filter((t) => {
@@ -86,7 +85,7 @@ function useDashboardStats(userId: number | undefined, role: string | undefined)
           resolus,
           total: tickets.length,
           totalKnowledge,
-          loading: false
+          loading: false,
         });
       })
       .catch(() => setStats((s) => ({ ...s, loading: false })));
@@ -108,7 +107,9 @@ function KpiBadge({
   color: string;
 }) {
   if (loading) {
-    return <div className="h-5 w-20 bg-[hsl(var(--muted))] rounded-full animate-pulse mt-3" />;
+    return (
+      <div className="h-5 w-20 bg-[hsl(var(--muted))] rounded-full animate-pulse mt-3" />
+    );
   }
   return (
     <span
@@ -123,7 +124,8 @@ function KpiBadge({
 
 // ─── Stats Mini-Dashboard (for Card 1) ────────────────────────────────────────
 function StatsMiniDashboard({ stats }: { stats: DashboardStats }) {
-  const resolusPercent = stats.total > 0 ? Math.round((stats.resolus / stats.total) * 100) : 0;
+  const resolusPercent =
+    stats.total > 0 ? Math.round((stats.resolus / stats.total) * 100) : 0;
   const circumference = 2 * Math.PI * 36;
   const strokeDashoffset = stats.loading
     ? circumference
@@ -160,7 +162,10 @@ function StatsMiniDashboard({ stats }: { stats: DashboardStats }) {
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           {stats.loading ? (
-            <Loader2 size={18} className="animate-spin text-[hsl(var(--primary))]" />
+            <Loader2
+              size={18}
+              className="animate-spin text-[hsl(var(--primary))]"
+            />
           ) : (
             <>
               <span className="text-xl font-bold text-[hsl(var(--foreground))] leading-none">
@@ -193,7 +198,9 @@ function StatsMiniDashboard({ stats }: { stats: DashboardStats }) {
           {stats.loading ? (
             <div className="h-6 w-8 bg-[hsl(var(--muted))] rounded animate-pulse mx-auto" />
           ) : (
-            <p className="text-2xl font-bold text-[#10b981] leading-none">{stats.resolus}</p>
+            <p className="text-2xl font-bold text-[#10b981] leading-none">
+              {stats.resolus}
+            </p>
           )}
           <p className="text-[0.65rem] text-[hsl(var(--muted-foreground))] mt-0.5 font-medium">
             Résolus
@@ -211,27 +218,27 @@ function UserGuideModal({ onClose }: { onClose: () => void }) {
       icon: <Ticket size={20} />,
       color: "hsl(var(--primary))",
       title: "Créer un ticket",
-      description: "Décrivez votre problème IT. L'IA l'analyse, le catégorise et l'assigne automatiquement au bon technicien.",
+      description:
+        "Décrivez votre problème IT. L'IA l'analyse, le catégorise et l'assigne automatiquement au bon technicien.",
     },
     {
       icon: <BarChart2 size={20} />,
       color: "#10b981",
       title: "Suivre l'avancement",
-      description: "Consultez vos statistiques en temps réel depuis le tableau de bord : tickets en cours, résolus et taux de résolution.",
+      description:
+        "Consultez vos statistiques en temps réel depuis le tableau de bord : tickets en cours, résolus et taux de résolution.",
     },
     {
       icon: <BookOpen size={20} />,
       color: "#f59e0b",
       title: "Consulter la Base de Connaissances",
-      description: "Accédez aux guides et tutoriels pour résoudre vous-même les problèmes courants et gagner du temps.",
+      description:
+        "Accédez aux guides et tutoriels pour résoudre vous-même les problèmes courants et gagner du temps.",
     },
   ];
 
   return (
-    <div
-      className="modal-overlay"
-      onClick={onClose}
-    >
+    <div className="modal-overlay" onClick={onClose}>
       <div
         className="modal-content w-full max-w-md p-8 relative"
         onClick={(e) => e.stopPropagation()}
@@ -254,7 +261,9 @@ function UserGuideModal({ onClose }: { onClose: () => void }) {
             <h2 className="text-xl font-bold text-[hsl(var(--foreground))]">
               Comment utiliser votre espace ?
             </h2>
-            <p className="text-sm text-[hsl(var(--muted-foreground))]">Guide en 3 étapes simples</p>
+            <p className="text-sm text-[hsl(var(--muted-foreground))]">
+              Guide en 3 étapes simples
+            </p>
           </div>
         </div>
 
@@ -265,7 +274,10 @@ function UserGuideModal({ onClose }: { onClose: () => void }) {
               <div className="flex flex-col items-center">
                 <div
                   className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ backgroundColor: `${step.color}18`, color: step.color }}
+                  style={{
+                    backgroundColor: `${step.color}18`,
+                    color: step.color,
+                  }}
                 >
                   {step.icon}
                 </div>
@@ -277,7 +289,10 @@ function UserGuideModal({ onClose }: { onClose: () => void }) {
                 <div className="flex items-center gap-2 mb-1">
                   <span
                     className="text-xs font-bold px-2 py-0.5 rounded-full"
-                    style={{ backgroundColor: `${step.color}18`, color: step.color }}
+                    style={{
+                      backgroundColor: `${step.color}18`,
+                      color: step.color,
+                    }}
                   >
                     Étape {idx + 1}
                   </span>
@@ -297,7 +312,8 @@ function UserGuideModal({ onClose }: { onClose: () => void }) {
         <div className="mt-2 pt-5 border-t border-[hsl(var(--border))]">
           <div className="flex items-center gap-2 text-xs text-[hsl(var(--muted-foreground))]">
             <CheckCircle2 size={14} className="text-[#10b981]" />
-            L&apos;IA s&apos;occupe du reste — concentrez-vous sur votre travail.
+            L&apos;IA s&apos;occupe du reste — concentrez-vous sur votre
+            travail.
           </div>
         </div>
       </div>
@@ -322,12 +338,13 @@ function Welcome() {
   };
 
   const handleChatbotOpen = () => {
-    window.dispatchEvent(new CustomEvent("toggle-chatbot", { detail: { open: true } }));
+    window.dispatchEvent(
+      new CustomEvent("toggle-chatbot", { detail: { open: true } }),
+    );
   };
 
   return (
     <div className="p-6 lg:p-8 max-w-[1440px] mx-auto space-y-10">
-
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 animate-fade-in">
         {/* Left: greeting */}
@@ -341,7 +358,8 @@ function Welcome() {
             👋
           </h1>
           <p className="text-[hsl(var(--muted-foreground))] text-base sm:text-lg">
-            Voici un aperçu de votre espace de support IT propulsé par l&apos;IA.
+            Voici un aperçu de votre espace de support IT propulsé par
+            l&apos;IA.
           </p>
         </div>
 
@@ -381,7 +399,6 @@ function Welcome() {
 
       {/* ── Dashboard Grid ─────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 animate-slide-up stagger-2">
-
         {/* Quick Actions */}
         <div className="lg:col-span-2 space-y-6">
           <h2 className="text-xl font-semibold flex items-center gap-2 text-[hsl(var(--foreground))]">
@@ -404,7 +421,8 @@ function Welcome() {
                 Gérer mes tickets
               </h3>
               <p className="text-sm text-[hsl(var(--muted-foreground))] leading-relaxed">
-                Consultez l&apos;état de vos demandes d&apos;assistance en cours et accédez à vos archives. Suivez chaque étape de la résolution.
+                Consultez l&apos;état de vos demandes d&apos;assistance en cours
+                et accédez à vos archives. Suivez chaque étape de la résolution.
               </p>
               <div className="flex items-center gap-2 mt-2">
                 <KpiBadge
@@ -428,7 +446,6 @@ function Welcome() {
 
           {/* ── CARDS 2 & 3 — side by side ── */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6">
-
             {/* Card 2 — Base de connaissances */}
             <Link
               href="/tech/knowledge"
@@ -443,8 +460,8 @@ function Welcome() {
                   Base de connaissances
                 </h3>
                 <p className="text-sm text-[hsl(var(--muted-foreground))] leading-relaxed">
-                  Trouvez des solutions instantanées grâce à notre documentation indexée par
-                  l&apos;IA.
+                  Trouvez des solutions instantanées grâce à notre documentation
+                  indexée par l&apos;IA.
                 </p>
                 <div className="flex items-center gap-2 mt-2">
                   <KpiBadge
@@ -481,7 +498,8 @@ function Welcome() {
                   </span>
                 </h3>
                 <p className="text-sm text-[hsl(var(--muted-foreground))] leading-relaxed">
-                  Posez vos questions à notre IA alimentée par Groq pour une réponse instantanée.
+                  Posez vos questions à notre IA alimentée par Groq pour une
+                  réponse instantanée.
                 </p>
                 <span className="inline-flex items-center gap-1.5 mt-3 text-xs font-bold px-2.5 py-1 rounded-full bg-[#f59e0b]/10 text-[#f59e0b]">
                   <Loader2 size={11} className="animate-spin" />
@@ -489,7 +507,6 @@ function Welcome() {
                 </span>
               </div>
             </button>
-
           </div>
         </div>
 
@@ -501,7 +518,6 @@ function Welcome() {
           </h2>
           <ActivityFeed />
         </div>
-
       </div>
 
       {/* ── Modales & Chatbot ──────────────────────────────────────────── */}
@@ -511,10 +527,7 @@ function Welcome() {
         onSuccess={handleTicketSuccess}
       />
 
-
-
       {isGuideOpen && <UserGuideModal onClose={() => setIsGuideOpen(false)} />}
-
     </div>
   );
 }

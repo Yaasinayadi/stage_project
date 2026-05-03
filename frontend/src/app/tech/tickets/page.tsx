@@ -230,7 +230,12 @@ function MyTicketsPage() {
   const activeTickets = applyPriority(
     tickets
       .filter((t) => ACTIVE_STATES.includes(t.state))
-      .sort((a, b) => parseInt(b.priority) - parseInt(a.priority)), // highest priority first
+      .sort((a, b) => {
+        const dateA = a.write_date ? new Date(a.write_date).getTime() : 0;
+        const dateB = b.write_date ? new Date(b.write_date).getTime() : 0;
+        if (dateA !== dateB) return dateB - dateA;
+        return b.id - a.id;
+      }),
   );
 
   const resolvedTickets = applyPriority(

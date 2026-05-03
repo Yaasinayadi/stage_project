@@ -38,25 +38,85 @@ export default function Sidebar() {
 
   if (user?.x_support_role === "admin") {
     navItems = [
-      { id: "analytics", label: "Analytiques", href: "/analytics", icon: <BarChart3 size={20} /> },
-      { id: "tickets", label: "Tous les Tickets", href: "/tickets", icon: <Ticket size={20} /> },
-      { id: "queue", label: "File d'attente", href: "/tech/queue", icon: <Inbox size={20} /> },
-      { id: "knowledge", label: "Base de connaissances", href: "/tech/knowledge", icon: <BookOpen size={20} /> },
-      { id: "users", label: "Équipe & Rôles", href: "/users", icon: <Settings size={20} /> },
+      {
+        id: "analytics",
+        label: "Analytiques",
+        href: "/analytics",
+        icon: <BarChart3 size={20} />,
+      },
+      {
+        id: "tickets",
+        label: "Tous les Tickets",
+        href: "/tickets",
+        icon: <Ticket size={20} />,
+      },
+      {
+        id: "queue",
+        label: "File d'attente",
+        href: "/tech/queue",
+        icon: <Inbox size={20} />,
+      },
+      {
+        id: "knowledge",
+        label: "Base de connaissances",
+        href: "/tech/knowledge",
+        icon: <BookOpen size={20} />,
+      },
+      {
+        id: "users",
+        label: "Équipe & Rôles",
+        href: "/users",
+        icon: <Settings size={20} />,
+      },
     ];
   } else if (user?.x_support_role === "tech") {
     navItems = [
-      { id: "analytics", label: "Analytiques", href: "/analytics", icon: <BarChart3 size={20} /> },
-      { id: "queue", label: "File d'attente", href: "/tech/queue", icon: <Inbox size={20} /> },
-      { id: "my-tickets", label: "Mes Tickets", href: "/tech/tickets", icon: <ClipboardList size={20} /> },
-      { id: "knowledge", label: "Base de connaissances", href: "/tech/knowledge", icon: <BookOpen size={20} /> },
+      {
+        id: "analytics",
+        label: "Analytiques",
+        href: "/analytics",
+        icon: <BarChart3 size={20} />,
+      },
+      {
+        id: "queue",
+        label: "File d'attente",
+        href: "/tech/queue",
+        icon: <Inbox size={20} />,
+      },
+      {
+        id: "my-tickets",
+        label: "Mes Tickets",
+        href: "/tech/tickets",
+        icon: <ClipboardList size={20} />,
+      },
+      {
+        id: "knowledge",
+        label: "Base de connaissances",
+        href: "/tech/knowledge",
+        icon: <BookOpen size={20} />,
+      },
     ];
   } else {
     // Regular User
     navItems = [
-      { id: "welcome",   label: "Accueil",               href: "/welcome",         icon: <Home size={20} /> },
-      { id: "tickets",   label: "Mes Tickets",            href: "/tickets",         icon: <Ticket size={20} /> },
-      { id: "knowledge", label: "Base de connaissances",  href: "/tech/knowledge",  icon: <BookOpen size={20} /> },
+      {
+        id: "welcome",
+        label: "Accueil",
+        href: "/welcome",
+        icon: <Home size={20} />,
+      },
+      {
+        id: "tickets",
+        label: "Mes Tickets",
+        href: "/tickets",
+        icon: <Ticket size={20} />,
+      },
+      {
+        id: "knowledge",
+        label: "Base de connaissances",
+        href: "/tech/knowledge",
+        icon: <BookOpen size={20} />,
+      },
     ];
   }
 
@@ -79,7 +139,9 @@ export default function Sidebar() {
   return (
     <aside
       className="sidebar h-screen flex flex-col sticky top-0 z-40 select-none"
-      style={{ width: collapsed ? "var(--sidebar-collapsed)" : "var(--sidebar-width)" }}
+      style={{
+        width: collapsed ? "var(--sidebar-collapsed)" : "var(--sidebar-width)",
+      }}
     >
       {/* Logo Area */}
       <div className="flex items-center gap-3 px-4 h-16 border-b border-[hsl(var(--border)/0.5)] flex-shrink-0">
@@ -108,7 +170,7 @@ export default function Sidebar() {
         )}
         {navItems.map((item) => {
           const isActive = pathname === item.href;
-          
+
           if (item.disabled) {
             return (
               <button
@@ -118,7 +180,9 @@ export default function Sidebar() {
                 disabled={true}
               >
                 <span className="flex-shrink-0">{item.icon}</span>
-                {!collapsed && <span className="whitespace-nowrap">{item.label}</span>}
+                {!collapsed && (
+                  <span className="whitespace-nowrap">{item.label}</span>
+                )}
                 {!collapsed && (
                   <span className="ml-auto text-[0.6rem] uppercase bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] px-1.5 py-0.5 rounded font-semibold">
                     Bientôt
@@ -136,7 +200,9 @@ export default function Sidebar() {
               title={collapsed ? item.label : undefined}
             >
               <span className="flex-shrink-0">{item.icon}</span>
-              {!collapsed && <span className="whitespace-nowrap">{item.label}</span>}
+              {!collapsed && (
+                <span className="whitespace-nowrap">{item.label}</span>
+              )}
             </Link>
           );
         })}
@@ -146,7 +212,10 @@ export default function Sidebar() {
       <div className="px-3 py-3 border-t border-[hsl(var(--border)/0.5)] space-y-2 flex-shrink-0">
         {/* User Info */}
         {user && (
-          <Link href="/profile" className={`flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-[hsl(var(--muted)/0.5)] transition-colors ${collapsed ? "justify-center" : ""}`}>
+          <Link
+            href="/profile"
+            className={`flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-[hsl(var(--muted)/0.5)] transition-colors ${collapsed ? "justify-center" : ""}`}
+          >
             <div
               className="w-8 h-8 rounded-lg accent-gradient flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
               title={user.name}
@@ -165,9 +234,13 @@ export default function Sidebar() {
         )}
 
         {/* Theme + Collapse row */}
-        <div className={`flex ${collapsed ? "flex-col items-center gap-1" : "justify-between items-center px-2"}`}>
+        <div
+          className={`flex ${collapsed ? "flex-col items-center gap-1" : "justify-between items-center px-2"}`}
+        >
           {!collapsed && (
-            <span className="text-xs font-medium text-[hsl(var(--muted-foreground))]">Thème</span>
+            <span className="text-xs font-medium text-[hsl(var(--muted-foreground))]">
+              Thème
+            </span>
           )}
           <ThemeToggle />
         </div>
