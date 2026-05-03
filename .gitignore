@@ -55,7 +55,8 @@ Thumbs.db
 *.txt
 infos/
 
-ia_service/uploads
+ia_service/uploads/
+ia_service/attachments.db
 
 #remove underline red
 .vscode
