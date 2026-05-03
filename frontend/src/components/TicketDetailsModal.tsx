@@ -102,7 +102,6 @@ const ALLOWED_TYPES = [
 const MAX_SIZE = 10 * 1024 * 1024;
 const MAX_FILES = 5;
 
-const FLASK_BASE = "http://localhost:8000";
 const POLL_INTERVAL = 30000; // 30 seconds
 
 // ─── Helpers ───
@@ -618,7 +617,7 @@ export default function TicketDetailsModal({
     setAttachLoading(true);
     try {
       const res = await axios.get(
-        `${FLASK_BASE}/api/ticket/${ticket.id}/attachments`,
+        `${ODOO_BASE}/api/ticket/${ticket.id}/attachments`,
       );
       if (res.data.status === 200) setAttachments(res.data.data);
     } catch {
@@ -739,7 +738,7 @@ export default function TicketDetailsModal({
   const handleDelete = useCallback(async () => {
     if (!confirm("Êtes-vous sûr de vouloir supprimer ce ticket ?")) return;
     try {
-      await axios.delete(`${ODOO_BASE}/api/ticket/${ticket.id}`);
+      await axios.delete(`${ODOO_BASE}/api/ticket/${ticket.id}`, { withCredentials: true });
       onRefresh?.();
       onClose();
     } catch {
@@ -794,6 +793,7 @@ export default function TicketDetailsModal({
         const res = await axios.put(
           `${ODOO_BASE}/api/ticket/update/${ticket.id}`,
           fieldUpdates,
+          { withCredentials: true },
         );
         if (res.data.status === 200) {
           setTicket((prev) => ({
@@ -808,7 +808,7 @@ export default function TicketDetailsModal({
       if (pendingDeletes.length > 0) {
         await Promise.all(
           pendingDeletes.map((id) =>
-            axios.delete(`${FLASK_BASE}/api/attachment/${id}`),
+            axios.delete(`${ODOO_BASE}/api/attachment/${id}`, { withCredentials: true }),
           ),
         );
         filesChanged = true;
@@ -817,9 +817,9 @@ export default function TicketDetailsModal({
         const formData = new FormData();
         pendingUploads.forEach((f) => formData.append("files", f));
         await axios.post(
-          `${FLASK_BASE}/api/ticket/${ticket.id}/upload`,
+          `${ODOO_BASE}/api/ticket/${ticket.id}/upload`,
           formData,
-          { headers: { "Content-Type": "multipart/form-data" } },
+          { headers: { "Content-Type": "multipart/form-data" }, withCredentials: true },
         );
         filesChanged = true;
       }
@@ -1119,7 +1119,7 @@ export default function TicketDetailsModal({
                 </span>
                 <InlinePrioritySelect
                   priority={isEditing ? editForm.priority : ticket.priority}
-                  canEdit={isEditing}
+                  canEdit={isEditing && user?.x_support_role === "admin"}
                   isUpdating={false}
                   onUpdate={(val) =>
                     setEditForm((prev) => ({ ...prev, priority: val }))
@@ -1132,7 +1132,7 @@ export default function TicketDetailsModal({
                 </span>
                 <InlineCategorySelect
                   category={isEditing ? editForm.category : ticket.category}
-                  canEdit={isEditing}
+                  canEdit={isEditing && user?.x_support_role === "admin"}
                   isUpdating={false}
                   onUpdate={(val) =>
                     setEditForm((prev) => ({ ...prev, category: val }))
@@ -1486,7 +1486,7 @@ export default function TicketDetailsModal({
                       <div className="w-10 h-10 flex-shrink-0 rounded-lg overflow-hidden bg-[hsl(var(--muted))] flex items-center justify-center border border-[hsl(var(--border)/0.5)]">
                         {isImageMime(att.mimetype) ? (
                           <img
-                            src={`${FLASK_BASE}${att.url}`}
+                            src={`${ODOO_BASE}${att.url}`}
                             alt={att.name}
                             className="w-full h-full object-cover"
                             onError={(e) => {
@@ -1515,7 +1515,7 @@ export default function TicketDetailsModal({
                       <div className="flex items-center gap-1 flex-shrink-0">
                         {/* Télécharger — toujours visible */}
                         <a
-                          href={`${FLASK_BASE}${att.url}`}
+                          href={`${ODOO_BASE}${att.url}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="w-7 h-7 rounded-md flex items-center justify-center text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.1)] transition-colors"

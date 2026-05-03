@@ -27,7 +27,7 @@ services:
       - USER=odoo
       - PASSWORD=odoo
 
-  # API d'Intelligence Artificielle (FastAPI)
+  # API d'Intelligence Artificielle
   ia_api:
     build:
       context: ./ia_service

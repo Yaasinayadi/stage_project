@@ -15,7 +15,8 @@
         'security/ir.model.access.csv',
         'data/it_domain_data.xml',
         'data/sla_data.xml',
-        'data/user_data.xml',        # Comptes de démo (user / tech / admin) — noupdate=1
+        # user_data.xml supprimé : la création des comptes de démo est gérée
+        # par post_init_hook (hooks.py) — idempotent, pas de UniqueViolation
         'views/ticket_views.xml',
         'views/sla_views.xml',
         'views/users_views.xml',
@@ -25,4 +26,5 @@
     'installable': True,
     'application': True,
     'license': 'LGPL-3',
+    'post_init_hook': 'post_init_hook',   # hooks.py — crée les comptes démo si absents
 }

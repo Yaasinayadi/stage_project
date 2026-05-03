@@ -148,13 +148,13 @@ export default function TicketModal({ isOpen, onClose, onSuccess }: TicketModalP
 
       const ticketId = createRes.data.ticket_id;
 
-      // 3. Upload des fichiers vers Flask (/uploads sur disque + SQLite)
+      // 3. Upload des fichiers vers Odoo (ir.attachment — stockage centralisé PostgreSQL)
       if (pendingFiles.length > 0 && ticketId) {
         setStep("uploading");
         const formData = new FormData();
         pendingFiles.forEach(({ file }) => formData.append("files", file));
         await axios.post(
-          `http://localhost:8000/api/ticket/${ticketId}/upload`,
+          `${ODOO_URL}/api/ticket/${ticketId}/upload`,
           formData,
           { headers: { "Content-Type": "multipart/form-data" } }
         );

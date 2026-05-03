@@ -47,7 +47,7 @@ import KnowledgeModal from "@/components/KnowledgeModal";
 
 
 
-const FLASK_URL = "http://localhost:8000";
+// Attachments are now handled directly by Odoo (ir.attachment) — no Flask needed here
 
 // ── Inline markdown renderer (no external dependency) ──────────────────────
 function renderMarkdown(text: string): string {
@@ -298,7 +298,7 @@ function TicketDetailPage() {
   const fetchAttachments = useCallback(async () => {
     setAttachLoading(true);
     try {
-      const res = await axios.get(`${FLASK_URL}/api/ticket/${id}/attachments`);
+      const res = await axios.get(`${ODOO_URL}/api/ticket/${id}/attachments`);
       if (res.data.status === 200) setAttachments(res.data.data);
     } catch {
       /* silent */
@@ -346,7 +346,7 @@ function TicketDetailPage() {
       const formData = new FormData();
       Array.from(files).forEach((f) => formData.append("files", f));
       const res = await axios.post(
-        `${FLASK_URL}/api/ticket/${id}/upload`,
+        `${ODOO_URL}/api/ticket/${id}/upload`,
         formData,
         {
           headers: { "Content-Type": "multipart/form-data" },
@@ -1025,7 +1025,7 @@ function TicketDetailPage() {
                     </p>
                   </div>
                   <a
-                    href={`${FLASK_URL}${a.url}`}
+                    href={`${ODOO_URL}${a.url}`}
                     target="_blank"
                     rel="noreferrer"
                     className="opacity-0 group-hover:opacity-100 transition-opacity text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"

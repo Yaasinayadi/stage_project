@@ -73,6 +73,25 @@ class SupportTicket(models.Model):
         string='Pièces jointes'
     )
     
+    # Compteur de documents pour le Smart Button
+    attachment_number = fields.Integer(compute='_compute_attachment_number', string='Nombre de documents')
+
+    @api.depends('attachment_ids')
+    def _compute_attachment_number(self):
+        for ticket in self:
+            ticket.attachment_number = len(ticket.attachment_ids)
+
+    def action_get_attachment_view(self):
+        self.ensure_one()
+        return {
+            'name': 'Documents',
+            'domain': [('res_model', '=', 'support.ticket'), ('res_id', '=', self.id)],
+            'res_model': 'ir.attachment',
+            'type': 'ir.actions.act_window',
+            'view_mode': 'kanban,list,form',
+            'context': "{'default_res_model': 'support.ticket', 'default_res_id': %s}" % (self.id),
+        }
+    
     # Commentaires / Discussion
     comment_ids = fields.One2many('support.ticket.comment', 'ticket_id', string='Commentaires')
 

@@ -409,13 +409,31 @@ class SupportTicketController(http.Controller):
             return self._json_response({'status': 404, 'message': 'Ticket not found'}, 404)
 
         vals = {}
+
+        # auth='public' → request.env.user est toujours l'utilisateur anonyme.
+        # On doit résoudre l'utilisateur réel via la session Odoo.
+        session_uid = request.session.uid
+        is_admin = False
+        if session_uid:
+            session_user = request.env['res.users'].sudo().browse(session_uid)
+            is_admin = session_user.has_group('base.group_system')
+
         if 'name' in post: vals['name'] = post['name']
         if 'description' in post: vals['description'] = post['description']
-        if 'priority' in post: vals['priority'] = post['priority']
+
+        # ── Champs protégés : priorité & catégorie ──────────────────────────
+        if 'priority' in post:
+            if not is_admin:
+                return self._json_response({'status': 403, 'message': 'Seul un administrateur peut modifier la priorité.'}, 403)
+            vals['priority'] = post['priority']
+
         if 'category' in post:
+            if not is_admin:
+                return self._json_response({'status': 403, 'message': 'Seul un administrateur peut modifier la catégorie.'}, 403)
             domain_name = post['category']
             domain_rec = request.env['pfe.it.domain'].sudo().search([('name', '=ilike', domain_name)], limit=1)
             vals['ai_classification'] = domain_rec.id if domain_rec else False
+
         if 'state' in post: vals['state'] = post['state']
         if 'assigned_to_id' in post:
             vals['assigned_to_id'] = int(post['assigned_to_id']) if post['assigned_to_id'] else False
