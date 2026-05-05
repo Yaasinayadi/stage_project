@@ -8,19 +8,20 @@ import {
   LayoutGrid,
   List,
   Ticket,
-  Clock,
   CheckCircle2,
   AlertTriangle,
   Inbox,
   Filter,
   ChevronDown,
   XCircle,
+  X,
   Activity,
   ArrowUpRight,
   ClipboardList,
   History,
   Users,
   Calendar,
+  SlidersHorizontal,
 } from "lucide-react";
 import StatsCard from "@/components/StatsCard";
 import TicketCard, { getStatusInfo } from "@/components/TicketCard";
@@ -115,8 +116,10 @@ function Dashboard() {
   });
 
   const [openDropdown, setOpenDropdown] = useState<
-    "status" | "priority" | "agent" | null
+    "status" | "priority" | "agent" | "category" | null
   >(null);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
   const [agents, setAgents] = useState<AgentType[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<string>("");
@@ -248,6 +251,12 @@ function Dashboard() {
     activeFilters.priorities.length > 0 ||
     selectedAgent !== "" ||
     activeQuickFilter !== null;
+
+  const mobileFilterCount =
+    activeFilters.categories.length +
+    activeFilters.statuses.length +
+    activeFilters.priorities.length +
+    (selectedAgent !== "" ? 1 : 0);
 
   // ── Global Temporal Filter (Admin Only) ──
   const periodFilteredTickets = tickets.filter((ticket) => {
@@ -583,368 +592,319 @@ function Dashboard() {
         />
       </div>
 
-      {/* ─── Filters Bar ─── */}
+      {/* ─── Unified Toolbar ─── */}
       <div
-        className="glass-card relative z-20 p-4 space-y-4 shadow-sm animate-fade-in"
+        className="glass-card relative z-20 shadow-sm animate-fade-in"
         style={{ animationDelay: "0.2s" }}
+        onClick={() => setOpenDropdown(null)}
       >
-        <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
-          {/* Top Row: Search & View Toggle */}
-          <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto flex-1">
-            <div className="relative flex-1 w-full max-w-md">
-              <Search
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]"
-                size={16}
-              />
-              <input
-                type="text"
-                value={activeFilters.search}
-                onChange={(e) =>
-                  setActiveFilters({ ...activeFilters, search: e.target.value })
-                }
-                placeholder="Rechercher un ticket..."
-                className="input-field focus-ring !pl-11 h-10 bg-[hsl(var(--background)/0.5)]"
-                id="search-input"
-              />
+        <div className="flex items-center gap-2 p-2.5 sm:p-3 flex-wrap sm:flex-nowrap">
+
+          {/* ── SEARCH: icon-only on mobile, full bar on desktop ── */}
+          <div className="relative flex items-center" onClick={(e) => e.stopPropagation()}>
+            {/* Mobile collapsed icon */}
+            {!mobileSearchOpen && (
+              <button
+                className="md:hidden flex items-center justify-center w-9 h-9 rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.3)] transition-all"
+                onClick={() => setMobileSearchOpen(true)}
+                aria-label="Rechercher"
+              >
+                <Search size={16} />
+              </button>
+            )}
+            {/* Mobile expanded + desktop always visible */}
+            <div className={`${mobileSearchOpen ? "flex" : "hidden"} md:flex`}>
+              <div className="relative w-52 lg:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" size={15} />
+                <input
+                  type="text"
+                  value={activeFilters.search}
+                  onChange={(e) => setActiveFilters({ ...activeFilters, search: e.target.value })}
+                  placeholder="Rechercher..."
+                  autoFocus={mobileSearchOpen}
+                  className="input-field focus-ring !pl-9 h-9 text-sm bg-[hsl(var(--background)/0.5)] w-full"
+                  id="search-input"
+                />
+              </div>
+              {mobileSearchOpen && (
+                <button
+                  className="md:hidden ml-1 w-9 h-9 rounded-lg flex items-center justify-center text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))]"
+                  onClick={() => setMobileSearchOpen(false)}
+                >
+                  <X size={16} />
+                </button>
+              )}
             </div>
           </div>
 
-          <div className="flex items-center justify-between w-full lg:w-auto gap-4">
-            {/* Secondary Filters Dropdowns */}
-            <div className="flex flex-wrap gap-2 items-center">
-              <div className="relative" onClick={(e) => e.stopPropagation()}>
-                <button
-                  onClick={() =>
-                    setOpenDropdown(openDropdown === "status" ? null : "status")
-                  }
-                  className={`flex items-center gap-1.5 h-10 px-3.5 rounded-lg text-sm font-semibold transition-all duration-200 border ${
-                    activeFilters.statuses.length > 0 ||
-                    openDropdown === "status"
-                      ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
-                      : "bg-transparent border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)] hover:text-[hsl(var(--foreground))]"
-                  }`}
-                >
-                  <Filter size={14} />
-                  Statut{" "}
-                  {activeFilters.statuses.length > 0 &&
-                    `(${activeFilters.statuses.length})`}
-                  <ChevronDown
-                    size={14}
-                    className={`transition-transform ${openDropdown === "status" ? "rotate-180" : ""}`}
-                  />
-                </button>
-                {openDropdown === "status" && (
-                  <div className="absolute top-11 left-0 mt-1 w-52 max-w-[calc(100vw-2rem)] bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl shadow-xl z-[100] animate-fade-in flex flex-col gap-1 p-2 max-h-60 overflow-y-auto">
-                    {statuses.map((st) => (
-                      <label
-                        key={st}
-                        className="flex items-center gap-2.5 p-2 hover:bg-[hsl(var(--muted))] rounded-md cursor-pointer text-sm font-medium transition-colors"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={activeFilters.statuses.includes(st)}
-                          onChange={() => toggleFilter("statuses", st)}
-                          className="accent-[hsl(var(--primary))] w-4 h-4 cursor-pointer"
-                        />
-                        {st}
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="relative" onClick={(e) => e.stopPropagation()}>
-                <button
-                  onClick={() =>
-                    setOpenDropdown(
-                      openDropdown === "priority" ? null : "priority",
-                    )
-                  }
-                  className={`flex items-center gap-1.5 h-10 px-3.5 rounded-lg text-sm font-semibold transition-all duration-200 border ${
-                    activeFilters.priorities.length > 0 ||
-                    openDropdown === "priority"
-                      ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
-                      : "bg-transparent border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)] hover:text-[hsl(var(--foreground))]"
-                  }`}
-                >
-                  <AlertTriangle size={14} />
-                  Priorité{" "}
-                  {activeFilters.priorities.length > 0 &&
-                    `(${activeFilters.priorities.length})`}
-                  <ChevronDown
-                    size={14}
-                    className={`transition-transform ${openDropdown === "priority" ? "rotate-180" : ""}`}
-                  />
-                </button>
-                {openDropdown === "priority" && (
-                  <div className="absolute top-11 left-0 mt-1 w-48 max-w-[calc(100vw-2rem)] bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl shadow-xl z-[100] animate-fade-in flex flex-col gap-1 p-2 max-h-60 overflow-y-auto">
-                    {priorities.map((prio) => (
-                      <label
-                        key={prio.value}
-                        className="flex items-center gap-2.5 p-2 hover:bg-[hsl(var(--muted))] rounded-md cursor-pointer text-sm font-medium transition-colors"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={activeFilters.priorities.includes(
-                            prio.value,
-                          )}
-                          onChange={() =>
-                            toggleFilter("priorities", prio.value)
-                          }
-                          className="accent-[hsl(var(--primary))] w-4 h-4 cursor-pointer"
-                        />
-                        {prio.label}
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Agent Filter — admin/tech only */}
-              {!isUser && agents.length > 0 && (
-                <div className="relative" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    onClick={() =>
-                      setOpenDropdown(openDropdown === "agent" ? null : "agent")
-                    }
-                    className={`flex items-center gap-1.5 h-10 px-3.5 rounded-lg text-sm font-semibold transition-all duration-200 border ${
-                      selectedAgent !== "" || openDropdown === "agent"
-                        ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
-                        : "bg-transparent border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)] hover:text-[hsl(var(--foreground))]"
-                    }`}
-                    id="agent-filter-btn"
-                  >
-                    <Users size={14} />
-                    Agent {selectedAgent !== "" && `(•)`}
-                    <ChevronDown
-                      size={14}
-                      className={`transition-transform ${openDropdown === "agent" ? "rotate-180" : ""}`}
-                    />
-                  </button>
-                  {openDropdown === "agent" && (
-                    <div className="absolute top-11 left-0 mt-1 w-56 max-w-[calc(100vw-2rem)] bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl shadow-xl z-[100] animate-fade-in flex flex-col gap-1 p-2 max-h-72 overflow-y-auto">
-                      {/* Option: tous */}
-                      <button
-                        onClick={() => {
-                          setSelectedAgent("");
-                          setOpenDropdown(null);
-                        }}
-                        className={`flex items-center gap-2 w-full text-left px-2.5 py-2 rounded-md text-sm font-medium transition-colors ${
-                          selectedAgent === ""
-                            ? "bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]"
-                            : "hover:bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]"
-                        }`}
-                      >
-                        <span className="w-5 h-5 rounded-full bg-[hsl(var(--muted))] flex items-center justify-center text-[9px] font-bold">
-                          ✓
-                        </span>
-                        Tous les agents
-                      </button>
-                      {/* Option: non assigné */}
-                      <button
-                        onClick={() => {
-                          setSelectedAgent("__unassigned__");
-                          setOpenDropdown(null);
-                        }}
-                        className={`flex items-center gap-2 w-full text-left px-2.5 py-2 rounded-md text-sm font-medium transition-colors ${
-                          selectedAgent === "__unassigned__"
-                            ? "bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]"
-                            : "hover:bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]"
-                        }`}
-                      >
-                        <span className="w-5 h-5 rounded-full border-2 border-dashed border-[hsl(var(--border))] flex items-center justify-center text-[9px]">
-                          −
-                        </span>
-                        <span className="italic">Non assigné</span>
-                      </button>
-                      <div className="my-1 border-t border-[hsl(var(--border)/0.5)]" />
-                      {agents
-                        .filter(
-                          (agent) =>
-                            agent.role === "admin" ||
-                            agent.role === "agent" ||
-                            agent.role === "tech",
-                        )
-                        .map((agent) => {
-                          const initials = agent.name
-                            .trim()
-                            .split(" ")
-                            .filter(Boolean)
-                            .map((p: any) => p[0])
-                            .join("")
-                            .toUpperCase()
-                            .slice(0, 2);
-                          const colors = [
-                            "#6366f1",
-                            "#8b5cf6",
-                            "#ec4899",
-                            "#10b981",
-                            "#f59e0b",
-                            "#06b6d4",
-                            "#3b82f6",
-                            "#ef4444",
-                          ];
-                          let hash = 0;
-                          for (let i = 0; i < agent.name.length; i++)
-                            hash =
-                              agent.name.charCodeAt(i) + ((hash << 5) - hash);
-                          const color = colors[Math.abs(hash) % colors.length];
-
-                          const roleLabel =
-                            agent.role === "admin"
-                              ? "ADMINISTRATEUR"
-                              : "TECHNICIEN";
-                          const roleColor =
-                            agent.role === "admin"
-                              ? "text-indigo-500 dark:text-indigo-400"
-                              : "text-emerald-500 dark:text-emerald-400";
-
-                          return (
-                            <button
-                              key={agent.id}
-                              onClick={() => {
-                                setSelectedAgent(agent.name);
-                                setOpenDropdown(null);
-                              }}
-                              className={`flex items-center gap-2 w-full text-left px-2.5 py-2 rounded-md text-sm font-medium transition-colors ${
-                                selectedAgent === agent.name
-                                  ? "bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]"
-                                  : "hover:bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]"
-                              }`}
-                            >
-                              <span
-                                className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
-                                style={{ background: color }}
-                              >
-                                {initials}
-                              </span>
-                              <div className="flex flex-col min-w-0">
-                                <span className="truncate">{agent.name}</span>
-                                <span
-                                  className={`text-[9px] uppercase font-bold tracking-wider ${roleColor}`}
-                                >
-                                  {roleLabel}
-                                </span>
-                              </div>
-                            </button>
-                          );
-                        })}
-                    </div>
-                  )}
+          {/* ── DESKTOP DROPDOWNS (hidden on mobile) ── */}
+          <div className="hidden md:flex items-center gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
+            {/* Categories */}
+            <div className="relative">
+              <button
+                onClick={() => setOpenDropdown(openDropdown === "category" ? null : "category")}
+                className={`flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-semibold transition-all border ${
+                  activeFilters.categories.length > 0 || openDropdown === "category"
+                    ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
+                    : "bg-transparent border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)] hover:text-[hsl(var(--foreground))]"
+                }`}
+              >
+                <Inbox size={14} />
+                Catégories{activeFilters.categories.length > 0 && ` (${activeFilters.categories.length})`}
+                <ChevronDown size={13} className={`transition-transform ${openDropdown === "category" ? "rotate-180" : ""}`} />
+              </button>
+              {openDropdown === "category" && (
+                <div className="absolute top-10 left-0 mt-1 w-52 bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl shadow-xl z-[200] animate-fade-in flex flex-col gap-1 p-2 max-h-60 overflow-y-auto">
+                  {categories.map((cat) => (
+                    <label key={cat} className="flex items-center gap-2.5 p-2 hover:bg-[hsl(var(--muted))] rounded-md cursor-pointer text-sm font-medium transition-colors">
+                      <input type="checkbox" checked={activeFilters.categories.includes(cat)} onChange={() => toggleFilter("categories", cat)} className="accent-[hsl(var(--primary))] w-4 h-4 cursor-pointer" />
+                      {cat}
+                    </label>
+                  ))}
                 </div>
               )}
             </div>
 
-            {/* View Toggle */}
-            <div className="view-toggle flex-shrink-0 ml-auto lg:ml-0 bg-[hsl(var(--background)/0.5)] border border-[hsl(var(--border)/0.5)]">
+            {/* Status */}
+            <div className="relative">
               <button
-                onClick={() => setViewMode("cards")}
-                className={viewMode === "cards" ? "active" : ""}
-                title="Vue cartes"
+                onClick={() => setOpenDropdown(openDropdown === "status" ? null : "status")}
+                className={`flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-semibold transition-all border ${
+                  activeFilters.statuses.length > 0 || openDropdown === "status"
+                    ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
+                    : "bg-transparent border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)] hover:text-[hsl(var(--foreground))]"
+                }`}
               >
-                <LayoutGrid size={15} />
+                <Filter size={14} />
+                Statut{activeFilters.statuses.length > 0 && ` (${activeFilters.statuses.length})`}
+                <ChevronDown size={13} className={`transition-transform ${openDropdown === "status" ? "rotate-180" : ""}`} />
               </button>
-              <button
-                onClick={() => setViewMode("table")}
-                className={viewMode === "table" ? "active" : ""}
-                title="Vue tableau"
-              >
-                <List size={15} />
-              </button>
+              {openDropdown === "status" && (
+                <div className="absolute top-10 left-0 mt-1 w-52 bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl shadow-xl z-[200] animate-fade-in flex flex-col gap-1 p-2 max-h-60 overflow-y-auto">
+                  {statuses.map((st) => (
+                    <label key={st} className="flex items-center gap-2.5 p-2 hover:bg-[hsl(var(--muted))] rounded-md cursor-pointer text-sm font-medium transition-colors">
+                      <input type="checkbox" checked={activeFilters.statuses.includes(st)} onChange={() => toggleFilter("statuses", st)} className="accent-[hsl(var(--primary))] w-4 h-4 cursor-pointer" />
+                      {st}
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
-          </div>
-        </div>
 
-        {/* Category chips — horizontal scroll on mobile, wrap on sm+ */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[hsl(var(--border)/0.5)]">
-          {/* Mobile: single scrollable row. sm+: normal wrap */}
-          <div className="flex sm:flex-wrap gap-2 overflow-x-auto pb-1 -mb-1 max-w-full scrollbar-none">
-            {categories.map((cat) => {
-              const isSelected = activeFilters.categories.includes(cat);
-              return (
+            {/* Priority */}
+            <div className="relative">
+              <button
+                onClick={() => setOpenDropdown(openDropdown === "priority" ? null : "priority")}
+                className={`flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-semibold transition-all border ${
+                  activeFilters.priorities.length > 0 || openDropdown === "priority"
+                    ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
+                    : "bg-transparent border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)] hover:text-[hsl(var(--foreground))]"
+                }`}
+              >
+                <AlertTriangle size={14} />
+                Priorité{activeFilters.priorities.length > 0 && ` (${activeFilters.priorities.length})`}
+                <ChevronDown size={13} className={`transition-transform ${openDropdown === "priority" ? "rotate-180" : ""}`} />
+              </button>
+              {openDropdown === "priority" && (
+                <div className="absolute top-10 left-0 mt-1 w-48 bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl shadow-xl z-[200] animate-fade-in flex flex-col gap-1 p-2 max-h-60 overflow-y-auto">
+                  {priorities.map((prio) => (
+                    <label key={prio.value} className="flex items-center gap-2.5 p-2 hover:bg-[hsl(var(--muted))] rounded-md cursor-pointer text-sm font-medium transition-colors">
+                      <input type="checkbox" checked={activeFilters.priorities.includes(prio.value)} onChange={() => toggleFilter("priorities", prio.value)} className="accent-[hsl(var(--primary))] w-4 h-4 cursor-pointer" />
+                      {prio.label}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Agent */}
+            {!isUser && agents.length > 0 && (
+              <div className="relative">
                 <button
-                  key={cat}
-                  onClick={() => toggleFilter("categories", cat)}
-                  className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 cursor-pointer border ${
-                    isSelected
+                  onClick={() => setOpenDropdown(openDropdown === "agent" ? null : "agent")}
+                  className={`flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-semibold transition-all border ${
+                    selectedAgent !== "" || openDropdown === "agent"
                       ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
-                      : "bg-[hsl(var(--background)/0.5)] border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)] hover:text-[hsl(var(--foreground))]"
+                      : "bg-transparent border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)] hover:text-[hsl(var(--foreground))]"
                   }`}
                 >
-                  {cat}
+                  <Users size={14} />
+                  Agent{selectedAgent !== "" && " (•)"}
+                  <ChevronDown size={13} className={`transition-transform ${openDropdown === "agent" ? "rotate-180" : ""}`} />
                 </button>
-              );
-            })}
-          </div>
+                {openDropdown === "agent" && (
+                  <div className="absolute top-10 left-0 mt-1 w-56 bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl shadow-xl z-[200] animate-fade-in flex flex-col gap-1 p-2 max-h-72 overflow-y-auto">
+                    <button onClick={() => { setSelectedAgent(""); setOpenDropdown(null); }} className={`flex items-center gap-2 w-full text-left px-2.5 py-2 rounded-md text-sm font-medium transition-colors ${selectedAgent === "" ? "bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]" : "hover:bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]"}`}>
+                      <span className="w-5 h-5 rounded-full bg-[hsl(var(--muted))] flex items-center justify-center text-[9px] font-bold">✓</span>
+                      Tous les agents
+                    </button>
+                    <button onClick={() => { setSelectedAgent("__unassigned__"); setOpenDropdown(null); }} className={`flex items-center gap-2 w-full text-left px-2.5 py-2 rounded-md text-sm font-medium transition-colors ${selectedAgent === "__unassigned__" ? "bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]" : "hover:bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]"}`}>
+                      <span className="w-5 h-5 rounded-full border-2 border-dashed border-[hsl(var(--border))] flex items-center justify-center text-[9px]">−</span>
+                      <span className="italic">Non assigné</span>
+                    </button>
+                    <div className="my-1 border-t border-[hsl(var(--border)/0.5)]" />
+                    {agents.filter((a) => ["admin","agent","tech"].includes(a.role || "")).map((agent) => {
+                      const initials = agent.name.trim().split(" ").filter(Boolean).map((p: any) => p[0]).join("").toUpperCase().slice(0, 2);
+                      const colors = ["#6366f1","#8b5cf6","#ec4899","#10b981","#f59e0b","#06b6d4","#3b82f6","#ef4444"];
+                      let hash = 0; for (let i = 0; i < agent.name.length; i++) hash = agent.name.charCodeAt(i) + ((hash << 5) - hash);
+                      const color = colors[Math.abs(hash) % colors.length];
+                      const roleLabel = agent.role === "admin" ? "ADMINISTRATEUR" : "TECHNICIEN";
+                      const roleColor = agent.role === "admin" ? "text-indigo-500" : "text-emerald-500";
+                      return (
+                        <button key={agent.id} onClick={() => { setSelectedAgent(agent.name); setOpenDropdown(null); }} className={`flex items-center gap-2 w-full text-left px-2.5 py-2 rounded-md text-sm font-medium transition-colors ${selectedAgent === agent.name ? "bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]" : "hover:bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]"}`}>
+                          <span className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0" style={{ background: color }}>{initials}</span>
+                          <div className="flex flex-col min-w-0"><span className="truncate">{agent.name}</span><span className={`text-[9px] uppercase font-bold tracking-wider ${roleColor}`}>{roleLabel}</span></div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
-          {/* Reset Button & Dynamic Counter */}
-          <div className="flex items-center gap-4 w-full sm:w-auto ml-auto">
-            <span className="text-xs font-medium text-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted)/0.5)] px-3 py-1.5 rounded-md">
-              <span className="text-[hsl(var(--foreground))] font-bold">
-                {filteredTickets.length}
-              </span>{" "}
-              ticket{filteredTickets.length !== 1 ? "s" : ""}{" "}
-              {hasActiveFilters && "trouvé(s)"}
-            </span>
-
+            {/* Reset */}
             {hasActiveFilters && (
-              <button
-                onClick={resetFilters}
-                className="flex items-center gap-1.5 text-xs font-semibold text-red-500 hover:text-red-600 bg-red-500/10 hover:bg-red-500/20 px-3 py-1.5 rounded-md transition-colors"
-              >
+              <button onClick={resetFilters} className="flex items-center gap-1.5 h-9 px-3 text-xs font-semibold text-red-500 hover:text-red-600 bg-red-500/10 hover:bg-red-500/20 rounded-lg transition-colors border border-red-500/20">
                 <XCircle size={14} />
                 Réinitialiser
               </button>
             )}
+          </div>
 
-            {/* ── Segmented control tabs (right-aligned) ── */}
-            <div className="ml-auto flex items-center gap-0.5 p-0.5 bg-[hsl(var(--muted)/0.5)] rounded-lg border border-[hsl(var(--border)/0.4)]">
-              <button
-                onClick={() => setActiveTab("active")}
-                title="En attente de traitement"
-                className={`flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-semibold transition-all duration-150
-                  ${
-                    activeTab === "active"
-                      ? "bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm"
-                      : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
-                  }`}
-              >
-                <ClipboardList size={13} />
-                <span className="hidden sm:inline">En attente</span>
-                <span
-                  className={`text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full transition-colors
-                  ${activeTab === "active" ? "bg-[hsl(var(--primary))] text-white" : "bg-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]"}`}
-                >
-                  {activeTabTickets.length}
-                </span>
-              </button>
-              <button
-                onClick={() => {
-                  setActiveFilters(prev => ({ ...prev, statuses: [] }));
-                  setActiveQuickFilter(null);
-                  setActiveTab("resolved");
-                }}
-                title="Terminés / Résolus"
-                className={`flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-semibold transition-all duration-150
-                  ${
-                    activeTab === "resolved"
-                      ? "bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm"
-                      : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
-                  }`}
-              >
-                <History size={13} />
-                <span className="hidden sm:inline">Terminés</span>
-                <span
-                  className={`text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full transition-colors
-                  ${activeTab === "resolved" ? "bg-emerald-500 text-white" : "bg-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]"}`}
-                >
-                  {resolvedTabTickets.length}
-                </span>
+          {/* ── MOBILE: Single "Filtres" button ── */}
+          <button
+            className={`md:hidden flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-semibold transition-all border ${
+              mobileFilterCount > 0
+                ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
+                : "bg-transparent border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]"
+            }`}
+            onClick={(e) => { e.stopPropagation(); setMobileFiltersOpen(true); }}
+          >
+            <SlidersHorizontal size={15} />
+            Filtres
+            {mobileFilterCount > 0 && (
+              <span className="w-5 h-5 rounded-full bg-[hsl(var(--primary))] text-white text-[10px] font-bold flex items-center justify-center">{mobileFilterCount}</span>
+            )}
+          </button>
+
+          {/* ── SPACER ── */}
+          <div className="flex-1" />
+
+          {/* ── Ticket count (desktop) ── */}
+          <span className="hidden md:flex text-xs font-medium text-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted)/0.5)] px-2.5 py-1.5 rounded-md whitespace-nowrap">
+            <span className="text-[hsl(var(--foreground))] font-bold mr-1">{filteredTickets.length}</span>
+            ticket{filteredTickets.length !== 1 ? "s" : ""}
+          </span>
+
+          {/* ── TABS ── */}
+          <div className="flex items-center gap-0.5 p-0.5 bg-[hsl(var(--muted)/0.5)] rounded-lg border border-[hsl(var(--border)/0.4)]">
+            <button
+              onClick={() => setActiveTab("active")}
+              title="En attente"
+              className={`flex items-center gap-1 h-7 px-2 rounded-md text-xs font-semibold transition-all ${activeTab === "active" ? "bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm" : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"}`}
+            >
+              <ClipboardList size={13} />
+              <span className="hidden sm:inline">En attente</span>
+              <span className={`text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full ${activeTab === "active" ? "bg-[hsl(var(--primary))] text-white" : "bg-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]"}`}>{activeTabTickets.length}</span>
+            </button>
+            <button
+              onClick={() => { setActiveFilters(prev => ({ ...prev, statuses: [] })); setActiveQuickFilter(null); setActiveTab("resolved"); }}
+              title="Terminés"
+              className={`flex items-center gap-1 h-7 px-2 rounded-md text-xs font-semibold transition-all ${activeTab === "resolved" ? "bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm" : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"}`}
+            >
+              <History size={13} />
+              <span className="hidden sm:inline">Terminés</span>
+              <span className={`text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full ${activeTab === "resolved" ? "bg-emerald-500 text-white" : "bg-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]"}`}>{resolvedTabTickets.length}</span>
+            </button>
+          </div>
+
+          {/* ── VIEW TOGGLE ── */}
+          <div className="view-toggle bg-[hsl(var(--background)/0.5)] border border-[hsl(var(--border)/0.5)]">
+            <button onClick={() => setViewMode("cards")} className={viewMode === "cards" ? "active" : ""} title="Vue cartes"><LayoutGrid size={15} /></button>
+            <button onClick={() => setViewMode("table")} className={viewMode === "table" ? "active" : ""} title="Vue tableau"><List size={15} /></button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── MOBILE BOTTOM SHEET ── */}
+      {mobileFiltersOpen && (
+        <div className="fixed inset-0 z-[9998] md:hidden" onClick={() => setMobileFiltersOpen(false)}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="absolute bottom-0 left-0 right-0 bg-[hsl(var(--card))] rounded-t-2xl max-h-[85vh] overflow-y-auto animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            <div className="p-5">
+              {/* Handle */}
+              <div className="w-10 h-1 bg-[hsl(var(--border))] rounded-full mx-auto mb-4" />
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="font-bold text-base">Filtres</h3>
+                <div className="flex items-center gap-2">
+                  {hasActiveFilters && (
+                    <button onClick={() => { resetFilters(); setMobileFiltersOpen(false); }} className="text-xs font-semibold text-red-500 hover:text-red-600 bg-red-500/10 px-3 py-1.5 rounded-lg transition-colors">Réinitialiser</button>
+                  )}
+                  <button onClick={() => setMobileFiltersOpen(false)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[hsl(var(--muted))]"><X size={18} className="text-[hsl(var(--muted-foreground))]" /></button>
+                </div>
+              </div>
+
+              {/* Search */}
+              <div className="mb-5">
+                <p className="text-xs font-bold uppercase tracking-wide text-[hsl(var(--muted-foreground))] mb-2">Recherche</p>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" size={15} />
+                  <input type="text" value={activeFilters.search} onChange={(e) => setActiveFilters({ ...activeFilters, search: e.target.value })} placeholder="Rechercher un ticket..." className="input-field focus-ring !pl-9 h-10 text-sm w-full" />
+                </div>
+              </div>
+
+              {/* Categories */}
+              <div className="mb-5">
+                <p className="text-xs font-bold uppercase tracking-wide text-[hsl(var(--muted-foreground))] mb-2">Catégories</p>
+                <div className="flex flex-wrap gap-2">
+                  {categories.map((cat) => (
+                    <button key={cat} onClick={() => toggleFilter("categories", cat)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${activeFilters.categories.includes(cat) ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]" : "border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]"}`}>{cat}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Status */}
+              <div className="mb-5">
+                <p className="text-xs font-bold uppercase tracking-wide text-[hsl(var(--muted-foreground))] mb-2">Statut</p>
+                <div className="flex flex-wrap gap-2">
+                  {statuses.map((st) => (
+                    <button key={st} onClick={() => toggleFilter("statuses", st)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${activeFilters.statuses.includes(st) ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]" : "border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]"}`}>{st}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Priority */}
+              <div className="mb-5">
+                <p className="text-xs font-bold uppercase tracking-wide text-[hsl(var(--muted-foreground))] mb-2">Priorité</p>
+                <div className="flex flex-wrap gap-2">
+                  {priorities.map((prio) => (
+                    <button key={prio.value} onClick={() => toggleFilter("priorities", prio.value)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${activeFilters.priorities.includes(prio.value) ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]" : "border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]"}`}>{prio.label}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Agent */}
+              {!isUser && agents.length > 0 && (
+                <div className="mb-5">
+                  <p className="text-xs font-bold uppercase tracking-wide text-[hsl(var(--muted-foreground))] mb-2">Agent</p>
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={() => setSelectedAgent("")} className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${selectedAgent === "" ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]" : "border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]"}`}>Tous</button>
+                    {agents.filter((a) => ["admin","agent","tech"].includes(a.role || "")).map((agent) => (
+                      <button key={agent.id} onClick={() => setSelectedAgent(selectedAgent === agent.name ? "" : agent.name)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${selectedAgent === agent.name ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]" : "border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]"}`}>{agent.name}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <button onClick={() => setMobileFiltersOpen(false)} className="w-full btn-primary mt-2">
+                Voir {filteredTickets.length} résultat{filteredTickets.length !== 1 ? "s" : ""}
               </button>
             </div>
           </div>
         </div>
-      </div>
+      )}
+
+
 
       {/* ─── Ticket List ─── */}
       {tabFilteredTickets.length === 0 ? (
