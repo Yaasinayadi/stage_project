@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ════════════════════════════════════════════════════════════
+         ACTION FENÊTRE (doit être avant la vue form pour %(action)d)
+    ════════════════════════════════════════════════════════════ -->
+    <record id="action_pfe_it_material" model="ir.actions.act_window">
+        <field name="name">Catalogue Matériel</field>
+        <field name="res_model">pfe.it.material</field>
+        <field name="view_mode">list,form</field>
+        <field name="context">{'search_default_active': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Ajoutez votre premier article au catalogue !
+            </p>
+            <p>
+                Listez ici tous les composants physiques, logiciels et câbles
+                que les techniciens peuvent associer à leurs interventions.
+            </p>
+        </field>
+    </record>
+
+    <!-- ════════════════════════════════════════════════════════════
+         VUE LISTE — Catalogue matériel
+    ════════════════════════════════════════════════════════════ -->
+    <record id="view_pfe_it_material_tree" model="ir.ui.view">
+        <field name="name">pfe.it.material.tree</field>
+        <field name="model">pfe.it.material</field>
+        <field name="arch" type="xml">
+            <list string="Catalogue Matériel IT"
+                  decoration-muted="active == False"
+                  decoration-danger="qty_available == 0 and active == True">
+                <field name="name"/>
+                <field name="category"/>
+                <field name="reference" optional="show"/>
+                <field name="qty_available" string="Stock"/>
+                <field name="unit_cost" string="Coût unitaire (DH)" optional="show"/>
+                <field name="ticket_count" string="Tickets"/>
+                <field name="active" widget="boolean_toggle" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- ════════════════════════════════════════════════════════════
+         VUE FORMULAIRE — Détail matériel
+    ════════════════════════════════════════════════════════════ -->
+    <record id="view_pfe_it_material_form" model="ir.ui.view">
+        <field name="name">pfe.it.material.form</field>
+        <field name="model">pfe.it.material</field>
+        <field name="arch" type="xml">
+            <form string="Matériel IT">
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="%(action_pfe_it_material)d"
+                                type="action"
+                                class="oe_stat_button"
+                                icon="fa-ticket">
+                            <field name="ticket_count" widget="statinfo" string="Tickets"/>
+                        </button>
+                    </div>
+
+                    <!-- Bouton Archiver / Désarchiver -->
+                    <widget name="web_ribbon"
+                            title="Archivé"
+                            bg_color="text-bg-danger"
+                            invisible="active == True"/>
+
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1>
+                            <field name="name"
+                                   placeholder="Ex: RAM 8GB DDR4, Câble RJ45..."/>
+                        </h1>
+                    </div>
+
+                    <group>
+                        <group string="Informations">
+                            <field name="category"/>
+                            <field name="reference" placeholder="Code interne (optionnel)"/>
+                        </group>
+                        <group string="Stock &amp; Finances">
+                            <field name="qty_available"
+                                   widget="integer"
+                                   decoration-danger="qty_available == 0"/>
+                            <field name="unit_cost" string="Coût unitaire (DH)"/>
+                        </group>
+                        <group string="État">
+                            <field name="active" widget="boolean_toggle"/>
+                        </group>
+                    </group>
+
+                    <notebook>
+                        <page string="Tickets utilisant ce matériel" name="tickets">
+                            <field name="ticket_ids" readonly="1">
+                                <list>
+                                    <field name="name"/>
+                                    <field name="state"/>
+                                    <field name="priority"/>
+                                    <field name="assigned_to_id"/>
+                                    <field name="create_date"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- ════════════════════════════════════════════════════════════
+         MENU — Matériel (juste après Base de Connaissances)
+    ════════════════════════════════════════════════════════════ -->
+    <menuitem id="menu_pfe_it_material"
+              name="Matériel"
+              parent="menu_root"
+              action="action_pfe_it_material"
+              sequence="25"/>
+</odoo>

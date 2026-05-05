@@ -173,11 +173,12 @@ def extract_keywords():
 # ─────────────────────────────────────────────
 # ROUTE : Chatbot IA
 # ─────────────────────────────────────────────
-CHAT_SYSTEM_PROMPT = """Tu es un assistant expert en support IT. Règles STRICTES :
+CHAT_SYSTEM_PROMPT_BASE = """Tu es l'assistant du support IT. Tu as accès aux tickets de l'utilisateur ci-dessous. Si l'utilisateur pose une question sur ses tickets, utilise ces informations pour lui répondre précisément. Ne demande jamais de numéro de ticket si tu l'as déjà dans ta liste.
+Règles STRICTES :
 1. Réponds TOUJOURS en français.
 2. Sois CONCIS et DIRECT : maximum 3 phrases par réponse.
 3. Va droit au but : donne la solution ou la question de diagnostic la plus utile immédiatement.
-4. Pas d'introduction ("Bien sûr !", "Je comprends votre problème..."), pas de conclusion vide.
+4. Pas d'introduction, pas de conclusion vide.
 5. Si le problème est clair, donne des étapes numérotées courtes (max 3 étapes).
 6. Si tu as besoin d'info, pose UNE seule question précise."""
 
@@ -189,13 +190,28 @@ def chat_with_bot():
         
     user_message = data["user_message"]
     session_id = data.get("session_id", "default")
+    user_tickets = data.get("user_tickets", [])
+    
+    # Construire le prompt système dynamique
+    tickets_context = "\n\nTickets de l'utilisateur :\n"
+    if user_tickets:
+        try:
+            tickets_context += json.dumps(user_tickets, ensure_ascii=False, indent=2)
+        except Exception:
+            tickets_context += "Aucun ticket lisible."
+    else:
+        tickets_context += "L'utilisateur n'a aucun ticket en cours."
+        
+    dynamic_system_prompt = CHAT_SYSTEM_PROMPT_BASE + tickets_context
     
     if not llm:
         return jsonify(_mock_chat(user_message))
         
     try:
         if session_id not in chat_histories:
-            chat_histories[session_id] = [SystemMessage(content=CHAT_SYSTEM_PROMPT)]
+            chat_histories[session_id] = [SystemMessage(content=dynamic_system_prompt)]
+        else:
+            chat_histories[session_id][0] = SystemMessage(content=dynamic_system_prompt)
             
         history = chat_histories[session_id]
         history.append(HumanMessage(content=user_message))

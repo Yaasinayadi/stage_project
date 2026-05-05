@@ -1,5 +1,6 @@
 from . import it_domain
 from . import res_users
+from . import material       # pfe.it.material — doit être importé AVANT ticket (Many2many)
 from . import ticket
 from . import sla
 from . import comment

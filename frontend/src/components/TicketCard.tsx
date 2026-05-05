@@ -66,7 +66,8 @@ function getStatusInfo(state: string): { label: string; dotClass: string } {
   if (s.includes("nouveau") || s.includes("new")) return { label: "Nouveau", dotClass: "new" };
   if (s.includes("cours") || s.includes("progress")) return { label: "En cours", dotClass: "progress" };
   if (s.includes("résolu") || s.includes("resolved") || s.includes("done")) return { label: "Résolu", dotClass: "resolved" };
-  if (s.includes("attente") || s.includes("waiting")) return { label: "En attente", dotClass: "open" };
+  if (s === "waiting_material") return { label: "En attente matériel", dotClass: "open" };
+  if (s.includes("attente") || s.includes("waiting")) return { label: "En attente client", dotClass: "open" };
   return { label: state || "Ouvert", dotClass: "open" };
 }
 

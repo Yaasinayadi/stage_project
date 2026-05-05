@@ -67,6 +67,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
     navItems = [
       { id: "analytics", label: "Analytiques", href: "/analytics", icon: <BarChart3 size={20} /> },
       { id: "tickets", label: "Tous les Tickets", href: "/tickets", icon: <Ticket size={20} /> },
+      { id: "inventory", label: "Gestion des Ressources", href: "/admin/inventory", icon: <ClipboardList size={20} /> },
       { id: "queue", label: "File d'attente", href: "/tech/queue", icon: <Inbox size={20} /> },
       { id: "knowledge", label: "Base de connaissances", href: "/tech/knowledge", icon: <BookOpen size={20} /> },
       { id: "users", label: "Équipe & Rôles", href: "/users", icon: <Settings size={20} /> },

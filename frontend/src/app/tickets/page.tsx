@@ -57,6 +57,7 @@ const ACTIVE_STATES = [
   "assigned",
   "in_progress",
   "waiting",
+  "waiting_material",
   "blocked",
   "escalated",
 ];
