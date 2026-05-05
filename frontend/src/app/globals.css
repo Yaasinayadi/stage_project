@@ -277,6 +277,15 @@ select:disabled,
   animation: shake 0.5s ease-in-out;
 }
 
+/* Hide scrollbar visually but keep scroll functionality (for chip strips) */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /* ─── Utility Classes ─── */
 .animate-fade-in {
   animation: fadeIn 0.5s ease-out both;
@@ -337,11 +346,18 @@ select:disabled,
 
 /* ─── Sidebar ─── */
 .sidebar {
-  background: hsl(var(--card) / 0.95);
+  background: hsl(var(--card));
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-right: 1px solid hsl(var(--border) / 0.5);
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  /* Desktop hover-expand animation */
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Prevent any horizontal overflow on mobile */
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 .sidebar-item {
@@ -357,6 +373,11 @@ select:disabled,
   cursor: pointer;
   position: relative;
   overflow: hidden;
+}
+
+/* When sidebar is collapsed, kill the gap so the single icon centers cleanly */
+.sidebar-item.\!gap-0 {
+  gap: 0 !important;
 }
 
 .sidebar-item:hover {
@@ -388,10 +409,16 @@ select:disabled,
   backdrop-filter: blur(12px);
   border: 1px solid hsl(var(--border) / 0.5);
   border-radius: var(--radius);
-  padding: 1.25rem 1.5rem;
+  padding: 0.875rem 1rem;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .stat-card {
+    padding: 1.25rem 1.5rem;
+  }
 }
 
 .stat-card::before {

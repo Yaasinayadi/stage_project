@@ -51,7 +51,8 @@ export default function Chatbot({ defaultOpen = false, onClose }: ChatbotProps) 
     setIsLoading(true);
 
     try {
-      const res = await axios.post("http://localhost:8000/chat", {
+      const iaUrl = `http://${window.location.hostname}:8000/chat`;
+      const res = await axios.post(iaUrl, {
         user_message: userMessage,
         session_id: sessionId,
       });

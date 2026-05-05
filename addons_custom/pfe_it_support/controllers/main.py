@@ -375,7 +375,7 @@ class SupportTicketController(http.Controller):
 
     def _cors_response(self, data=None, status_code=200):
         """Helper CORS ultra-permissif pour débloquer le Frontend (OPTIONS et réponses normales)."""
-        origin = 'http://localhost:3000'
+        origin = request.httprequest.headers.get('Origin', 'http://localhost:3000')
         headers = [
             ('Access-Control-Allow-Origin', origin),
             ('Access-Control-Allow-Credentials', 'true'),
@@ -1142,10 +1142,21 @@ class SupportTicketController(http.Controller):
             
             if period == 'today':
                 domain.append(('create_date', '>=', now - timedelta(days=1)))
+            elif period == 'yesterday':
+                yesterday_start = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+                yesterday_end = yesterday_start + timedelta(days=1)
+                domain.append(('create_date', '>=', yesterday_start))
+                domain.append(('create_date', '<', yesterday_end))
             elif period == 'week':
                 domain.append(('create_date', '>=', now - timedelta(days=7)))
-            elif period == 'month':
+            elif period in ['month', '30days']:
                 domain.append(('create_date', '>=', now - timedelta(days=30)))
+            elif period == 'custom':
+                start_date = kw.get('start_date')
+                end_date = kw.get('end_date')
+                if start_date and end_date:
+                    domain.append(('create_date', '>=', start_date + ' 00:00:00'))
+                    domain.append(('create_date', '<=', end_date + ' 23:59:59'))
 
             total_count = env.search_count(domain)
             resolved_count = env.search_count(domain + [('state', 'in', ('resolved', 'closed'))])
@@ -1189,10 +1200,18 @@ class SupportTicketController(http.Controller):
             
             if period == 'today':
                 days_to_show = 1
+            elif period == 'yesterday':
+                days_to_show = 1
+                today_start = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
             elif period == 'week':
                 days_to_show = 7
-            elif period == 'month':
+            elif period in ['month', '30days']:
                 days_to_show = 30
+            elif period == 'custom' and kw.get('start_date') and kw.get('end_date'):
+                s = datetime.strptime(kw.get('start_date'), '%Y-%m-%d')
+                e = datetime.strptime(kw.get('end_date'), '%Y-%m-%d')
+                days_to_show = min((e - s).days + 1, 60)
+                today_start = e.replace(hour=0, minute=0, second=0, microsecond=0)
             else: # 'all'
                 days_to_show = 30 # For chart clarity, keep last 30 days
             
@@ -1271,10 +1290,21 @@ class SupportTicketController(http.Controller):
             
             if period == 'today':
                 domain.append(('create_date', '>=', now - timedelta(days=1)))
+            elif period == 'yesterday':
+                yesterday_start = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+                yesterday_end = yesterday_start + timedelta(days=1)
+                domain.append(('create_date', '>=', yesterday_start))
+                domain.append(('create_date', '<', yesterday_end))
             elif period == 'week':
                 domain.append(('create_date', '>=', now - timedelta(days=7)))
-            elif period == 'month':
+            elif period in ['month', '30days']:
                 domain.append(('create_date', '>=', now - timedelta(days=30)))
+            elif period == 'custom':
+                start_date = kw.get('start_date')
+                end_date = kw.get('end_date')
+                if start_date and end_date:
+                    domain.append(('create_date', '>=', start_date + ' 00:00:00'))
+                    domain.append(('create_date', '<=', end_date + ' 23:59:59'))
 
             # Agents have role 'tech'
             search_domain = [
@@ -1353,10 +1383,21 @@ class SupportTicketController(http.Controller):
             
             if period == 'today':
                 domain.append(('create_date', '>=', now - timedelta(days=1)))
+            elif period == 'yesterday':
+                yesterday_start = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+                yesterday_end = yesterday_start + timedelta(days=1)
+                domain.append(('create_date', '>=', yesterday_start))
+                domain.append(('create_date', '<', yesterday_end))
             elif period == 'week':
                 domain.append(('create_date', '>=', now - timedelta(days=7)))
-            elif period == 'month':
+            elif period in ['month', '30days']:
                 domain.append(('create_date', '>=', now - timedelta(days=30)))
+            elif period == 'custom':
+                start_date = kw.get('start_date')
+                end_date = kw.get('end_date')
+                if start_date and end_date:
+                    domain.append(('create_date', '>=', start_date + ' 00:00:00'))
+                    domain.append(('create_date', '<=', end_date + ' 23:59:59'))
 
             total_count = env.search_count(domain)
             resolved_count = env.search_count(domain + [('state', 'in', ('resolved', 'closed'))])
@@ -1399,10 +1440,18 @@ class SupportTicketController(http.Controller):
             
             if period == 'today':
                 days_to_show = 1
+            elif period == 'yesterday':
+                days_to_show = 1
+                today_start = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
             elif period == 'week':
                 days_to_show = 7
-            elif period == 'month':
+            elif period in ['month', '30days']:
                 days_to_show = 30
+            elif period == 'custom' and kw.get('start_date') and kw.get('end_date'):
+                s = datetime.strptime(kw.get('start_date'), '%Y-%m-%d')
+                e = datetime.strptime(kw.get('end_date'), '%Y-%m-%d')
+                days_to_show = min((e - s).days + 1, 60)
+                today_start = e.replace(hour=0, minute=0, second=0, microsecond=0)
             else: # 'all'
                 days_to_show = 30 # For chart clarity, keep last 30 days
             

@@ -20,6 +20,7 @@ import {
   ClipboardList,
   History,
   Users,
+  Calendar,
 } from "lucide-react";
 import StatsCard from "@/components/StatsCard";
 import TicketCard, { getStatusInfo } from "@/components/TicketCard";
@@ -60,15 +61,45 @@ const ACTIVE_STATES = [
 ];
 const RESOLVED_STATES = ["resolved", "closed"];
 
+const VISIBLE_PERIODS = [
+  { id: "today", label: "Aujourd'hui" },
+  { id: "week", label: "7 Jours" },
+  { id: "month", label: "Mois" },
+  { id: "all", label: "Global" },
+];
+const MORE_PERIODS = [
+  { id: "yesterday", label: "Hier" },
+  { id: "30days", label: "30 Jours" },
+];
+
 function Dashboard() {
   const { user } = useAuth();
   const [tickets, setTickets] = useState<TicketType[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"active" | "resolved">("active");
+  const [period, setPeriod] = useState("month");
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
+  const [isMorePeriodsOpen, setIsMorePeriodsOpen] = useState(false);
+
+  const customDateError = (() => {
+    if (!customStartDate && !customEndDate) return null;
+    const todayStr = new Date().toISOString().split('T')[0];
+    if ((customStartDate && customStartDate > todayStr) || (customEndDate && customEndDate > todayStr)) {
+      return "La date ne peut pas être dans le futur.";
+    }
+    if (customStartDate && customEndDate && customStartDate > customEndDate) {
+      return "La date 'Du' doit être avant 'Au'.";
+    }
+    return null;
+  })();
 
   // View mode
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+
+  // Quick Filters from Stats Cards
+  const [activeQuickFilter, setActiveQuickFilter] = useState<"breached" | "escalated" | "in_progress" | null>(null);
 
   // Advanced Filtering State
   const [activeFilters, setActiveFilters] = useState<{
@@ -207,6 +238,7 @@ function Dashboard() {
     });
     setSelectedAgent("");
     setOpenDropdown(null);
+    setActiveQuickFilter(null);
   };
 
   const hasActiveFilters =
@@ -214,10 +246,50 @@ function Dashboard() {
     activeFilters.categories.length > 0 ||
     activeFilters.statuses.length > 0 ||
     activeFilters.priorities.length > 0 ||
-    selectedAgent !== "";
+    selectedAgent !== "" ||
+    activeQuickFilter !== null;
+
+  // ── Global Temporal Filter (Admin Only) ──
+  const periodFilteredTickets = tickets.filter((ticket) => {
+    if (user?.x_support_role !== "admin" || period === "all") return true;
+    const ticketDate = ticket.create_date ? new Date(ticket.create_date) : new Date();
+    const now = new Date();
+    if (period === "today") {
+      return ticketDate.toDateString() === now.toDateString();
+    } else if (period === "yesterday") {
+      const yesterday = new Date();
+      yesterday.setDate(now.getDate() - 1);
+      return ticketDate.toDateString() === yesterday.toDateString();
+    } else if (period === "week") {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(now.getDate() - 7);
+      return ticketDate >= sevenDaysAgo;
+    } else if (period === "month") {
+      return ticketDate.getMonth() === now.getMonth() && ticketDate.getFullYear() === now.getFullYear();
+    } else if (period === "30days") {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(now.getDate() - 30);
+      return ticketDate >= thirtyDaysAgo;
+    } else if (period === "custom") {
+      if (customStartDate && customEndDate) {
+        const start = new Date(customStartDate);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(customEndDate);
+        end.setHours(23, 59, 59, 999);
+        return ticketDate >= start && ticketDate <= end;
+      }
+      return true;
+    }
+    return true;
+  });
 
   // Filter logic (Cumulative Intersection)
-  const filteredTickets = tickets.filter((ticket) => {
+  const filteredTickets = periodFilteredTickets.filter((ticket) => {
+    // 0. Quick Filters
+    if (activeQuickFilter === "breached" && (ticket.sla_status !== "breached" || ticket.state === "resolved" || ticket.state === "closed")) return false;
+    if (activeQuickFilter === "escalated" && ticket.state !== "escalated") return false;
+    if (activeQuickFilter === "in_progress" && ticket.state !== "assigned" && ticket.state !== "in_progress") return false;
+
     // 1. Search
     const safeName = (ticket.name || "").toLowerCase();
     const safeDesc = (ticket.description || "").toLowerCase();
@@ -273,29 +345,32 @@ function Dashboard() {
     activeTab === "active" ? activeTabTickets : resolvedTabTickets;
 
   // KPI calculations
-  const totalTickets = tickets.length;
-  const resolvedCount = tickets.filter((t) =>
+  const totalTickets = periodFilteredTickets.length;
+  const resolvedCount = periodFilteredTickets.filter((t) =>
     ["resolved", "closed"].includes(t.state),
   ).length;
-  const breachedCount = tickets.filter(
+  const breachedCount = periodFilteredTickets.filter(
     (t) =>
       !["resolved", "closed"].includes(t.state) && t.sla_status === "breached",
   ).length;
-  const inProgressCount = tickets.filter(
+  const inProgressCount = periodFilteredTickets.filter(
     (t) =>
       !["resolved", "closed"].includes(t.state) && t.sla_status !== "breached",
   ).length;
-  const escalatedCount = tickets.filter((t) => t.state === "escalated").length;
+  const escalatedCount = periodFilteredTickets.filter((t) => t.state === "escalated").length;
 
   const isUser = user?.x_support_role === "user" || !user?.x_support_role;
 
   return (
     <div
-      className="p-6 lg:p-8 max-w-[1400px] mx-auto space-y-6"
-      onClick={() => setOpenDropdown(null)}
+      className="p-4 sm:p-6 lg:p-8 max-w-[1400px] mx-auto space-y-4 sm:space-y-6"
+      onClick={() => {
+        setOpenDropdown(null);
+        setIsMorePeriodsOpen(false);
+      }}
     >
       {/* ─── Header ─── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-in">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-in relative z-50">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
             {user
@@ -311,19 +386,127 @@ function Dashboard() {
             Gérez vos demandes de support IT
           </p>
         </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="btn-primary shadow-md hover:shadow-lg transition-all shadow-[hsl(var(--primary)/0.2)]"
-          id="new-ticket-btn"
-        >
-          <PlusCircle size={18} />
-          Nouveau ticket
-        </button>
+        {user?.x_support_role !== "admin" ? (
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="btn-primary shadow-md hover:shadow-lg transition-all shadow-[hsl(var(--primary)/0.2)]"
+            id="new-ticket-btn"
+          >
+            <PlusCircle size={18} />
+            Nouveau ticket
+          </button>
+        ) : (
+          <div className="flex items-center gap-2 relative z-50">
+            <div className="flex bg-[hsl(var(--muted)/0.3)] p-1.5 rounded-xl border border-[hsl(var(--border)/0.5)] shadow-sm w-max">
+              {/* Primary Tabs */}
+              {VISIBLE_PERIODS.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => setPeriod(p.id)}
+                  className={`px-3 sm:px-4 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                    period === p.id
+                      ? "bg-[hsl(var(--background))] text-[hsl(var(--primary))] shadow-sm border border-[hsl(var(--border)/0.5)]"
+                      : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] border border-transparent"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+              
+              {/* More button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsMorePeriodsOpen(!isMorePeriodsOpen);
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                  MORE_PERIODS.some(p => p.id === period) || period === "custom"
+                    ? "bg-[hsl(var(--background))] text-[hsl(var(--primary))] shadow-sm border border-[hsl(var(--border)/0.5)]"
+                    : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] border border-transparent"
+                }`}
+              >
+                {period === "custom" ? (
+                  <><Calendar size={13} /> {customStartDate && customEndDate ? `${new Date(customStartDate).toLocaleDateString('fr-FR', {day: '2-digit', month: 'short'})} - ${new Date(customEndDate).toLocaleDateString('fr-FR', {day: '2-digit', month: 'short'})}` : "Personnalisé"}</>
+                ) : (
+                  MORE_PERIODS.find(p => p.id === period)?.label || <><Calendar size={13} /> Plus</>
+                )}
+                <ChevronDown size={13} className={`transition-transform ${isMorePeriodsOpen ? "rotate-180" : ""}`} />
+              </button>
+            </div>
+
+            {isMorePeriodsOpen && (
+              <div 
+                className="absolute top-[calc(100%+8px)] right-0 w-64 bg-[hsl(var(--popover))] border border-[hsl(var(--border))] rounded-xl shadow-2xl z-[100] p-2 animate-fade-in text-[hsl(var(--popover-foreground))]"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="space-y-1 mb-2 pb-2 border-b border-[hsl(var(--border)/0.5)]">
+                  {MORE_PERIODS.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => { setPeriod(p.id); setIsMorePeriodsOpen(false); }}
+                      className={`w-full text-left text-xs px-3 py-2 rounded-md font-semibold transition-colors
+                        ${period === p.id ? "bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]" : "hover:bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]"}`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                
+                <div className="px-1 pt-1 space-y-2">
+                  <span className="text-[0.65rem] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide px-2">Personnalisé</span>
+                  <div className="flex flex-col gap-2 px-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-[hsl(var(--muted-foreground))] w-6">Du</span>
+                      <input 
+                        type="date" 
+                        max={new Date().toISOString().split('T')[0]}
+                        className={`flex-1 bg-[hsl(var(--background))] border rounded text-[10px] p-1.5 outline-none transition-colors ${
+                          customDateError && customStartDate && (!customEndDate || customStartDate > customEndDate || customStartDate > new Date().toISOString().split('T')[0])
+                            ? "border-red-500/50 focus:border-red-500" 
+                            : "border-[hsl(var(--border))] focus:border-[hsl(var(--primary))]"
+                        }`}
+                        value={customStartDate}
+                        onChange={e => setCustomStartDate(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-[hsl(var(--muted-foreground))] w-6">Au</span>
+                      <input 
+                        type="date" 
+                        max={new Date().toISOString().split('T')[0]}
+                        className={`flex-1 bg-[hsl(var(--background))] border rounded text-[10px] p-1.5 outline-none transition-colors ${
+                          customDateError && customEndDate && (customStartDate > customEndDate || customEndDate > new Date().toISOString().split('T')[0])
+                            ? "border-red-500/50 focus:border-red-500" 
+                            : "border-[hsl(var(--border))] focus:border-[hsl(var(--primary))]"
+                        }`}
+                        value={customEndDate}
+                        onChange={e => setCustomEndDate(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  {customDateError && (
+                    <div className="text-[10px] text-red-500 font-medium px-1 mt-2 leading-tight flex items-start gap-1.5 animate-fade-in">
+                      <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" /> 
+                      <span>{customDateError}</span>
+                    </div>
+                  )}
+                  <button
+                    disabled={!customStartDate || !customEndDate || !!customDateError}
+                    onClick={() => { setPeriod("custom"); setIsMorePeriodsOpen(false); }}
+                    className="w-full mt-2 py-1.5 rounded-lg bg-[hsl(var(--primary))] text-white text-[11px] font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:opacity-90"
+                  >
+                    Appliquer la période
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ─── KPI Stats Row ─── */}
       <div
-        className={`grid gap-4 ${isUser ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-2 lg:grid-cols-5"}`}
+        className={`grid gap-2 sm:gap-4 ${isUser ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-2 lg:grid-cols-5"}`}
       >
         <StatsCard
           title="Total Tickets"
@@ -332,6 +515,11 @@ function Dashboard() {
           color="#6366f1"
           loading={loading}
           delay={0}
+          onClick={() => {
+            resetFilters();
+            setActiveTab("active");
+          }}
+          isActive={activeQuickFilter === null && activeTab === "active" && !hasActiveFilters}
         />
         <StatsCard
           title="Dépassé"
@@ -340,6 +528,11 @@ function Dashboard() {
           color="#ef4444"
           loading={loading}
           delay={80}
+          onClick={() => {
+            setActiveQuickFilter(activeQuickFilter === "breached" ? null : "breached");
+            setActiveTab("active");
+          }}
+          isActive={activeQuickFilter === "breached"}
         />
         {!isUser && (
           <StatsCard
@@ -349,6 +542,11 @@ function Dashboard() {
             color="#f59e0b"
             loading={loading}
             delay={160}
+            onClick={() => {
+              setActiveQuickFilter(activeQuickFilter === "escalated" ? null : "escalated");
+              setActiveTab("active");
+            }}
+            isActive={activeQuickFilter === "escalated"}
           />
         )}
         <StatsCard
@@ -358,6 +556,16 @@ function Dashboard() {
           color="#3b82f6"
           loading={loading}
           delay={isUser ? 160 : 240}
+          onClick={() => {
+            setActiveQuickFilter(activeQuickFilter === "in_progress" ? null : "in_progress");
+            if (activeQuickFilter !== "in_progress") {
+              setActiveFilters(prev => ({ ...prev, statuses: ["En cours"] }));
+            } else {
+              setActiveFilters(prev => ({ ...prev, statuses: prev.statuses.filter(s => s !== "En cours") }));
+            }
+            setActiveTab("active");
+          }}
+          isActive={activeQuickFilter === "in_progress"}
         />
         <StatsCard
           title="Résolus"
@@ -366,12 +574,18 @@ function Dashboard() {
           color="#10b981"
           loading={loading}
           delay={isUser ? 240 : 320}
+          onClick={() => {
+            setActiveFilters(prev => ({ ...prev, statuses: [] }));
+            setActiveQuickFilter(null);
+            setActiveTab("resolved");
+          }}
+          isActive={activeTab === "resolved" && activeQuickFilter === null}
         />
       </div>
 
       {/* ─── Filters Bar ─── */}
       <div
-        className="glass-card relative z-50 p-4 space-y-4 shadow-sm animate-fade-in"
+        className="glass-card relative z-20 p-4 space-y-4 shadow-sm animate-fade-in"
         style={{ animationDelay: "0.2s" }}
       >
         <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
@@ -420,7 +634,7 @@ function Dashboard() {
                   />
                 </button>
                 {openDropdown === "status" && (
-                  <div className="absolute top-11 right-0 sm:left-0 sm:right-auto mt-1 w-56 bg-white dark:bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl shadow-xl z-[100] animate-fade-in flex flex-col gap-1 p-2">
+                  <div className="absolute top-11 left-0 mt-1 w-52 max-w-[calc(100vw-2rem)] bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl shadow-xl z-[100] animate-fade-in flex flex-col gap-1 p-2 max-h-60 overflow-y-auto">
                     {statuses.map((st) => (
                       <label
                         key={st}
@@ -463,7 +677,7 @@ function Dashboard() {
                   />
                 </button>
                 {openDropdown === "priority" && (
-                  <div className="absolute top-11 right-0 w-56 bg-white dark:bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl shadow-xl z-[100] animate-fade-in flex flex-col gap-1 p-2">
+                  <div className="absolute top-11 left-0 mt-1 w-48 max-w-[calc(100vw-2rem)] bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl shadow-xl z-[100] animate-fade-in flex flex-col gap-1 p-2 max-h-60 overflow-y-auto">
                     {priorities.map((prio) => (
                       <label
                         key={prio.value}
@@ -508,7 +722,7 @@ function Dashboard() {
                     />
                   </button>
                   {openDropdown === "agent" && (
-                    <div className="absolute top-11 right-0 sm:left-0 sm:right-auto mt-1 w-56 bg-white dark:bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl shadow-xl z-[100] animate-fade-in flex flex-col gap-1 p-2">
+                    <div className="absolute top-11 left-0 mt-1 w-56 max-w-[calc(100vw-2rem)] bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl shadow-xl z-[100] animate-fade-in flex flex-col gap-1 p-2 max-h-72 overflow-y-auto">
                       {/* Option: tous */}
                       <button
                         onClick={() => {
@@ -641,16 +855,17 @@ function Dashboard() {
           </div>
         </div>
 
-        {/* Category Range (Multi-Select) & Reset */}
+        {/* Category chips — horizontal scroll on mobile, wrap on sm+ */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[hsl(var(--border)/0.5)]">
-          <div className="flex flex-wrap gap-2">
+          {/* Mobile: single scrollable row. sm+: normal wrap */}
+          <div className="flex sm:flex-wrap gap-2 overflow-x-auto pb-1 -mb-1 max-w-full scrollbar-none">
             {categories.map((cat) => {
               const isSelected = activeFilters.categories.includes(cat);
               return (
                 <button
                   key={cat}
                   onClick={() => toggleFilter("categories", cat)}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 cursor-pointer border ${
+                  className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 cursor-pointer border ${
                     isSelected
                       ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
                       : "bg-[hsl(var(--background)/0.5)] border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)] hover:text-[hsl(var(--foreground))]"
@@ -704,7 +919,11 @@ function Dashboard() {
                 </span>
               </button>
               <button
-                onClick={() => setActiveTab("resolved")}
+                onClick={() => {
+                  setActiveFilters(prev => ({ ...prev, statuses: [] }));
+                  setActiveQuickFilter(null);
+                  setActiveTab("resolved");
+                }}
                 title="Terminés / Résolus"
                 className={`flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-semibold transition-all duration-150
                   ${

@@ -138,7 +138,7 @@ function InlineRoleSelect({
       </button>
 
       {open && (
-        <div className="absolute top-[calc(100%+6px)] left-0 z-[200] w-56 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-2xl backdrop-blur-lg overflow-hidden animate-fade-in flex flex-col">
+        <div className="absolute top-[calc(100%+6px)] left-0 z-30 w-56 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-2xl backdrop-blur-lg overflow-hidden animate-fade-in flex flex-col">
           <div className="p-2 space-y-1">
             {Object.entries(ROLE_META).map(([val, m]) => (
               <button
@@ -269,7 +269,7 @@ function InlineDomainSelect({
 
       {/* Dropdown panel */}
       {open && (
-        <div className="absolute top-[calc(100%+6px)] left-0 z-[200] w-56 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-2xl backdrop-blur-lg overflow-hidden animate-fade-in flex flex-col">
+        <div className="absolute top-[calc(100%+6px)] left-0 z-30 w-56 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-2xl backdrop-blur-lg overflow-hidden animate-fade-in flex flex-col">
           <div className="px-3 pt-3 pb-2 border-b border-[hsl(var(--border)/0.5)]">
             <p className="text-[0.65rem] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">
               Domaines d&apos;expertise
@@ -484,7 +484,7 @@ function UsersManagement() {
 
         {/* ── Filters ── */}
         <div
-          className="glass-card relative z-50 p-4 space-y-4 shadow-sm animate-fade-in"
+          className="glass-card relative z-20 p-4 space-y-4 shadow-sm animate-fade-in"
           style={{ animationDelay: "0.1s" }}
         >
           <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
@@ -543,7 +543,7 @@ function UsersManagement() {
                       />
                     </button>
                     {openHeaderDropdown === key && (
-                      <div className="absolute top-11 left-0 z-[200] w-52 bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl shadow-2xl animate-fade-in p-1.5 space-y-0.5">
+                      <div className="absolute top-11 left-0 z-30 w-52 bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl shadow-2xl animate-fade-in p-1.5 space-y-0.5">
                         {items.map((it) => (
                           <label
                             key={it.value}

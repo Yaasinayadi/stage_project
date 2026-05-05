@@ -12,9 +12,10 @@ type StatsCardProps = {
   delay?: number; // stagger animation delay in ms
   onClick?: () => void;
   tooltip?: string;
+  isActive?: boolean;
 };
 
-export default function StatsCard({ title, value, icon, color, loading, delay = 0, onClick, tooltip }: StatsCardProps) {
+export default function StatsCard({ title, value, icon, color, loading, delay = 0, onClick, tooltip, isActive }: StatsCardProps) {
   const [displayValue, setDisplayValue] = useState<number | string>(0);
   const [showTooltip, setShowTooltip] = useState(false);
 
@@ -57,8 +58,22 @@ export default function StatsCard({ title, value, icon, color, loading, delay = 
 
   return (
     <div
-      className={`stat-card animate-fade-in relative ${onClick ? "cursor-pointer hover:shadow-md transition-shadow" : ""}`}
-      style={{ animationDelay: `${delay}ms`, overflow: 'visible' }}
+      className={`stat-card animate-fade-in relative transition-all duration-200 ${
+        onClick ? "cursor-pointer hover:shadow-md" : ""
+      } ${
+        isActive 
+          ? "shadow-sm" 
+          : ""
+      }`}
+      style={{ 
+        animationDelay: `${delay}ms`, 
+        overflow: 'visible',
+        ...(isActive ? { 
+            borderColor: color, 
+            backgroundColor: `${color}15`, // extremely subtle background tint
+            boxShadow: `0 0 0 1px ${color}` // 2px equivalent border without layout shift
+        } : {})
+      }}
       onClick={onClick}
     >
       {/* Decorative circle behind */}
@@ -69,11 +84,11 @@ export default function StatsCard({ title, value, icon, color, loading, delay = 
         />
       </div>
 
-      <div className="flex items-center justify-between mb-3 relative z-10">
-        <span className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))] flex items-center gap-1">
+      <div className="flex items-center justify-between mb-2 md:mb-3 relative z-10">
+        <span className="text-[10px] sm:text-[11px] md:text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))] flex items-center gap-1 line-clamp-1">
           {title}
         </span>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 md:gap-2">
           {tooltip && (
             <div 
               className="relative flex items-center justify-center cursor-help text-[hsl(var(--muted-foreground))]"
@@ -90,7 +105,7 @@ export default function StatsCard({ title, value, icon, color, loading, delay = 
             </div>
           )}
           <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center"
+            className="w-7 h-7 md:w-10 md:h-10 rounded-lg md:rounded-xl flex items-center justify-center [&>svg]:w-4 [&>svg]:h-4 md:[&>svg]:w-5 md:[&>svg]:h-5"
             style={{ background: `${color}18`, color: color }}
           >
             {icon}
@@ -99,7 +114,7 @@ export default function StatsCard({ title, value, icon, color, loading, delay = 
       </div>
 
       <div className="flex items-end gap-2 relative z-10">
-        <span className="text-3xl font-bold tracking-tight animate-count-up" style={{ animationDelay: `${delay + 200}ms` }}>
+        <span className="text-2xl sm:text-2xl md:text-3xl font-bold tracking-tight animate-count-up" style={{ animationDelay: `${delay + 200}ms` }}>
           {displayValue}
         </span>
       </div>

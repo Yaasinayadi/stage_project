@@ -93,19 +93,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Restore session from localStorage on mount + immediate sync
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored) as User;
-        setUser(parsed);
-        // Immediately sync with Odoo in the background
-        setTimeout(() => refreshUser(), 500);
+    console.log("AuthProvider: Initializing...");
+    let isMounted = true;
+
+    async function initAuth() {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored && isMounted) {
+          const parsed = JSON.parse(stored) as User;
+          setUser(parsed);
+          console.log("AuthProvider: User restored from localStorage");
+          
+          // Background sync
+          refreshUser().catch(err => console.error("AuthProvider: Initial sync failed", err));
+        }
+      } catch (e) {
+        console.error("AuthProvider: Error reading localStorage", e);
+        localStorage.removeItem(STORAGE_KEY);
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+          console.log("AuthProvider: Loading finished");
+        }
       }
-    } catch {
-      localStorage.removeItem(STORAGE_KEY);
-    } finally {
-      setIsLoading(false);
     }
+
+    initAuth();
+
+    return () => {
+      isMounted = false;
+    };
   }, [refreshUser]);
 
   // Periodic sync while the user is logged in

@@ -132,7 +132,8 @@ export default function TicketModal({ isOpen, onClose, onSuccess }: TicketModalP
 
     try {
       // 1. Classification IA
-      const iaRes = await axios.post("http://localhost:8000/classify_ticket", { description: desc });
+      const iaUrl = `http://${window.location.hostname}:8000/classify_ticket`;
+      const iaRes = await axios.post(iaUrl, { description: desc });
       const { category, priority } = iaRes.data;
       setAiResult({ category, priority });
 

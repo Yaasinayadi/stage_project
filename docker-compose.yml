@@ -61,6 +61,10 @@ services:
       - NODE_ENV=development
       - WATCHPACK_POLLING=true
       - CHOKIDAR_USEPOLLING=true
+      # Odoo URL visible depuis le NAVIGATEUR du client (mobile/desktop)
+      # Doit pointer vers l'IP réelle de la machine hôte
+      - NEXT_PUBLIC_ODOO_URL=http://192.168.1.10:8069
+      - NEXT_PUBLIC_ODOO_DB=it_support
     depends_on:
       - ia_api
 
