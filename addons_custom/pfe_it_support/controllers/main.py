@@ -319,7 +319,23 @@ class SupportTicketController(http.Controller):
             'write_date': str(t.write_date) if t.write_date else None,
             'date_resolved': str(t.date_done) if t.date_done else None,
             'resolution': t.resolution or None,
+            'ai_confidence': t.ai_confidence or None,
+            'ai_suggested_solution': t.ai_suggested_solution or None,
+            # Matériel IT lié au ticket
+            'materials': [{
+                'id':        line.material_id.id,
+                'name':      line.material_id.name,
+                'category':  line.material_id.category,
+                'status':    line.status,
+                'line_id':   line.id,
+                'unit_cost': line.material_id.unit_cost,
+            } for line in t.material_line_ids],
+            # Coût total matériel
+            'total_material_cost': t.total_material_cost,
+            # Pause SLA
+            'x_total_paused_duration': t.x_total_paused_duration or 0.0,
         } for t in tickets]
+
         headers.append(('Content-Type', 'application/json'))
         return request.make_response(
             json.dumps({'status': 200, 'data': data}),
@@ -379,7 +395,7 @@ class SupportTicketController(http.Controller):
         headers = [
             ('Access-Control-Allow-Origin', origin),
             ('Access-Control-Allow-Credentials', 'true'),
-            ('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS'),
+            ('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS'),
             ('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization'),
             ('Content-Type', 'application/json')
         ]
@@ -608,7 +624,7 @@ class SupportTicketController(http.Controller):
 
     @http.route('/api/ticket/<int:ticket_id>/wait', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
     def wait_ticket(self, ticket_id, **kw):
-        """Passe un ticket en état 'En attente' avec une justification."""
+        """Passe un ticket en état 'En attente client' avec une justification."""
         if request.httprequest.method == 'OPTIONS':
             return self._cors_response()
         try:
@@ -624,7 +640,7 @@ class SupportTicketController(http.Controller):
 
             # Ajouter un commentaire explicatif et message public
             if justification:
-                body = f"⏸️ **MISE EN ATTENTE** : {justification}"
+                body = f"⏸️ **EN ATTENTE CLIENT** : {justification}"
                 ticket.message_post(
                     body=body,
                     message_type='comment',
@@ -639,11 +655,84 @@ class SupportTicketController(http.Controller):
 
             return self._json_response({
                 'status': 200,
-                'message': 'Ticket mis en attente.',
+                'message': 'Ticket mis en attente client.',
                 'state': 'waiting',
             })
         except Exception as e:
             return self._json_response({'status': 500, 'message': str(e)}, 500)
+
+    @http.route('/api/ticket/<int:ticket_id>/wait-material', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
+    def wait_material_ticket(self, ticket_id, **kw):
+        """Passe un ticket en état 'En attente matériel' (pause SLA) + enregistre le matériel requis."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+        try:
+            post = json.loads(request.httprequest.data.decode('utf-8'))
+            justification = post.get('justification', '').strip()
+            user_id = post.get('user_id')
+            material_ids = post.get('material_ids', [])  # Liste d'IDs Odoo
+
+            ticket = request.env['support.ticket'].sudo().browse(ticket_id)
+            if not ticket.exists():
+                return self._json_response({'status': 404, 'message': 'Ticket introuvable.'}, 404)
+
+            # Préparer les valeurs à écrire
+            write_vals = {'state': 'waiting_material'}
+            
+            existing_lines = ticket.material_line_ids
+            existing_mat_ids = existing_lines.mapped('material_id.id')
+            lines_cmd = []
+            
+            if material_ids:
+                requested_mids = [int(mid) for mid in material_ids]
+                for line in existing_lines:
+                    if line.material_id.id not in requested_mids:
+                        lines_cmd.append((2, line.id, False))
+                for mid in requested_mids:
+                    if mid not in existing_mat_ids:
+                        lines_cmd.append((0, 0, {'material_id': mid, 'status': 'requested'}))
+            else:
+                lines_cmd.append((5, 0, 0))
+                
+            write_vals['material_line_ids'] = lines_cmd
+
+            ticket.write(write_vals)
+
+            # Construire le message avec les matériels
+            mat_names = []
+            if material_ids:
+                mats = request.env['pfe.it.material'].sudo().browse([int(mid) for mid in material_ids])
+                mat_names = [m.name for m in mats if m.exists()]
+
+            mat_str = ', '.join(mat_names) if mat_names else 'Non spécifié'
+            body_parts = ["📦 <b>EN ATTENTE MATÉRIEL</b>"]
+            if justification:
+                body_parts.append(f"<b>Motif :</b> {justification}")
+            body_parts.append(f"<b>Matériel requis :</b> {mat_str}")
+            body = "<br/>".join(body_parts)
+
+            ticket.message_post(
+                body=body,
+                message_type='comment',
+                subtype_xmlid='mail.mt_comment',
+                author_id=int(user_id) if user_id else False
+            )
+            request.env['support.ticket.comment'].sudo().create({
+                'ticket_id': ticket_id,
+                'body': body,
+                'author_id': int(user_id) if user_id else request.env.user.id,
+            })
+
+            return self._json_response({
+                'status': 200,
+                'message': 'Ticket mis en attente matériel. SLA suspendu.',
+                'state': 'waiting_material',
+                'materials': mat_names,
+            })
+        except Exception as e:
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
+
+
 
     @http.route('/api/ticket/<int:ticket_id>/resume', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
     def resume_ticket(self, ticket_id, **kw):
@@ -778,9 +867,32 @@ class SupportTicketController(http.Controller):
         except Exception as e:
             return self._json_response({'status': 500, 'message': str(e)}, 500)
 
+
+
     # ─────────────────────────────────────────────
-    # AGENTS API
+    # MATERIALS API
     # ─────────────────────────────────────────────
+
+    @http.route('/api/materials', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
+    def get_materials(self, **kw):
+        """Récupère le catalogue complet de matériel IT."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+        try:
+            mats = request.env['pfe.it.material'].sudo().search([('active', '=', True)], order='category, name')
+            data = [{
+                'id':            m.id,
+                'name':          m.name,
+                'category':      m.category,
+                'reference':     m.reference or '',
+                'qty_available': m.qty_available,
+                'unit_cost':     m.unit_cost,
+            } for m in mats]
+            return self._json_response({'status': 200, 'data': data})
+        except Exception as e:
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
+
+
 
     @http.route('/api/agents', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
     def get_agents(self, **kw):
@@ -1163,9 +1275,10 @@ class SupportTicketController(http.Controller):
             
             # Non-resolved context for partition
             open_domain = domain + [('state', 'not in', ('resolved', 'closed'))]
-            overdue_count = env.search_count(open_domain + [('sla_status', '=', 'breached')])
-            at_risk_count = env.search_count(open_domain + [('sla_status', '=', 'at_risk')])
-            in_progress_count = env.search_count(open_domain + [('sla_status', 'not in', ('breached', 'at_risk'))])
+            open_tickets = env.search(open_domain)
+            overdue_count = len(open_tickets.filtered(lambda t: t.sla_status == 'breached'))
+            at_risk_count = len(open_tickets.filtered(lambda t: t.sla_status == 'at_risk'))
+            in_progress_count = len(open_tickets.filtered(lambda t: t.sla_status not in ('breached', 'at_risk')))
 
             # Répartition par catégorie
             cats_group = env.read_group(domain, ['ai_classification'], ['ai_classification'])
@@ -1404,9 +1517,10 @@ class SupportTicketController(http.Controller):
             
             # Non-resolved context for partition
             open_domain = domain + [('state', 'not in', ('resolved', 'closed'))]
-            overdue_count = env.search_count(open_domain + [('sla_status', '=', 'breached')])
-            at_risk_count = env.search_count(open_domain + [('sla_status', '=', 'at_risk')])
-            in_progress_count = env.search_count(open_domain + [('sla_status', 'not in', ('breached', 'at_risk'))])
+            open_tickets = env.search(open_domain)
+            overdue_count = len(open_tickets.filtered(lambda t: t.sla_status == 'breached'))
+            at_risk_count = len(open_tickets.filtered(lambda t: t.sla_status == 'at_risk'))
+            in_progress_count = len(open_tickets.filtered(lambda t: t.sla_status not in ('breached', 'at_risk')))
 
             # Répartition par catégorie
             cats_group = env.read_group(domain, ['ai_classification'], ['ai_classification'])
@@ -1662,6 +1776,149 @@ class SupportTicketController(http.Controller):
         except Exception as e:
             import traceback
             return self._json_response({'status': 500, 'message': str(e), 'trace': traceback.format_exc()}, 500)
+
+    @http.route('/api/admin/inventory', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
+    def get_admin_inventory(self, **kwargs):
+        """Récupère tous les matériels demandés pour l'inventaire administrateur."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+            
+        try:
+            lines = request.env['support.ticket.material.line'].sudo().search([])
+            
+            data = []
+            for line in lines:
+                mat = line.material_id
+                data.append({
+                    'id': line.id,
+                    'ticket_id': line.ticket_id.id,
+                    'ticket_name': line.ticket_id.name,
+                    'user_name': line.ticket_id.assigned_to_id.name if line.ticket_id.assigned_to_id else (line.ticket_id.user_id.name if line.ticket_id.user_id else 'Inconnu'),
+                    'material_id': mat.id,
+                    'material_name': mat.name,
+                    'material_reference': mat.reference or '',
+                    'qty_available': mat.qty_available,
+                    'unit_cost': mat.unit_cost,
+                    'status': line.status,
+                    'ticket_priority': line.ticket_id.priority,
+                })
+                
+            return self._json_response({'status': 200, 'data': data})
+        except Exception as e:
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
+
+    @http.route('/api/admin/catalog', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
+    def get_admin_catalog(self, **kwargs):
+        """Retourne le catalogue complet des matériels IT avec leur stock."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+
+        try:
+            materials = request.env['pfe.it.material'].sudo().search([('active', '=', True)], order='category, name')
+            data = []
+            for mat in materials:
+                data.append({
+                    'id': mat.id,
+                    'name': mat.name,
+                    'reference': mat.reference or '',
+                    'category': mat.category or 'other',
+                    'qty_available': mat.qty_available,
+                    'unit_cost': mat.unit_cost,
+                })
+            return self._json_response({'status': 200, 'data': data})
+        except Exception as e:
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
+
+    @http.route('/api/admin/catalog/<int:material_id>/stock', type='http', auth='public', methods=['PATCH', 'OPTIONS'], csrf=False)
+    def update_catalog_stock(self, material_id, **kwargs):
+        """Incrémente ou décrémente le stock d'un matériel. Payload JSON: { delta: 1 | -1 }"""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+
+        try:
+            raw = request.httprequest.data.decode('utf-8')
+            payload = json.loads(raw) if raw else {}
+            delta = int(payload.get('delta', 0))
+
+            if delta not in (1, -1):
+                return self._json_response({'status': 400, 'message': 'delta doit être 1 ou -1.'}, 400)
+
+            mat = request.env['pfe.it.material'].sudo().browse(material_id)
+            if not mat.exists():
+                return self._json_response({'status': 404, 'message': 'Matériel introuvable.'}, 404)
+
+            new_qty = max(0, mat.qty_available + delta)
+            mat.write({'qty_available': new_qty})
+
+            return self._json_response({
+                'status': 200,
+                'message': 'Stock mis à jour.',
+                'qty_available': new_qty,
+            })
+        except Exception as e:
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
+
+    @http.route('/api/admin/inventory/<int:line_id>/ready', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
+    def mark_inventory_ready(self, line_id, **kwargs):
+        """Marque une ligne de matériel comme 'ready'."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+            
+        try:
+            line = request.env['support.ticket.material.line'].sudo().browse(line_id)
+            if not line.exists():
+                return self._json_response({'status': 404, 'message': 'Ligne introuvable.'}, 404)
+                
+            if line.material_id.qty_available <= 0:
+                return self._json_response({'status': 400, 'message': f'Stock insuffisant pour la ressource : {line.material_id.name}'}, 400)
+                
+            line.write({'status': 'ready'})
+            
+            # Notifier dans le ticket
+            ticket = line.ticket_id
+            if ticket:
+                msg = f"✅ <b>Matériel Disponible</b> : Le matériel {line.material_id.name} est désormais prêt et peut être récupéré par le technicien."
+                ticket.message_post(body=msg, message_type='notification')
+                
+            return self._json_response({'status': 200, 'message': 'Matériel marqué comme prêt.'})
+        except Exception as e:
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
+
+    @http.route('/api/ticket/<int:ticket_id>/order_material', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
+    def order_inventory_material(self, ticket_id, **kwargs):
+        """Marque une ligne de matériel comme 'ordered' (en cours de commande)."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+            
+        try:
+            raw = request.httprequest.data.decode('utf-8')
+            payload = json.loads(raw) if raw else {}
+            material_id = payload.get('material_id')
+
+            if not material_id:
+                return self._json_response({'status': 400, 'message': 'material_id requis.'}, 400)
+
+            ticket = request.env['support.ticket'].sudo().browse(ticket_id)
+            if not ticket.exists():
+                return self._json_response({'status': 404, 'message': 'Ticket introuvable.'}, 404)
+
+            line = request.env['support.ticket.material.line'].sudo().search([
+                ('ticket_id', '=', ticket_id),
+                ('material_id', '=', int(material_id))
+            ], limit=1)
+
+            if not line:
+                return self._json_response({'status': 404, 'message': 'Ligne de matériel introuvable pour ce ticket.'}, 404)
+                
+            line.write({'status': 'ordered'})
+            
+            # Notifier dans le ticket
+            msg = f"PROCÉDURE : Une commande a été initiée pour le matériel {line.material_id.name}."
+            ticket.message_post(body=msg, message_type='notification')
+                
+            return self._json_response({'status': 200, 'message': 'Matériel marqué comme en commande.'})
+        except Exception as e:
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
 
 
 

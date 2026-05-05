@@ -13,3 +13,9 @@ access_support_knowledge_tag_technician,support.knowledge.tag.technician,model_s
 access_support_knowledge_tag_manager,support.knowledge.tag.manager,model_support_knowledge_tag,base.group_system,1,1,1,1
 access_pfe_it_domain_user,pfe.it.domain.user,model_pfe_it_domain,base.group_user,1,0,0,0
 access_pfe_it_domain_manager,pfe.it.domain.manager,model_pfe_it_domain,base.group_system,1,1,1,1
+access_pfe_it_material_user,pfe.it.material.user,model_pfe_it_material,base.group_user,1,0,0,0
+access_pfe_it_material_technician,pfe.it.material.technician,model_pfe_it_material,pfe_it_support.group_support_technician,1,1,1,0
+access_pfe_it_material_manager,pfe.it.material.manager,model_pfe_it_material,base.group_system,1,1,1,1
+access_support_ticket_material_line_user,support.ticket.material.line.user,model_support_ticket_material_line,base.group_user,1,1,1,1
+access_support_ticket_material_line_technician,support.ticket.material.line.technician,model_support_ticket_material_line,pfe_it_support.group_support_technician,1,1,1,1
+access_support_ticket_material_line_manager,support.ticket.material.line.manager,model_support_ticket_material_line,base.group_system,1,1,1,1

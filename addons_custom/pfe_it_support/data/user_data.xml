@@ -16,7 +16,7 @@
             <field name="name">Demo User</field>
             <field name="login">user@gmail.com</field>
             <field name="email">user@gmail.com</field>
-            <field name="password">12345678</field>
+            <!-- <field name="password">12345678</field> -->
             <!-- Internal User = base.group_user uniquement → rôle "user" -->
             <field name="group_ids" eval="[(6, 0, [ref('base.group_user')])]"/>
         </record>
@@ -26,7 +26,7 @@
             <field name="name">Demo Technician</field>
             <field name="login">tech@gmail.com</field>
             <field name="email">tech@gmail.com</field>
-            <field name="password">12345678</field>
+            <!-- <field name="password">12345678</field> -->
             <!--
                 group_support_technician implique déjà base.group_user via
                 implied_ids défini dans security/security.xml.
@@ -43,7 +43,7 @@
             <field name="name">Demo Admin</field>
             <field name="login">admin@gmail.com</field>
             <field name="email">admin@gmail.com</field>
-            <field name="password">12345678</field>
+            <!-- <field name="password">12345678</field> -->
             <!--
                 base.group_system = Administrator Odoo (Settings > Technical).
                 C'est ce groupe qui est mappé au rôle "admin" dans x_support_role.

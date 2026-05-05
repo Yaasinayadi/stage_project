@@ -765,3 +765,226 @@ class TicketController(http.Controller):
             )
         except Exception as e:
             return request.make_response(json.dumps({'status': 'error', 'message': str(e)}), headers=headers, status=500)
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # CATALOGUE MATÉRIEL IT
+    # ═══════════════════════════════════════════════════════════════════════
+
+    @http.route('/api/materials', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
+    def get_materials(self, **kwargs):
+        """
+        Retourne le catalogue complet de matériel IT (actif uniquement).
+        """
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+        try:
+            domain = [('active', '=', True)]
+            category_filter = kwargs.get('category')
+            if category_filter:
+                domain.append(('category', '=', category_filter))
+
+            materials = request.env['pfe.it.material'].sudo().search(domain, order='category, name')
+
+            CATEGORY_LABELS = {
+                'hardware': 'Matériel',
+                'software': 'Logiciel',
+                'cable':    'Câblage',
+                'other':    'Autre',
+            }
+
+            data = [{
+                'id':        m.id,
+                'name':      m.name,
+                'category':  m.category,
+                'category_label': CATEGORY_LABELS.get(m.category, m.category),
+                'reference': m.reference or None,
+            } for m in materials]
+
+            return self._cors_response({'status': 'success', 'data': data})
+        except Exception as e:
+            _logger.error("GET /api/materials error: %s", e)
+            return self._cors_response({'status': 'error', 'message': str(e)}, status=500)
+
+    @http.route('/api/ticket/<int:ticket_id>/materials', type='http', auth='public',
+                methods=['GET', 'POST', 'OPTIONS'], csrf=False)
+    def manage_ticket_materials(self, ticket_id, **kwargs):
+        """
+        GET  → liste le matériel actuellement lié au ticket.
+        POST → { material_ids: [1, 2, 3] } → remplace la liste des matériaux liés (en créant des lignes).
+        """
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+
+        try:
+            ticket = request.env['support.ticket'].sudo().browse(ticket_id)
+            if not ticket.exists():
+                return self._cors_response({'status': 'error', 'message': 'Ticket introuvable.'}, status=404)
+
+            # ── GET : retourner les matériaux liés ────────────────────────
+            if request.httprequest.method == 'GET':
+                data = [{
+                    'id':             line.material_id.id,
+                    'name':           line.material_id.name,
+                    'category':       line.material_id.category,
+                    'status':         line.status,
+                    'line_id':        line.id,
+                    'unit_cost':      line.material_id.unit_cost,
+                } for line in ticket.material_line_ids if line.material_id]
+                return self._cors_response({
+                    'status': 'success', 
+                    'data': data,
+                    'total_material_cost': ticket.total_material_cost
+                })
+
+            # ── POST : mettre à jour la liste ─────────────────────────────
+            body = json.loads(request.httprequest.data.decode('utf-8')) if request.httprequest.data else {}
+            material_ids = body.get('material_ids', [])
+
+            if not isinstance(material_ids, list):
+                return self._cors_response(
+                    {'status': 'error', 'message': 'material_ids doit être une liste d\'entiers.'},
+                    status=400
+                )
+
+            # Vérifier que tous les IDs existent
+            valid_materials = request.env['pfe.it.material'].sudo().browse(material_ids)
+            if len(valid_materials) != len(material_ids):
+                return self._cors_response(
+                    {'status': 'error', 'message': 'Certains material_ids sont invalides.'},
+                    status=400
+                )
+
+            # Get current lines
+            current_lines = ticket.material_line_ids
+            current_mids = set(current_lines.mapped('material_id.id'))
+            new_mids = set(int(mid) for mid in material_ids)
+
+            # Lignes à supprimer
+            mids_to_remove = current_mids - new_mids
+            if mids_to_remove:
+                lines_to_remove = current_lines.filtered(lambda l: l.material_id.id in mids_to_remove)
+                lines_to_remove.unlink()
+
+            # Lignes à créer
+            mids_to_add = new_mids - current_mids
+            MaterialLine = request.env['support.ticket.material.line'].sudo()
+            for mid in mids_to_add:
+                MaterialLine.create({
+                    'ticket_id': ticket.id,
+                    'material_id': mid,
+                    'status': 'requested',
+                })
+
+            # Force compute total cost
+            ticket._compute_total_material_cost()
+
+            # Unify logic with "En attente matériel": if materials are added and ticket is active, pause SLA
+            if material_ids and ticket.state in ['assigned', 'in_progress']:
+                ticket.state = 'waiting_material'
+                ticket.message_post(
+                    body="⏸️ <b>SLA Suspendu</b> : Passage automatique en attente matériel suite à l'ajout de ressources.",
+                    message_type='notification',
+                )
+            elif not material_ids and ticket.state == 'waiting_material':
+                ticket.state = 'in_progress'
+                ticket.message_post(
+                    body="▶️ <b>SLA Repris</b> : Le matériel requis a été annulé. Le ticket repasse en cours.",
+                    message_type='notification',
+                )
+
+            # Log dans le chatter
+            if material_ids:
+                names = ', '.join(valid_materials.mapped('name'))
+                ticket.message_post(
+                    body=f"🔧 <b>Matériel lié au ticket mis à jour</b> : {names}",
+                    message_type='notification',
+                )
+            else:
+                ticket.message_post(
+                    body="🔧 <b>Matériel</b> : liste vidée.",
+                    message_type='notification',
+                )
+
+            # Retourner la liste mise à jour
+            updated = [{
+                'id':             line.material_id.id,
+                'name':           line.material_id.name,
+                'category':       line.material_id.category,
+                'status':         line.status,
+                'line_id':        line.id,
+                'unit_cost':      line.material_id.unit_cost,
+            } for line in ticket.material_line_ids if line.material_id]
+
+            return self._cors_response({
+                'status': 200,
+                'data': updated,
+                'total_material_cost': ticket.total_material_cost,
+                'state': ticket.state
+            })
+
+        except Exception as e:
+            _logger.error("manage_ticket_materials error: %s", e)
+            return self._cors_response({'status': 'error', 'message': str(e)}, status=500)
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # PAUSE SLA — En attente matériel
+    # ═══════════════════════════════════════════════════════════════════════
+
+    @http.route('/api/ticket/<int:ticket_id>/wait_material', type='http', auth='public',
+                methods=['POST', 'OPTIONS'], csrf=False)
+    def wait_material_ticket(self, ticket_id, **kwargs):
+        """
+        Passe le ticket en 'En attente matériel' :
+        - Enregistre x_last_pause_date (début du chrono de pause)
+        - Le SLA est figé pendant cette période (calculé au retour en 'En cours')
+        Body JSON : { justification: str, user_id: int }
+        """
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+        try:
+            body = json.loads(request.httprequest.data.decode('utf-8')) if request.httprequest.data else {}
+            justification = body.get('justification', '').strip()
+            user_id       = body.get('user_id')
+
+            ticket = request.env['support.ticket'].sudo().browse(ticket_id)
+            if not ticket.exists():
+                return self._cors_response({'status': 'error', 'message': 'Ticket introuvable.'}, status=404)
+
+            if ticket.state == 'waiting_material':
+                return self._cors_response(
+                    {'status': 'error', 'message': 'Le ticket est déjà en attente de matériel.'},
+                    status=400
+                )
+
+            # Écriture → la logique de pause SLA est déclenchée dans write()
+            ticket.write({'state': 'waiting_material'})
+
+            # Message chatter
+            msg = "⏳ <b>En attente de matériel</b>"
+            if justification:
+                msg += f" : {justification}"
+            ticket.message_post(
+                body=msg,
+                message_type='comment',
+                subtype_xmlid='mail.mt_comment',
+                author_id=int(user_id) if user_id else False,
+            )
+
+            # Ajouter aussi dans le modèle de commentaires frontend
+            try:
+                request.env['support.ticket.comment'].sudo().create({
+                    'ticket_id': ticket_id,
+                    'body':      msg,
+                    'author_id': int(user_id) if user_id else request.env.user.id,
+                })
+            except Exception as comment_err:
+                _logger.warning("wait_material comment failed: %s", comment_err)
+
+            return self._cors_response({
+                'status':  'success',
+                'message': 'Ticket mis en attente de matériel. Le chrono SLA est suspendu.',
+                'state':   'waiting_material',
+            })
+        except Exception as e:
+            _logger.error("wait_material_ticket error: %s", e)
+            return self._cors_response({'status': 'error', 'message': str(e)}, status=500)

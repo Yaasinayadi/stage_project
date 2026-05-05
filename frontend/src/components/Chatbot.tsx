@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect } from "react";
 import { MessageCircle, X, Send, Bot, User, Sparkles, AlertTriangle } from "lucide-react";
 import axios from "axios";
+import { useAuth } from "@/lib/auth";
+import { ODOO_URL } from "@/lib/config";
 
 type Message = { sender: "user" | "bot"; text: React.ReactNode };
 
@@ -43,6 +45,8 @@ export default function Chatbot({ defaultOpen = false, onClose }: ChatbotProps) 
     return () => window.removeEventListener("toggle-chatbot", handleToggle);
   }, []);
 
+  const { user } = useAuth();
+
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
     const userMessage = input;
@@ -51,10 +55,31 @@ export default function Chatbot({ defaultOpen = false, onClose }: ChatbotProps) 
     setIsLoading(true);
 
     try {
+      let userTickets: any[] = [];
+      if (user) {
+        try {
+          // Fetch only the connected user's tickets
+          const ticketsRes = await axios.get(`${ODOO_URL}/api/tickets?user_id=${user.id}`);
+          if (ticketsRes.data.status === 200) {
+            userTickets = ticketsRes.data.data.map((t: any) => ({
+              reference: `Ticket #${t.id}`,
+              sujet: t.name,
+              statut: t.state,
+              assigne_a: t.assigned_to || "Non assigné",
+              categorie: t.category,
+              priorite: t.priority
+            }));
+          }
+        } catch (e) {
+          console.error("Erreur récupération tickets pour chatbot", e);
+        }
+      }
+
       const iaUrl = `http://${window.location.hostname}:8000/chat`;
       const res = await axios.post(iaUrl, {
         user_message: userMessage,
         session_id: sessionId,
+        user_tickets: userTickets
       });
       setMessages(prev => [...prev, { sender: "bot", text: res.data.bot_reply }]);
     } catch {

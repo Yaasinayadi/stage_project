@@ -5,15 +5,22 @@
         <field name="name">support.ticket.tree</field>
         <field name="model">support.ticket</field>
         <field name="arch" type="xml">
-            <list decoration-danger="sla_status=='breached'" decoration-warning="sla_status=='at_risk'" decoration-success="state=='resolved'">
+            <list decoration-danger="sla_status=='breached'"
+                  decoration-warning="sla_status=='at_risk'"
+                  decoration-success="state=='resolved'">
                 <field name="name"/>
                 <field name="user_id"/>
                 <field name="assigned_to_id" optional="show"/>
                 <field name="x_accepted" widget="boolean_toggle" string="Accepté"/>
                 <field name="priority" widget="badge"/>
                 <field name="ai_classification"/>
-                <field name="state" widget="badge" decoration-info="state=='new'" decoration-success="state=='resolved'"/>
-                <field name="sla_status" widget="badge" decoration-danger="sla_status=='breached'"/>
+                <field name="state" widget="badge"
+                       decoration-info="state=='new'"
+                       decoration-warning="state in ('waiting','waiting_material')"
+                       decoration-success="state=='resolved'"/>
+                <field name="sla_status" widget="badge"
+                       decoration-danger="sla_status=='breached'"
+                       decoration-warning="sla_status=='at_risk'"/>
                 <field name="create_date"/>
             </list>
         </field>
@@ -26,7 +33,14 @@
         <field name="arch" type="xml">
             <form>
                 <header>
-                    <field name="state" widget="statusbar" options="{'clickable': '1'}"/>
+                    <button name="action_pause_ticket" type="object" string="Mettre en attente matériel (Pause SLA)" class="btn-warning"
+                            invisible="state != 'in_progress'"/>
+                    <button name="action_resume_ticket" type="object" string="Reprendre l'intervention (Reprise SLA)" class="btn-success"
+                            invisible="state != 'waiting_material'"/>
+
+                    <field name="state" widget="statusbar"
+                           options="{'clickable': '1'}"
+                           statusbar_visible="new,assigned,in_progress,waiting,waiting_material,resolved,closed"/>
                 </header>
                 <sheet>
                     <div class="oe_button_box" name="button_box">
@@ -42,8 +56,10 @@
                             <field name="name" placeholder="Sujet du ticket..."/>
                         </h1>
                     </div>
+
+                    <!-- Groupe principal -->
                     <group>
-                        <group>
+                        <group string="Informations">
                             <field name="user_id"/>
                             <field name="ai_classification" widget="selection"/>
                             <field name="assigned_to_id"
@@ -51,21 +67,79 @@
                                 options="{'no_create': True, 'no_quick_create': True}"/>
                             <field name="priority"/>
                         </group>
-                        <group>
+                        <group string="SLA &amp; Statut">
                             <field name="ai_confidence" widget="progressbar"/>
-                            <field name="sla_deadline" widget="remaining_days"/>
+                            <field name="sla_deadline"/>
                             <field name="sla_status"/>
                             <field name="x_accepted" widget="boolean_toggle"/>
                         </group>
                     </group>
+
+                    <!-- Groupe Pause SLA (visible uniquement si données existantes) -->
+                    <group string="⏱️ Pause SLA (En attente matériel)"
+                           invisible="x_total_paused_duration == 0.0">
+                        <field name="x_total_paused_duration"
+                               string="Durée totale pausée (heures)"
+                               readonly="1"
+                               widget="float_time"/>
+                        <field name="x_last_pause_date"
+                               string="Début de pause en cours"
+                               readonly="1"
+                               invisible="x_last_pause_date == False"/>
+                    </group>
+
+                    <!-- Groupe Finances / Ressources (visible si des matériels sont liés) -->
+                    <group string="Finances / Ressources"
+                           invisible="total_material_cost == 0.0">
+                        <field name="total_material_cost"
+                               string="Coût total matériel estimé (DH)"
+                               readonly="1"/>
+                    </group>
+
                     <notebook>
-                        <page string="Description">
+                        <page string="Description" name="description">
                             <field name="description"/>
                         </page>
-                        <page string="IA : Solution suggérée">
+
+                        <!-- Onglet Matériel IT -->
+                        <page string="🔧 Matériel utilisé" name="material">
+                            <div class="o_field_widget">
+                                <p class="text-muted" style="font-size:12px; margin-bottom:8px;">
+                                    Composants physiques, logiciels ou câbles utilisés lors de cette intervention.
+                                </p>
+                            </div>
+                            <field name="material_line_ids" mode="list"
+                                   readonly="state in ('resolved', 'closed')">
+                                <list string="Matériel requis" editable="bottom">
+                                    <field name="material_id"/>
+                                    <field name="material_category" readonly="1"/>
+                                    <field name="material_reference" optional="show" readonly="1"/>
+                                    <field name="status" widget="badge"
+                                           decoration-warning="status == 'requested'"
+                                           decoration-success="status == 'ready'"/>
+                                </list>
+                                <form>
+                                    <group>
+                                        <field name="material_id"/>
+                                        <field name="material_category" readonly="1"/>
+                                        <field name="material_reference" readonly="1"/>
+                                        <field name="status"/>
+                                    </group>
+                                </form>
+                            </field>
+                        </page>
+
+                        <page string="IA : Solution suggérée" name="ai">
                             <field name="ai_suggested_solution"/>
                         </page>
-                        <page string="Discussion / Commentaires">
+
+                        <page string="Résolution" name="resolution"
+                              invisible="state not in ('resolved', 'closed')">
+                            <field name="resolution" readonly="1"/>
+                            <field name="date_done" string="Résolu le" readonly="1"/>
+                        </page>
+
+                        <page string="Discussion / Commentaires" name="comments">
                             <field name="comment_ids" mode="list">
                                 <list string="Commentaires" create="false" delete="false">
                                     <field name="create_date" string="Date" readonly="1"/>
@@ -86,10 +160,26 @@
         <field name="name">Tickets IT</field>
         <field name="res_model">support.ticket</field>
         <field name="view_mode">list,form</field>
+        <field name="context">{'search_default_my_tickets': 0}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Aucun ticket pour le moment !
+            </p>
+            <p>
+                Les tickets arriveront depuis le portail utilisateur ou l'interface web.
+            </p>
+        </field>
     </record>
 
     <!-- Menu Principal -->
-    <menuitem id="menu_root" name="IT Support IA" sequence="10" web_icon="pfe_it_support,static/description/icon.png"/>
-    <menuitem id="menu_support_tickets" name="Tickets" parent="menu_root" action="action_support_ticket" sequence="10"/>
+    <menuitem id="menu_root"
+              name="IT Support IA"
+              sequence="10"
+              web_icon="pfe_it_support,static/description/icon.png"/>
+    <menuitem id="menu_support_tickets"
+              name="Tickets"
+              parent="menu_root"
+              action="action_support_ticket"
+              sequence="10"/>
 
 </odoo>

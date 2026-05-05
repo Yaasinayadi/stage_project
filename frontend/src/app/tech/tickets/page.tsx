@@ -60,7 +60,8 @@ const STATE_MAP: Record<string, { label: string; color: string }> = {
   new: { label: "Nouveau", color: "text-gray-500" },
   assigned: { label: "Assigné", color: "text-blue-500" },
   in_progress: { label: "En cours", color: "text-indigo-500" },
-  waiting: { label: "En attente", color: "text-amber-500" },
+  waiting: { label: "En attente client", color: "text-amber-500" },
+  waiting_material: { label: "En attente matériel", color: "text-sky-500" },
   blocked: { label: "Bloqué", color: "text-red-500" },
   escalated: { label: "Escaladé", color: "text-purple-500" },
   resolved: { label: "Résolu", color: "text-emerald-500" },
@@ -72,6 +73,7 @@ const ACTIVE_STATES = [
   "assigned",
   "in_progress",
   "waiting",
+  "waiting_material",
   "blocked",
   "escalated",
 ];

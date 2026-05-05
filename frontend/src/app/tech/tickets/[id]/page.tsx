@@ -7,6 +7,7 @@ import {
   useRef,
   type FormEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import { useParams, useRouter } from "next/navigation";
 import axios from "axios";
 import {
@@ -34,6 +35,21 @@ import {
   ShieldAlert,
   ShieldCheck,
   UploadCloud,
+  PauseCircle,
+  PackageSearch,
+  PlayCircle,
+  Search,
+  Check,
+  Package,
+  Cpu,
+  Wallet,
+  Plus,
+  Info,
+  Pencil,
+  Save,
+  PackageCheck,
+  PackageX,
+  Truck,
 } from "lucide-react";
 import SlaBadge from "@/components/SlaBadge";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -73,6 +89,98 @@ function renderMarkdown(text: string): string {
       .replace(/\n\n/g, "</p><p>")
       .replace(/\n/g, "<br/>")
       .replace(/^(.+)$/, "<p>$1</p>")
+  );
+}
+
+function parseOdooDate(dateStr: string | null | undefined): Date {
+  if (!dateStr) return new Date();
+  const sanitized = dateStr.trim().replace(" ", "T");
+  return new Date(sanitized.endsWith("Z") ? sanitized : sanitized + "Z");
+}
+
+function SlaCountdown({
+  deadline,
+  state,
+  dateResolved,
+}: {
+  deadline: string | null | undefined;
+  state: string;
+  dateResolved: string | null | undefined;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    // Si en pause (client OU matériel) ou résolu, le chronomètre s'arrête
+    const isPaused = state === "waiting_material" || state === "waiting";
+    const isResolved = state === "resolved" || state === "closed";
+    if (isPaused || isResolved) return;
+
+    const interval = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [state]);
+
+  if (!deadline) return <span className="text-[hsl(var(--muted-foreground))]">—</span>;
+
+  const end = parseOdooDate(deadline).getTime();
+  let timeToCompare = now;
+
+  const isResolved = state === "resolved" || state === "closed";
+  if (isResolved && dateResolved) {
+    timeToCompare = parseOdooDate(dateResolved).getTime();
+  }
+
+  const diff = end - timeToCompare;
+  const isOverdue = diff <= 0;
+  const absDiff = Math.abs(diff);
+
+  const hours = Math.floor(absDiff / 3600000);
+  const mins = Math.floor((absDiff % 3600000) / 60000);
+  const secs = Math.floor((absDiff % 60000) / 1000);
+
+  const formatUnit = (u: number) => u.toString().padStart(2, "0");
+  const timeStr = `${formatUnit(hours)}:${formatUnit(mins)}:${formatUnit(secs)}`;
+
+  if (state === "waiting_material") {
+    return (
+      <div className="flex flex-col items-start mt-1">
+        <span className="text-sky-400 font-bold font-mono tracking-wider flex items-center text-sm">
+          <PauseCircle size={16} className="animate-pulse mr-1.5" />
+          {timeStr}
+        </span>
+        <span className="text-[10px] text-sky-400/70 mt-0.5">SLA suspendu &mdash; Attente matériel</span>
+      </div>
+    );
+  }
+
+  if (state === "waiting") {
+    return (
+      <div className="flex flex-col items-start mt-1">
+        <span className="text-amber-400 font-bold font-mono tracking-wider flex items-center text-sm">
+          <PauseCircle size={16} className="animate-pulse mr-1.5" />
+          {timeStr}
+        </span>
+        <span className="text-[10px] text-amber-400/70 mt-0.5">SLA suspendu &mdash; Attente client</span>
+      </div>
+    );
+  }
+
+  if (isOverdue) {
+    return (
+      <div className="flex flex-col items-start mt-1">
+        <span className="text-red-500 font-bold font-mono tracking-wider text-sm flex items-center">
+          <AlertTriangle size={16} className="mr-1.5" />
+          - {timeStr}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <span className="text-[hsl(var(--foreground))] font-bold font-mono tracking-wider text-sm mt-1 block">
+      {timeStr}
+    </span>
   );
 }
 // ───────────────────────────────────────────────────────────────────────────
@@ -117,8 +225,12 @@ const STATE_MAP: Record<string, { label: string; badge: string }> = {
     badge: "bg-blue-500/15 text-blue-500 border-blue-500/20",
   },
   waiting: {
-    label: "En attente",
+    label: "En attente client",
     badge: "bg-orange-500/15 text-orange-500 border-orange-500/20",
+  },
+  waiting_material: {
+    label: "En attente matériel",
+    badge: "bg-sky-500/15 text-sky-400 border-sky-500/20",
   },
   blocked: {
     label: "Bloqué",
@@ -158,6 +270,17 @@ type Ticket = {
   resolution?: string | null;
   escalated_by_id?: number | null;
   date_resolved?: string | null;
+  materials?: { id: number; name: string; category: string; status?: "requested" | "ready" | "ordered"; line_id?: number; unit_cost?: number }[];
+  total_material_cost?: number;
+};
+
+type ItMaterial = {
+  id: number;
+  name: string;
+  category: string;
+  reference?: string;
+  qty_available?: number;
+  unit_cost?: number;
 };
 
 type AiSuggestion = {
@@ -240,8 +363,28 @@ function TicketDetailPage() {
 
   // Wait modal state
   const [showWaitModal, setShowWaitModal] = useState(false);
+  const [showWaitMaterialModal, setShowWaitMaterialModal] = useState(false);
   const [waitJustification, setWaitJustification] = useState("");
   const [waiting, setWaiting] = useState(false);
+
+  // Material selection state (wait-material modal)
+  const [allMaterials, setAllMaterials] = useState<ItMaterial[]>([]);
+  const [selectedMaterialIds, setSelectedMaterialIds] = useState<number[]>([]);
+  const [matSearch, setMatSearch] = useState("");
+  const [matDropdownOpen, setMatDropdownOpen] = useState(false);
+  const matDropdownRef = useRef<HTMLDivElement>(null);
+  const waitMatTriggerRef = useRef<HTMLButtonElement>(null);
+  const [waitDropdownRect, setWaitDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  // Material edit section state
+  const [isEditingMaterials, setIsEditingMaterials] = useState(false);
+  const [editSelectedMatIds, setEditSelectedMatIds] = useState<number[]>([]);
+  const [editMatSearch, setEditMatSearch] = useState("");
+  const [editMatDropdownOpen, setEditMatDropdownOpen] = useState(false);
+  const [savingMaterials, setSavingMaterials] = useState(false);
+  const editMatDropdownRef = useRef<HTMLDivElement>(null);
+  const matTriggerRef = useRef<HTMLButtonElement>(null);
+  const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
 
   // Drag & drop state
   const [isDragging, setIsDragging] = useState(false);
@@ -277,9 +420,76 @@ function TicketDetailPage() {
     }
   }, [id]);
 
+  const [materialsLoading, setMaterialsLoading] = useState(false);
+
+  // ── Fetch catalogue matériel IT ──
+  const fetchMaterials = useCallback(async () => {
+    setMaterialsLoading(true);
+    try {
+      const res = await axios.get(`${ODOO_URL}/api/materials`);
+      if (res.data.status === 200) setAllMaterials(res.data.data);
+    } catch {
+      /* silent */
+    } finally {
+      setMaterialsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchMaterials();
+  }, [fetchMaterials]);
+
+  // ── Fermer le dropdown matériel si clic à l'extérieur + scroll hors du menu ──
+  useEffect(() => {
+    const handleMouseDown = (e: MouseEvent) => {
+      // Pour le modal En attente matériel :
+      if (
+        matDropdownRef.current &&
+        !matDropdownRef.current.contains(e.target as Node) &&
+        waitMatTriggerRef.current &&
+        !waitMatTriggerRef.current.contains(e.target as Node)
+      ) {
+        setMatDropdownOpen(false);
+      }
+      // Pour le Portal MATÉRIEL & RESSOURCES : vérifier que le clic n'est ni dans le menu ni sur le trigger
+      if (
+        editMatDropdownRef.current &&
+        !editMatDropdownRef.current.contains(e.target as Node) &&
+        matTriggerRef.current &&
+        !matTriggerRef.current.contains(e.target as Node)
+      ) {
+        setEditMatDropdownOpen(false);
+      }
+    };
+
+    const handleScroll = (e: Event) => {
+      // Ignorer le scroll dans le menu déroulant lui-même
+      if (
+        (editMatDropdownRef.current && editMatDropdownRef.current.contains(e.target as Node)) ||
+        (matDropdownRef.current && matDropdownRef.current.contains(e.target as Node))
+      ) {
+        return;
+      }
+
+      // On utilise le state updater (prev) pour contourner le stale closure du useEffect vide []
+      // Si le menu est ouvert (prev === true), on le ferme. Sinon, on renvoie prev pour ne pas forcer de re-render.
+      setEditMatDropdownOpen((prev) => (prev ? false : prev));
+      setMatDropdownOpen((prev) => (prev ? false : prev));
+    };
+
+    document.addEventListener("mousedown", handleMouseDown);
+    window.addEventListener("scroll", handleScroll, true);
+    return () => {
+      document.removeEventListener("mousedown", handleMouseDown);
+      window.removeEventListener("scroll", handleScroll, true);
+    };
+  }, []);
+
+
   useEffect(() => {
     fetchTicket();
   }, [fetchTicket]);
+
 
   // ── Discussion Handlers ──
   const fetchComments = useCallback(async () => {
@@ -435,19 +645,20 @@ function TicketDetailPage() {
     if (!waitJustification.trim()) return;
     setWaiting(true);
     try {
-      console.log("WAIT TICKET:", {
-        id,
-        userId: user?.id,
-        justification: waitJustification,
-      });
       await axios.post(
         `${ODOO_URL}/api/ticket/${id}/wait`,
         { justification: waitJustification, user_id: user?.id },
         { withCredentials: true },
       );
-      toast.success("Ticket mis en attente. Notification envoyée.", {
-        icon: <Clock size={18} />,
-      });
+      toast.success(
+        <div className="flex flex-col gap-1">
+          <span className="font-semibold text-sm">En attente client</span>
+          <span className="text-xs opacity-90">
+            Le ticket attend une réponse du client.
+          </span>
+        </div>,
+        { icon: <Clock size={18} /> }
+      );
       setShowWaitModal(false);
       setWaitJustification("");
       fetchTicket();
@@ -460,6 +671,87 @@ function TicketDetailPage() {
     }
   };
 
+  const handleSaveMaterials = async () => {
+    setSavingMaterials(true);
+    try {
+      const res = await axios.post(
+        `${ODOO_URL}/api/ticket/${id}/materials`,
+        { material_ids: editSelectedMatIds },
+        { withCredentials: true },
+      );
+      if (res.data.status === 200) {
+        // Update local ticket state with fresh data from API
+        setTicket((prev) =>
+          prev
+            ? {
+                ...prev,
+                materials: res.data.data,
+                total_material_cost: res.data.total_material_cost,
+                state: res.data.state || prev.state,
+              }
+            : prev
+        );
+        setIsEditingMaterials(false);
+        setEditMatSearch("");
+        
+        // Rafraîchir pour voir le nouveau commentaire dans la discussion (SLA suspendu)
+        fetchTicket();
+        fetchComments();
+        
+        toast.success("Ressources et coûts synchronisés avec succès.", {
+          icon: <Sparkles size={18} />,
+        });
+      } else {
+        toast.error(res.data.message || "Erreur lors de la sauvegarde.");
+      }
+    } catch {
+      toast.error("Erreur réseau lors de la mise à jour des ressources.");
+    } finally {
+      setSavingMaterials(false);
+    }
+  };
+
+  const handleWaitMaterial = async () => {
+    setWaiting(true);
+    try {
+      await axios.post(
+        `${ODOO_URL}/api/ticket/${id}/wait-material`,
+        {
+          justification: waitJustification,
+          user_id: user?.id,
+          material_ids: selectedMaterialIds,
+        },
+        { withCredentials: true },
+      );
+      const matNames = allMaterials
+        .filter((m) => selectedMaterialIds.includes(m.id))
+        .map((m) => m.name);
+      toast.success(
+        <div className="flex flex-col gap-1">
+          <span className="font-semibold text-sm">SLA Suspendu</span>
+          <span className="text-xs opacity-90">
+            {matNames.length > 0
+              ? `En attente : ${matNames.join(", ")}`
+              : "Ticket mis en attente matériel."}
+          </span>
+        </div>,
+        { icon: <PackageSearch size={18} /> }
+      );
+      setShowWaitMaterialModal(false);
+      setWaitJustification("");
+      setSelectedMaterialIds([]);
+      setMatSearch("");
+      fetchTicket();
+      fetchComments();
+    } catch (err) {
+      console.error("Wait Material Error:", err);
+      toast.error("Erreur lors de la mise en attente matériel.");
+    } finally {
+      setWaiting(false);
+    }
+  };
+
+
   const handleResume = async () => {
     setActionLoading("resume");
     try {
@@ -469,9 +761,15 @@ function TicketDetailPage() {
         { user_id: user?.id },
         { withCredentials: true },
       );
-      toast.success("Travail repris sur le ticket.", {
-        icon: <RefreshCw size={18} />,
-      });
+      toast.success(
+        <div className="flex flex-col gap-1">
+          <span className="font-semibold text-sm">SLA Repris</span>
+          <span className="text-xs opacity-90">
+            L'intervention a repris normalement.
+          </span>
+        </div>,
+        { icon: <PlayCircle size={18} /> }
+      );
       fetchTicket();
       fetchComments();
     } catch (err) {
@@ -713,10 +1011,9 @@ function TicketDetailPage() {
               <p className="text-[0.65rem] text-[hsl(var(--muted-foreground))] mb-1.5 font-semibold uppercase tracking-wider">
                 Deadline SLA
               </p>
-              <SlaBadge
-                slaDeadline={ticket.sla_deadline}
-                slaStatus={ticket.sla_status}
-                ticketState={ticket.state}
+              <SlaCountdown
+                deadline={ticket.sla_deadline}
+                state={ticket.state}
                 dateResolved={ticket.date_resolved}
               />
             </div>
@@ -732,6 +1029,231 @@ function TicketDetailPage() {
             </p>
           </div>
 
+          {/* Matériel & Ressources */}
+          <div className="glass-card p-5">
+            {/* Section header */}
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider flex items-center">
+                <Package size={15} className="mr-2" />
+                Matériel & Ressources
+              </h2>
+              {!isResolved && (
+                isEditingMaterials ? (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setIsEditingMaterials(false);
+                        setEditMatSearch("");
+                        setEditMatDropdownOpen(false);
+                      }}
+                      className="flex items-center text-xs font-semibold px-3 py-1.5 rounded-md border border-[hsl(var(--border)/0.5)] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors"
+                    >
+                      <X size={13} className="mr-1" /> Annuler
+                    </button>
+                    <button
+                      onClick={handleSaveMaterials}
+                      disabled={savingMaterials}
+                      className="flex items-center text-xs font-bold px-3 py-1.5 rounded-md bg-emerald-600/20 text-emerald-500 border border-emerald-500/30 hover:bg-emerald-600 hover:text-white transition-all disabled:opacity-50"
+                    >
+                      {savingMaterials ? <Loader2 size={13} className="animate-spin mr-1" /> : <Save size={13} className="mr-1" />}
+                      Sauvegarder
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setEditSelectedMatIds(ticket.materials?.map((m) => m.id) ?? []);
+                      setIsEditingMaterials(true);
+                    }}
+                    className="flex items-center text-xs font-semibold px-3 py-1.5 rounded-md border border-[hsl(var(--border)/0.5)] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:border-[hsl(var(--border))] transition-colors"
+                  >
+                    <Pencil size={12} className="mr-1.5" /> Modifier
+                  </button>
+                )
+              )}
+            </div>
+
+            {/* ── MODE LECTURE ── */}
+            {!isEditingMaterials && (
+              <div className="space-y-3">
+                {ticket.materials && ticket.materials.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {ticket.materials.map((m) => {
+                      const isReady = m.status === "ready";
+                      return (
+                        <span
+                          key={m.id}
+                          className={`inline-flex items-center px-2.5 py-1.5 rounded-md text-xs font-bold border transition-colors duration-300 ${
+                            isReady
+                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                              : m.status === "ordered"
+                              ? "bg-indigo-600/10 text-indigo-400 border-indigo-500/20"
+                              : "bg-[hsl(var(--secondary)/0.3)] text-amber-500/90 border-amber-500/30"
+                          }`}
+                        >
+                          {isReady ? (
+                            <CheckCircle2 size={12} className="mr-1.5" />
+                          ) : m.status === "ordered" ? (
+                            <Truck size={12} className="animate-pulse mr-1.5" />
+                          ) : (
+                            <Clock size={12} className="animate-pulse mr-1.5" />
+                          )}
+                          {m.status === "ordered" ? `${m.name} - EN COMMANDE` : m.name}
+                        </span>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-[hsl(var(--muted-foreground))] italic">Aucun matériel répertorié.</p>
+                )}
+
+                {/* Coût total */}
+                {(ticket.total_material_cost ?? 0) > 0 && (
+                  <div className="flex items-center mt-2 pt-2 border-t border-[hsl(var(--border)/0.4)]">
+                    <Wallet size={14} className="text-emerald-500 mr-2" />
+                    <span className="text-sm font-bold text-emerald-500/90">
+                      {ticket.total_material_cost?.toFixed(2)} MAD
+                    </span>
+                    <span className="text-xs text-[hsl(var(--muted-foreground))] ml-1.5">coût total estimé</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── MODE ÉDITION ── */}
+            {isEditingMaterials && (
+              <div className="space-y-3">
+                {/* Badges des matériels sélectionnés */}
+                <div className="flex flex-wrap gap-2">
+                  {editSelectedMatIds.length === 0 && (
+                    <p className="text-xs text-[hsl(var(--muted-foreground))] italic">Aucun matériel sélectionné.</p>
+                  )}
+                  {editSelectedMatIds.map((mid) => {
+                    const mat = allMaterials.find((m) => m.id === mid);
+                    if (!mat) return null;
+                    return (
+                      <span
+                        key={mid}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-[hsl(var(--secondary)/0.4)] text-[hsl(var(--foreground))] border border-[hsl(var(--border)/0.5)]"
+                      >
+                        <Cpu size={11} />
+                        {mat.name}
+                        <button
+                          onClick={() => setEditSelectedMatIds((prev) => prev.filter((id) => id !== mid))}
+                          className="ml-0.5 hover:text-red-400 transition-colors"
+                        >
+                          <X size={11} />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+
+                {/* Selecteur Popover — Portal pour échapper au stacking context de glass-card */}
+                <div className="relative">
+                  <button
+                    ref={matTriggerRef}
+                    onClick={() => {
+                      if (!editMatDropdownOpen && matTriggerRef.current) {
+                        const rect = matTriggerRef.current.getBoundingClientRect();
+                        // getBoundingClientRect() donne déjà des coordonnées viewport (fixed)
+                        // Pas besoin d'ajouter scrollY : le menu est en position fixed
+                        setDropdownRect({
+                          top: rect.bottom + 6,
+                          left: rect.left,
+                          width: rect.width,
+                        });
+                        fetchMaterials();
+                      }
+                      setEditMatDropdownOpen((v) => !v);
+                    }}
+                    className="flex items-center text-xs font-semibold px-3 py-2 rounded-lg border border-dashed border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.5)] hover:text-[hsl(var(--foreground))] transition-colors w-full justify-center gap-2"
+                  >
+                    <Plus size={14} /> Ajouter des ressources
+                  </button>
+
+                  {editMatDropdownOpen && dropdownRect && typeof document !== "undefined" && createPortal(
+                    <div
+                      ref={editMatDropdownRef}
+                      style={{
+                        position: "fixed",
+                        top: dropdownRect.top,
+                        left: dropdownRect.left,
+                        width: Math.max(dropdownRect.width, 300),
+                        zIndex: 9999,
+                      }}
+                      className="rounded-xl border border-white/10 bg-[hsl(240_15%_6%)] shadow-2xl shadow-black/60 p-2 animate-scale-in"
+                    >
+                      {/* Recherche */}
+                      <div className="flex items-center gap-2 px-2 py-1.5 mb-1 border-b border-[hsl(var(--border)/0.5)]">
+                        <Search size={12} className="text-[hsl(var(--muted-foreground))] shrink-0" />
+                        <input
+                          autoFocus
+                          value={editMatSearch}
+                          onChange={(e) => setEditMatSearch(e.target.value)}
+                          placeholder="Rechercher un matériel..."
+                          className="flex-1 bg-transparent text-xs outline-none placeholder:text-[hsl(var(--muted-foreground))]"
+                        />
+                        {materialsLoading && <RefreshCw size={12} className="text-sky-400 animate-spin shrink-0" />}
+                      </div>
+                      {/* Liste */}
+                      <div className="max-h-52 overflow-y-auto custom-scrollbar space-y-0.5">
+                        {allMaterials
+                          .filter((m) =>
+                            m.name.toLowerCase().includes(editMatSearch.toLowerCase())
+                          )
+                          .map((m) => {
+                            const isSelected = editSelectedMatIds.includes(m.id);
+                            const outOfStock = (m.qty_available ?? 1) === 0;
+                            return (
+                              <button
+                                key={m.id}
+                                onClick={() => {
+                                  setEditSelectedMatIds((prev) =>
+                                    isSelected ? prev.filter((id) => id !== m.id) : [...prev, m.id]
+                                  );
+                                }}
+                                className={`w-full flex flex-col items-start px-2.5 py-2 rounded-lg text-left text-xs transition-colors ${
+                                  isSelected
+                                    ? "bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]"
+                                    : "hover:bg-[hsl(var(--secondary)/0.5)] text-[hsl(var(--foreground))]"
+                                }`}
+                              >
+                                <div className="w-full flex items-center justify-between">
+                                  <span className="flex items-center gap-2">
+                                    {isSelected ? (
+                                      <Check size={12} className="text-[hsl(var(--primary))] shrink-0" />
+                                    ) : (
+                                      <Cpu size={12} className="text-[hsl(var(--muted-foreground))] shrink-0" />
+                                    )}
+                                    <span className="font-medium">{m.name}</span>
+                                  </span>
+                                  <span className={`flex items-center gap-1 font-mono text-[10px] ${
+                                    outOfStock ? "text-red-400 font-bold" : "text-[hsl(var(--muted-foreground))]"
+                                  }`}>
+                                    <Info size={10} />
+                                    {outOfStock ? "Rupture" : `${m.qty_available} en stock`}
+                                  </span>
+                                </div>
+                                {outOfStock && (
+                                  <span className="text-[9px] text-red-500/70 ml-5 mt-1 font-medium italic">
+                                    Sélectionnable pour commande admin
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                      </div>
+                    </div>,
+                    document.body
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+
+
           {/* Quick Actions */}
           {!isResolved && (
             <div className="glass-card p-4">
@@ -739,30 +1261,70 @@ function TicketDetailPage() {
                 Actions rapides
               </h2>
               <div className="flex flex-wrap gap-2">
-                {/* Bouton Toggle : En attente / Reprendre */}
-                {ticket.state === "waiting" ? (
-                  <button
-                    disabled={actionLoading === "resume"}
-                    onClick={handleResume}
-                    className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg border border-blue-500/30
-                      bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-colors disabled:opacity-60"
-                  >
-                    {actionLoading === "resume" ? (
-                      <Loader2 size={13} className="animate-spin" />
-                    ) : (
-                      <RefreshCw size={13} />
-                    )}
-                    Reprendre le travail
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setShowWaitModal(true)}
-                    className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg border border-orange-500/30
-                      bg-orange-500/10 text-orange-500 hover:bg-orange-500/20 transition-colors"
-                  >
-                    <Clock size={13} />
-                    En attente
-                  </button>
+                {/* ── Bouton 1 : En attente client (position fixe) ──────── */}
+                {ticket.state !== "waiting_material" && (
+                  ticket.state === "waiting" ? (
+                    /* État actif → affiche "En cours" en bleu */
+                    <button
+                      disabled={actionLoading === "resume"}
+                      onClick={handleResume}
+                      className="flex items-center text-xs font-semibold px-4 py-2 rounded-lg border border-blue-500/40
+                        bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors disabled:opacity-60"
+                    >
+                      {actionLoading === "resume" ? (
+                        <Loader2 size={15} className="animate-spin mr-2" />
+                      ) : (
+                        <PlayCircle size={15} className="mr-2" />
+                      )}
+                      En cours
+                    </button>
+                  ) : (
+                    /* État normal → affiche "En attente client" en ambre */
+                    <button
+                      onClick={() => {
+                        setWaitJustification("");
+                        setShowWaitModal(true);
+                      }}
+                      className="flex items-center text-xs font-semibold px-4 py-2 rounded-lg border border-amber-500/30
+                        bg-amber-600/20 text-amber-500 hover:bg-amber-600/30 transition-colors"
+                    >
+                      <Clock size={15} className="mr-2" />
+                      En attente client
+                    </button>
+                  )
+                )}
+
+                {/* ── Bouton 2 : En attente matériel / SLA (position fixe) ── */}
+                {ticket.state !== "waiting" && (
+                  ticket.state === "waiting_material" ? (
+                    /* État actif → affiche "En cours" en bleu avec icône pause */
+                    <button
+                      disabled={actionLoading === "resume"}
+                      onClick={handleResume}
+                      className="flex items-center text-xs font-semibold px-4 py-2 rounded-lg border border-blue-500/40
+                        bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors disabled:opacity-60"
+                    >
+                      {actionLoading === "resume" ? (
+                        <Loader2 size={15} className="animate-spin mr-2" />
+                      ) : (
+                        <PlayCircle size={15} className="mr-2" />
+                      )}
+                      En cours
+                    </button>
+                  ) : (
+                    /* État normal → affiche "En attente matériel" en ambre */
+                    <button
+                      onClick={() => {
+                        setWaitJustification("");
+                        setShowWaitMaterialModal(true);
+                      }}
+                      className="flex items-center text-xs font-semibold px-4 py-2 rounded-lg border border-amber-500/30
+                        bg-amber-600/20 text-amber-500 hover:bg-amber-600/30 transition-colors"
+                    >
+                      <PackageSearch size={15} className="mr-2" />
+                      En attente matériel
+                    </button>
+                  )
                 )}
 
                 {/* Escalader / Annuler Escalade */}
@@ -1169,6 +1731,255 @@ function TicketDetailPage() {
                   <Send size={15} />
                 )}
                 Confirmer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════ WAIT MATERIAL MODAL ══════════ */}
+      {showWaitMaterialModal && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+          onClick={() => setShowWaitMaterialModal(false)}
+        >
+          <div
+            className="glass-card w-full max-w-lg animate-scale-in shadow-2xl border-[hsl(var(--border))] flex flex-col max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="p-6 pb-4 border-b border-[hsl(var(--border)/0.5)] flex items-center gap-2 flex-shrink-0">
+              <div className="p-2 rounded-lg bg-sky-500/10 text-sky-400">
+                <PackageSearch size={20} />
+              </div>
+              <div>
+                <h2 className="text-base font-bold">
+                  En attente matériel #{ticket.id}
+                </h2>
+                <p className="text-xs text-sky-400 font-medium">⏸ Le SLA sera suspendu</p>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1 relative">
+              <div>
+                <label className="text-[10px] font-bold uppercase text-[hsl(var(--muted-foreground))] mb-2 block">
+                  Matériel requis
+                </label>
+                
+                <div ref={matDropdownRef} className="relative">
+                  {/* Badges row + add button */}
+                  <div className="flex flex-wrap gap-2 items-center min-h-[38px] p-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background)/0.5)]">
+                    {selectedMaterialIds.map((id) => {
+                      const m = allMaterials.find((mat) => mat.id === id);
+                      if (!m) return null;
+                      return (
+                        <span
+                          key={m.id}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20"
+                        >
+                          {m.name}
+                          <button
+                            onClick={() => setSelectedMaterialIds(prev => prev.filter(x => x !== m.id))}
+                            className="hover:text-red-400 transition-colors"
+                          >
+                            <X size={12} />
+                          </button>
+                      </span>
+                    );
+                  })}
+                  <button
+                    ref={waitMatTriggerRef}
+                    onClick={(e) => {
+                      if (!matDropdownOpen) {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setWaitDropdownRect({
+                          top: rect.bottom + 8,
+                          left: rect.left,
+                          width: Math.max(280, rect.width)
+                        });
+                        fetchMaterials();
+                      }
+                      setMatDropdownOpen((p) => !p);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold border border-dashed border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-sky-500/40 hover:text-sky-400 hover:bg-sky-500/5 transition-all outline-none ml-1"
+                  >
+                    <PackageSearch size={14} />
+                    Ajouter...
+                  </button>
+                </div>
+
+                {/* Dropdown panel avec Portal */}
+                {matDropdownOpen &&
+                  waitDropdownRect &&
+                  createPortal(
+                    <div
+                      ref={matDropdownRef}
+                      style={{
+                        position: "fixed",
+                        top: waitDropdownRect.top,
+                        left: waitDropdownRect.left,
+                        width: waitDropdownRect.width,
+                      }}
+                      className="z-[9999] rounded-xl border border-white/10 bg-zinc-950 shadow-2xl overflow-hidden animate-fade-in flex flex-col"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="p-2 border-b border-white/5 bg-zinc-950">
+                        <div className="relative flex items-center">
+                          <Search
+                            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+                            size={14}
+                          />
+                          <input
+                            type="text"
+                            value={matSearch}
+                            onChange={(e) => setMatSearch(e.target.value)}
+                            placeholder="Rechercher un matériel..."
+                            className="w-full bg-transparent text-sm pl-8 pr-8 h-8 outline-none text-zinc-100 placeholder:text-muted-foreground"
+                            autoFocus
+                          />
+                          {materialsLoading && (
+                            <RefreshCw size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-sky-400 animate-spin" />
+                          )}
+                        </div>
+                      </div>
+                      <div className="p-1 max-h-[300px] overflow-y-auto custom-scrollbar bg-zinc-950">
+                        {allMaterials
+                          .filter(
+                            (m) =>
+                              m.name
+                                .toLowerCase()
+                                .includes(matSearch.toLowerCase()) ||
+                              m.reference
+                                ?.toLowerCase()
+                                .includes(matSearch.toLowerCase()),
+                          )
+                          .map((m) => {
+                            const isSelected = selectedMaterialIds.includes(m.id);
+                            const outOfStock = (m.qty_available || 0) <= 0;
+
+                            return (
+                              <button
+                                key={m.id}
+                                onClick={() => {
+                                  setSelectedMaterialIds((prev) =>
+                                    isSelected
+                                      ? prev.filter((x) => x !== m.id)
+                                      : [...prev, m.id],
+                                  );
+                                }}
+                                className={`w-full flex flex-col p-3 cursor-pointer border-b border-white/5 last:border-0 transition-colors text-left
+                                  ${
+                                    isSelected
+                                      ? "bg-sky-500/5 hover:bg-sky-500/10"
+                                      : "hover:bg-white/5 bg-transparent"
+                                  }`}
+                              >
+                                <div className="w-full flex items-center justify-between">
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className={`text-sm font-bold ${isSelected ? "text-sky-400" : "text-zinc-100"}`}>
+                                      {m.name}
+                                    </span>
+                                    {m.reference && (
+                                      <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-wider">
+                                        {m.reference}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-3">
+                                    {/* Stock Indicator */}
+                                    {outOfStock ? (
+                                      <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] font-bold tracking-wider">
+                                        <PackageX size={12} />
+                                        RUPTURE
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold tracking-wider">
+                                        <PackageCheck size={12} />
+                                        {m.qty_available} EN STOCK
+                                      </div>
+                                    )}
+
+                                    {/* Checkbox */}
+                                    <div
+                                      className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-all ${
+                                        isSelected
+                                          ? "bg-sky-500 border-sky-500"
+                                          : outOfStock
+                                            ? "border-border/50 bg-transparent"
+                                            : "border-white/20 bg-transparent"
+                                      }`}
+                                    >
+                                      {isSelected && (
+                                        <Check size={12} className="text-white" strokeWidth={3} />
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                                {outOfStock && (
+                                  <span className="text-[10px] text-rose-500/70 mt-1.5 font-medium italic">
+                                    Sélectionnable pour commande admin
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        {allMaterials.filter(
+                          (m) =>
+                            m.name.toLowerCase().includes(matSearch.toLowerCase()) ||
+                            m.reference?.toLowerCase().includes(matSearch.toLowerCase()),
+                        ).length === 0 && (
+                          <div className="py-6 text-center flex flex-col items-center justify-center opacity-50">
+                            <PackageSearch size={24} className="mb-2" />
+                            <p className="text-sm">Aucun matériel trouvé</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>,
+                    document.body,
+                  )}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold uppercase text-[hsl(var(--muted-foreground))] mb-2 block">
+                Motif (optionnel)
+              </label>
+              <textarea
+                autoFocus
+                value={waitJustification}
+                onChange={(e) => setWaitJustification(e.target.value)}
+                rows={3}
+                placeholder="Ex: En attente de livraison d'une pièce de rechange..."
+                className="input-field w-full resize-none text-sm p-4"
+              />
+              <p className="text-[10px] text-[hsl(var(--muted-foreground))] mt-2 italic">
+                Le chronomètre SLA sera gelé jusqu'à la reprise du travail.
+              </p>
+            </div>
+            {/* End of Body */}
+            </div>
+
+            {/* Footer */}
+            <div className="p-6 pt-4 border-t border-[hsl(var(--border)/0.5)] flex gap-3 flex-shrink-0">
+              <button
+                onClick={() => setShowWaitMaterialModal(false)}
+                className="flex-1 btn-ghost text-sm"
+              >
+                Annuler
+              </button>
+              <button
+                disabled={waiting}
+                onClick={handleWaitMaterial}
+                className="flex-1 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {waiting ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <PauseCircle size={15} />
+                )}
+                Suspendre le SLA
               </button>
             </div>
           </div>

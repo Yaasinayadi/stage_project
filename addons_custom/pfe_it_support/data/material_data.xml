@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <!-- Matériel — Catégorie : Matériel physique -->
+        <record id="material_ram_8gb"   model="pfe.it.material">
+            <field name="name">RAM 8GB DDR4</field>
+            <field name="category">hardware</field>
+            <field name="reference">RAM-DDR4-8G</field>
+        </record>
+        <record id="material_ram_16gb"  model="pfe.it.material">
+            <field name="name">RAM 16GB DDR4</field>
+            <field name="category">hardware</field>
+            <field name="reference">RAM-DDR4-16G</field>
+        </record>
+        <record id="material_ssd_256"   model="pfe.it.material">
+            <field name="name">SSD 256GB NVMe</field>
+            <field name="category">hardware</field>
+            <field name="reference">SSD-NVME-256</field>
+        </record>
+        <record id="material_ssd_512"   model="pfe.it.material">
+            <field name="name">SSD 512GB NVMe</field>
+            <field name="category">hardware</field>
+            <field name="reference">SSD-NVME-512</field>
+        </record>
+        <record id="material_clavier"   model="pfe.it.material">
+            <field name="name">Clavier AZERTY USB</field>
+            <field name="category">hardware</field>
+            <field name="reference">KB-AZERTY-USB</field>
+        </record>
+        <record id="material_souris"    model="pfe.it.material">
+            <field name="name">Souris optique USB</field>
+            <field name="category">hardware</field>
+            <field name="reference">MOUSE-OPT-USB</field>
+        </record>
+        <record id="material_ecran_24"  model="pfe.it.material">
+            <field name="name">Écran 24 pouces Full HD</field>
+            <field name="category">hardware</field>
+            <field name="reference">SCREEN-24-FHD</field>
+        </record>
+        <record id="material_alim_pc"   model="pfe.it.material">
+            <field name="name">Alimentation PC 500W</field>
+            <field name="category">hardware</field>
+            <field name="reference">PSU-500W</field>
+        </record>
+        <record id="material_switch"    model="pfe.it.material">
+            <field name="name">Switch réseau 8 ports</field>
+            <field name="category">hardware</field>
+            <field name="reference">NET-SWITCH-8P</field>
+        </record>
+
+        <!-- Matériel — Catégorie : Câblage -->
+        <record id="material_rj45"      model="pfe.it.material">
+            <field name="name">Câble RJ45 Cat6 (2m)</field>
+            <field name="category">cable</field>
+            <field name="reference">CABLE-RJ45-2M</field>
+        </record>
+        <record id="material_hdmi"      model="pfe.it.material">
+            <field name="name">Câble HDMI 2.0 (1.5m)</field>
+            <field name="category">cable</field>
+            <field name="reference">CABLE-HDMI-1M5</field>
+        </record>
+        <record id="material_usb_c"     model="pfe.it.material">
+            <field name="name">Câble USB-C (1m)</field>
+            <field name="category">cable</field>
+            <field name="reference">CABLE-USBC-1M</field>
+        </record>
+
+        <!-- Matériel — Catégorie : Logiciel / Licence -->
+        <record id="material_win11"     model="pfe.it.material">
+            <field name="name">Windows 11 Pro (Licence)</field>
+            <field name="category">software</field>
+            <field name="reference">LIC-WIN11-PRO</field>
+        </record>
+        <record id="material_antivirus" model="pfe.it.material">
+            <field name="name">Antivirus (Licence annuelle)</field>
+            <field name="category">software</field>
+            <field name="reference">LIC-AV-1Y</field>
+        </record>
+        <record id="material_office"    model="pfe.it.material">
+            <field name="name">Microsoft Office 365 (Licence)</field>
+            <field name="category">software</field>
+            <field name="reference">LIC-O365</field>
+        </record>
+    </data>
+</odoo>

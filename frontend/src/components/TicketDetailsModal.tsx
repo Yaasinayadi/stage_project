@@ -27,6 +27,7 @@ import {
   RefreshCw,
   Check,
   ChevronDown,
+  PauseCircle,
 } from "lucide-react";
 import {
   getCategoryColor,
@@ -132,14 +133,15 @@ function formatFullDate(dateStr: string | null | undefined): string {
   const d = parseOdooDate(dateStr);
   return (
     d.toLocaleDateString("fr-FR", {
-      day: "numeric",
-      month: "long",
+      day: "2-digit",
+      month: "2-digit",
       year: "numeric",
     }) +
-    " à " +
+    " " +
     d.toLocaleTimeString("fr-FR", {
       hour: "2-digit",
       minute: "2-digit",
+      second: "2-digit",
     })
   );
 }
@@ -260,6 +262,84 @@ function getRemainingTime(
     return `${days}j ${remH}h restant`;
   }
   return `${hours}h ${mins}min restant`;
+}
+
+function SlaCountdown({
+  deadline,
+  state,
+  dateResolved,
+}: {
+  deadline: string | null | undefined;
+  state: string;
+  dateResolved: string | null | undefined;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    // Si en pause ou résolu, le chronomètre visuel s'arrête de tourner
+    const isPaused = state === "waiting_material";
+    const isResolved = state === "resolved" || state === "closed";
+    if (isPaused || isResolved) return;
+
+    const interval = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [state]);
+
+  if (!deadline) return <span className="text-[hsl(var(--muted-foreground))]">—</span>;
+
+  const end = parseOdooDate(deadline).getTime();
+  let timeToCompare = now;
+
+  const isResolved = state === "resolved" || state === "closed";
+  if (isResolved && dateResolved) {
+    timeToCompare = parseOdooDate(dateResolved).getTime();
+  }
+
+  const diff = end - timeToCompare;
+  const isOverdue = diff <= 0;
+  const absDiff = Math.abs(diff);
+
+  const hours = Math.floor(absDiff / 3600000);
+  const mins = Math.floor((absDiff % 3600000) / 60000);
+  const secs = Math.floor((absDiff % 60000) / 1000);
+
+  const formatUnit = (u: number) => u.toString().padStart(2, "0");
+  const timeStr = `${formatUnit(hours)}:${formatUnit(mins)}:${formatUnit(secs)}`;
+
+  if (state === "waiting_material") {
+    return (
+      <div className="flex flex-col items-end">
+        <span className="text-blue-400 font-bold font-mono tracking-wider flex items-center gap-1.5 text-sm">
+          <PauseCircle size={15} className="animate-pulse" />
+          {timeStr}
+        </span>
+        <span className="text-[0.6rem] text-blue-400/80 font-medium mt-0.5">
+          Chrono suspendu (Attente matériel)
+        </span>
+      </div>
+    );
+  }
+
+  if (isOverdue) {
+    return (
+      <div className="flex flex-col items-end">
+        <span className="text-red-500 font-bold font-mono tracking-wider text-sm">
+          - {timeStr}
+        </span>
+        <span className="text-[0.6rem] text-red-500/80 font-medium mt-0.5">
+          SLA Dépassé
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <span className="text-[hsl(var(--foreground))] font-bold font-mono tracking-wider text-sm">
+      {timeStr}
+    </span>
+  );
 }
 
 // ─── Status Timeline ───
@@ -1232,9 +1312,9 @@ export default function TicketDetailsModal({
                         SLA : {slaInfo.label}
                       </span>
                     </div>
-                    <span className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">
-                      {slaRemaining}
-                    </span>
+                    <div className="flex items-center justify-end">
+                      <SlaCountdown deadline={ticket.sla_deadline} state={ticket.state} dateResolved={ticket.date_resolved} />
+                    </div>
                   </div>
 
                   {/* Progress bar */}
@@ -1326,12 +1406,14 @@ export default function TicketDetailsModal({
                       />
                     ) : (
                       <div className="flex flex-col mt-0.5 gap-0.5">
-                        <span className="text-xs font-semibold">{ticket.assigned_to || "Non assigné"}</span>
+                        <span className="text-xs font-semibold">
+                          {ticket.assigned_to || "Non assigné"}
+                        </span>
                         {ticket.assigned_to && (
                           <span className="text-[10px] text-muted-foreground/80 font-medium italic">
-                            {ticket.assigned_by_id === ticket.assigned_to_id 
-                              ? "Auto-assigné" 
-                              : `Assigné par : ${ticket.assigned_by || 'Admin'}`}
+                            {ticket.assigned_by_id === ticket.assigned_to_id
+                              ? "Auto-assigné"
+                              : `Assigné par : ${ticket.assigned_by || "Admin"}`}
                           </span>
                         )}
                       </div>
@@ -1352,6 +1434,11 @@ export default function TicketDetailsModal({
                       </span>
                       <span className="text-xs font-semibold">
                         {formatFullDate(ticket.sla_deadline)}
+                        {ticket.state === "waiting_material" && (
+                          <span className="ml-1.5 text-[0.65rem] font-bold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded-md animate-pulse">
+                            (PAUSE)
+                          </span>
+                        )}
                       </span>
                     </div>
                   </div>
