@@ -19,6 +19,7 @@ import {
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAuth } from "@/lib/auth";
 import Link from "next/link";
+import SlaGauge from "@/components/SlaGauge";
 
 import { ODOO_URL } from "@/lib/config";
 
@@ -361,21 +362,14 @@ function MyTicketsPage() {
           </div>
         </div>
 
-        {/* Right: SLA */}
-        <div className="flex-shrink-0 flex flex-col items-end gap-2">
-          {ticket.sla_status === "breached" ? (
-            <div className="bg-rose-500/10 text-rose-500 border border-rose-500/20 px-2 py-1 rounded-full text-[11px] font-medium flex items-center gap-1">
-              <AlertTriangle size={12} /> SLA Dépassé
-            </div>
-          ) : ticket.sla_status === "at_risk" ? (
-            <div className="bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2 py-1 rounded-full text-[11px] font-medium flex items-center gap-1">
-              <Clock size={12} /> À risque
-            </div>
-          ) : isResolved ? null : ticket.sla_deadline ? (
-            <div className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-2 py-1 rounded-full text-[11px] font-medium flex items-center gap-1">
-              <CheckCircle2 size={12} /> Dans les temps
-            </div>
-          ) : null}
+        {/* Right: SLA Gauge — centred vertically & horizontally */}
+        <div className="flex-shrink-0 self-stretch flex items-center justify-center pl-3 pr-1">
+          <SlaGauge
+            slaDeadline={ticket.sla_deadline}
+            priority={ticket.priority}
+            state={ticket.state}
+            size={88}
+          />
         </div>
       </Link>
     );
