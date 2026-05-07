@@ -11,7 +11,6 @@ import {
   CheckCircle2,
   Filter,
   ChevronDown,
-  Calendar,
   Tag,
   History,
   Inbox,
@@ -19,7 +18,8 @@ import {
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAuth } from "@/lib/auth";
 import Link from "next/link";
-import SlaGauge from "@/components/SlaGauge";
+import DualSlaGauge from "@/components/DualSlaGauge";
+import CompactTimeline from "@/components/CompactTimeline";
 
 import { ODOO_URL } from "@/lib/config";
 
@@ -88,11 +88,22 @@ type Ticket = {
   state: string;
   create_date: string | null;
   write_date: string | null;
+  // ── SLA Résolution ─────────────────────────────────────────────────
   sla_deadline: string | null;
   sla_status: string | null;
+  date_resolved?: string | null;          // horodatage figé de résolution
+  // ── SLA Réponse (v2) ────────────────────────────────────────────
+  sla_response_deadline?: string | null;
+  sla_response_status?: string | null;
+  date_first_assigned?: string | null;
+  // ── Escalade (v2) ───────────────────────────────────────────────────
+  date_escalated?: string | null;
+  escalation_sla_bonus_hours?: number;
+  // ── Divers ──────────────────────────────────────────────────────────
   user_id: string | null;
   assigned_to_id?: string | null;
   category?: string | null;
+  x_total_paused_duration?: number;
 };
 
 // ── Glow styles injected once ─────────────────────────────────────────────────
@@ -271,6 +282,14 @@ function MyTicketsPage() {
     RESOLVED_STATES.includes(t.state),
   ).length;
 
+  // ── SLA Compliance Score (FIXED: use stored 'met' status, never 'on_track') ─
+  // 'met' is the immutable frozen value written when a ticket is closed in time.
+  // 'on_track' is a live computed value for open tickets — must NEVER be used here.
+  const slaMetCount = tickets.filter(
+    (t) => RESOLVED_STATES.includes(t.state) && t.sla_status === "met",
+  ).length;
+  const slaCompliance = resolved > 0 ? Math.round((slaMetCount / resolved) * 100) : 0;
+
   // ── Row renderer ──────────────────────────────────────────────────────────
   const renderRow = (ticket: Ticket) => {
     const pCfg = PRIORITY_MAP[ticket.priority] ?? PRIORITY_MAP["1"];
@@ -298,47 +317,11 @@ function MyTicketsPage() {
       >
         {/* Left */}
         <div className="flex-1 min-w-0 pr-4">
-          <span className="inline-block text-[10px] font-mono text-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted))] px-1.5 py-0.5 rounded uppercase mb-1">
-            #{ticket.id}
-          </span>
-          <h3
-            className={`text-base font-bold tracking-tight mt-1 line-clamp-1 transition-colors flex items-center gap-1.5
-            ${
-              isResolved
-                ? "text-[hsl(var(--muted-foreground)/0.8)] group-hover:text-[hsl(var(--foreground))]"
-                : "text-[hsl(var(--foreground))] group-hover:text-[hsl(var(--primary))]"
-            }`}
-          >
-            {isResolved && (
-              <CheckCircle2
-                size={13}
-                className="text-emerald-500 flex-shrink-0"
-              />
-            )}
-            {ticket.name}
-          </h3>
-          <p className="text-sm text-[hsl(var(--muted-foreground)/0.8)] line-clamp-1 mt-1">
-            {ticket.description}
-          </p>
-          <div className="flex items-center flex-wrap gap-3 mt-3 text-xs text-[hsl(var(--muted-foreground))]">
-            {ticket.user_id && (
-              <div className="flex items-center gap-1">
-                <User2 size={12} />
-                {ticket.user_id}
-              </div>
-            )}
-            {ticket.create_date && (
-              <div className="flex items-center gap-1">
-                <Calendar size={12} />
-                {new Date(ticket.create_date).toLocaleDateString("fr-FR")}
-              </div>
-            )}
-            {ticket.category && (
-              <span className="inline-flex items-center bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
-                <Tag size={10} className="mr-1" />
-                {ticket.category}
-              </span>
-            )}
+          {/* ID + Priority + Status */}
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+            <span className="inline-block text-[10px] font-mono text-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted))] px-1.5 py-0.5 rounded uppercase">
+              #{ticket.id}
+            </span>
             {/* Priority badge: hide for resolved tickets */}
             {!isResolved && (
               <span
@@ -360,15 +343,65 @@ function MyTicketsPage() {
               </span>
             )}
           </div>
+
+          <h3
+            className={`text-base font-bold tracking-tight mt-0.5 line-clamp-1 transition-colors flex items-center gap-1.5
+            ${
+              isResolved
+                ? "text-[hsl(var(--muted-foreground)/0.8)] group-hover:text-[hsl(var(--foreground))]"
+                : "text-[hsl(var(--foreground))] group-hover:text-[hsl(var(--primary))]"
+            }`}
+          >
+            {isResolved && (
+              <CheckCircle2
+                size={13}
+                className="text-emerald-500 flex-shrink-0"
+              />
+            )}
+            {ticket.name}
+          </h3>
+          <p className="text-sm text-[hsl(var(--muted-foreground)/0.8)] line-clamp-1 mt-1">
+            {ticket.description}
+          </p>
+
+          {/* Bottom metadata + timeline */}
+          <div className="flex items-center flex-wrap gap-3 mt-3 text-xs text-[hsl(var(--muted-foreground))]">
+            {ticket.user_id && (
+              <div className="flex items-center">
+                <User2 className="w-4 h-4 mr-1.5 text-muted-foreground/70" />
+                <span className="font-medium">{ticket.user_id}</span>
+              </div>
+            )}
+            
+            {/* Timeline Compacte Contextuelle */}
+            {ticket.create_date && (
+              <CompactTimeline
+                createDate={ticket.create_date}
+                slaDeadline={ticket.sla_deadline}
+                slaStatus={ticket.sla_status}
+                dateResolved={ticket.date_resolved}
+                state={ticket.state}
+              />
+            )}
+            
+            {ticket.category && (
+              <span className="inline-flex items-center bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                <Tag size={10} className="mr-1" />
+                {ticket.category}
+              </span>
+            )}
+          </div>
         </div>
 
-        {/* Right: SLA Gauge — centred vertically & horizontally */}
-        <div className="flex-shrink-0 self-stretch flex items-center justify-center pl-3 pr-1">
-          <SlaGauge
+        {/* Right: Dual SLA Gauge */}
+        <div className="flex-shrink-0 self-stretch flex items-center justify-center pl-2 pr-1">
+          <DualSlaGauge
             slaDeadline={ticket.sla_deadline}
+            slaStatus={ticket.sla_status}
             priority={ticket.priority}
             state={ticket.state}
-            size={88}
+            dateResolved={ticket.date_resolved}
+            size={108}
           />
         </div>
       </Link>
@@ -408,7 +441,7 @@ function MyTicketsPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         {[
           {
             label: "En cours",
@@ -433,6 +466,12 @@ function MyTicketsPage() {
             count: resolved,
             icon: <CheckCircle2 size={16} />,
             color: "text-emerald-500",
+          },
+          {
+            label: "Score SLA",
+            count: `${slaCompliance}%`,
+            icon: <History size={16} />,
+            color: slaCompliance >= 80 ? "text-emerald-500" : slaCompliance >= 50 ? "text-amber-500" : "text-red-500",
           },
         ].map((kpi) => (
           <div

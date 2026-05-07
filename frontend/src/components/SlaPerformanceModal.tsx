@@ -287,6 +287,22 @@ export default function SlaPerformanceModal({
 
                   <div className="glass-card p-4 flex flex-col justify-center rounded-2xl shadow-sm border border-[hsl(var(--border)/0.5)]">
                     <div className="flex items-center gap-3 mb-1">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+                        <Trophy size={20} />
+                      </div>
+                      <div>
+                        <p className="text-[0.65rem] font-bold uppercase tracking-widest text-[hsl(var(--muted-foreground))]">
+                          SLA Respecté
+                        </p>
+                        <p className="text-2xl font-black text-[hsl(var(--foreground))]">
+                          {techData.volume - (techData.breached_volume || 0)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="glass-card p-4 flex flex-col justify-center rounded-2xl shadow-sm border border-[hsl(var(--border)/0.5)]">
+                    <div className="flex items-center gap-3 mb-1">
                       <div className="w-10 h-10 rounded-xl bg-red-500/10 text-red-500 flex items-center justify-center">
                         <AlertCircle size={20} />
                       </div>

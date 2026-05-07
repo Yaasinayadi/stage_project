@@ -10,7 +10,6 @@ import {
   User,
   User2,
   Clock,
-  Calendar,
   Tag,
   CheckCircle2,
   ShieldCheck,
@@ -24,6 +23,8 @@ import {
   UserCog,
 } from "lucide-react";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import DualSlaGauge from "@/components/DualSlaGauge";
+import CompactTimeline from "@/components/CompactTimeline";
 import { useAuth } from "@/lib/auth";
 
 import { ODOO_URL } from "@/lib/config";
@@ -73,6 +74,9 @@ type QueueTicket = {
   create_date: string | null;
   sla_deadline: string | null;
   sla_status?: string | null;
+  sla_response_deadline?: string | null;
+  sla_response_status?: string | null;
+  date_first_assigned?: string | null;
   user_id: number | null;
   user_name?: string | null;
   user_email?: string | null;
@@ -480,29 +484,34 @@ function QueuePage() {
                   <div className="flex items-start justify-between w-full">
                     {/* Left: Info */}
                     <div className="flex-1 min-w-0 pr-4">
-                      {/* ID + escalated badge */}
-                      <div className="flex items-center gap-2 mb-1">
+                      {/* ID + Priority + Status badges */}
+                      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                         <span className="inline-block text-[10px] font-mono text-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted))] px-1.5 py-0.5 rounded uppercase">
                           #{ticket.id}
                         </span>
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full border text-[10px] uppercase tracking-wider font-semibold ${pCfg.badge}`}>
+                          {ticket.priority_label || pCfg.label || ticket.priority}
+                        </span>
+                        {!ticket.assigned_to_id ? (
+                          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[10px] font-black uppercase tracking-widest bg-sky-500/10 text-sky-500 border-sky-500/20">
+                            <Globe size={10} /> OUVERT
+                          </span>
+                        ) : ticket.assigned_to_id === user?.id && !ticket.x_accepted ? (
+                          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[10px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-500 border-emerald-500/20 animate-pulse">
+                            <ArrowUpCircle size={10} /> MISSION ASSIGNÉE
+                          </span>
+                        ) : null}
                         {ticket.state === "escalated" && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-400 border border-purple-500/30 uppercase tracking-wider">
-                            <ArrowUpCircle size={12} />
-                            ESCALADÉ
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-500/15 text-purple-400 border border-purple-500/30 uppercase tracking-wider">
+                            <ArrowUpCircle size={10} /> ESCALADÉ
                           </span>
                         )}
                       </div>
 
                       {/* Title */}
-                      {isAdmin ? (
-                        <p className="block text-base font-bold text-[hsl(var(--foreground))] tracking-tight mt-1 line-clamp-1 group-hover:text-[hsl(var(--primary))] transition-colors">
-                          {ticket.name}
-                        </p>
-                      ) : (
-                        <p className="block text-base font-bold text-[hsl(var(--foreground))] tracking-tight mt-1 line-clamp-1 group-hover:text-[hsl(var(--primary))] transition-colors">
-                          {ticket.name}
-                        </p>
-                      )}
+                      <p className="block text-base font-bold text-[hsl(var(--foreground))] tracking-tight mt-0.5 line-clamp-1 group-hover:text-[hsl(var(--primary))] transition-colors">
+                        {ticket.name}
+                      </p>
 
                       {/* Description */}
                       <p className="text-sm text-[hsl(var(--muted-foreground)/0.8)] line-clamp-1 mt-1">
@@ -510,81 +519,55 @@ function QueuePage() {
                       </p>
                     </div>
 
-                    {/* Right: SLA */}
-                    <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                      {ticket.sla_status === "breached" ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full bg-rose-500/10 text-rose-500 border border-rose-500/20 uppercase tracking-wider">
-                          <AlertTriangle size={12} />
-                          SLA Dépassé
-                        </span>
-                      ) : ticket.sla_status === "at_risk" ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 uppercase tracking-wider">
-                          <Clock size={12} />À risque
-                        </span>
-                      ) : ticket.sla_status === "on_track" ||
-                        ticket.sla_deadline ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 uppercase tracking-wider">
-                          <CheckCircle2 size={12} />
-                          Dans les temps
-                        </span>
-                      ) : null}
+                    <div className="flex flex-col items-center justify-center flex-shrink-0 pl-2">
+                      <DualSlaGauge
+                        priority={ticket.priority}
+                        state={ticket.state}
+                        slaResponseDeadline={ticket.sla_response_deadline}
+                        slaResponseStatus={ticket.sla_response_status || null}
+                        dateFirstAssigned={ticket.date_first_assigned}
+                        dateResolved={ticket.date_resolved}
+                        size={96}
+                      />
                     </div>
                   </div>
 
                   {/* Bottom Section: Metadata + Indicator */}
                   <div className="flex items-center justify-between w-full mt-auto pt-3">
-                    {/* Left: Metadata */}
-                    <div className="flex items-center flex-wrap gap-4 text-xs text-[hsl(var(--muted-foreground))]">
+                    {/* Left: Metadata & Timeline */}
+                    <div className="flex items-center flex-wrap gap-3 text-xs text-[hsl(var(--muted-foreground))]">
                       {(ticket.user_name || ticket.user_id) && (
                         <div className="flex items-center">
-                          <User2 className="w-3.5 h-3.5 mr-1" />
-                          <span className="truncate max-w-[120px]">
+                          <User2 className="w-4 h-4 mr-1.5 text-muted-foreground/70" />
+                          <span className="truncate max-w-[120px] font-medium">
                             {ticket.user_name ?? `${ticket.user_id}`}
                           </span>
                         </div>
                       )}
+                      
+                      {/* Timeline Compacte Contextuelle */}
                       {ticket.create_date && (
-                        <div className="flex items-center">
-                          <Calendar className="w-3.5 h-3.5 mr-1" />
-                          {new Date(ticket.create_date).toLocaleDateString(
-                            "fr-FR",
-                          )}
-                        </div>
+                        <CompactTimeline
+                          createDate={ticket.create_date}
+                          slaResponseDeadline={ticket.sla_response_deadline}
+                          slaResponseStatus={ticket.sla_response_status}
+                          dateResolved={ticket.date_resolved}
+                          state={ticket.state}
+                        />
                       )}
-                      <div className="flex items-center">
-                        {ticket.category && (
-                          <span className="inline-flex items-center bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2 py-0.5 rounded text-[10px] font-bold uppercase mr-2 tracking-wider">
+
+                      {ticket.category && (
+                        <div className="flex items-center">
+                          <span className="inline-flex items-center bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
                             <Tag size={10} className="mr-1" />
                             {ticket.category}
                           </span>
-                        )}
-                        <Tag className="w-3.5 h-3.5 mr-1" />
-                        <span
-                          className={`inline-flex items-center px-1.5 py-0.5 rounded-full border text-[10px] uppercase tracking-wider font-semibold mr-2 ${pCfg.badge}`}
-                        >
-                          {ticket.priority_label ||
-                            pCfg.label ||
-                            ticket.priority}
-                        </span>
-                      </div>
+                        </div>
+                      )}
                     </div>
 
-                    {/* Right: Indicator */}
+                    {/* Right: Affichage traçabilité origin Assignateur si assigné */}
                     <div className="flex flex-col gap-2 flex-shrink-0 ml-4 items-end">
-                      {!ticket.assigned_to_id ? (
-                        <span className="flex items-center gap-1.5 px-2 py-1 rounded-full border text-[10px] font-black uppercase tracking-widest bg-sky-500/10 text-sky-500 border-sky-500/20">
-                          <Globe size={12} />
-                          OUVERT
-                        </span>
-                      ) : ticket.assigned_to_id === user?.id &&
-                        !ticket.x_accepted ? (
-                        <span className="flex items-center gap-1.5 px-2 py-1 rounded-full border text-[10px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-500 border-emerald-500/20 animate-pulse">
-                          <ArrowUpCircle size={12} />
-                          MISSION ASSIGNÉE
-                        </span>
-                      ) : null}
-
-                      {/* Affichage traçabilité origin Assignateur si assigné */}
                       {ticket.assigned_to_id && (
                         <span className="text-[10px] font-semibold italic text-muted-foreground">
                           {ticket.assigned_by_id === ticket.assigned_to_id

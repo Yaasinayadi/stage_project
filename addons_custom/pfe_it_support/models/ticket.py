@@ -64,7 +64,31 @@ class SupportTicket(models.Model):
         ('on_track', 'Dans les temps'),
         ('at_risk',  'À risque'),
         ('breached', 'Dépassé'),
-    ], string='Statut SLA', compute='_compute_sla_status')
+        ('met',      'Respecté ✓'),
+    ], string='Statut SLA Résolution', compute='_compute_sla_status', store=True)
+
+    # ─── SLA Réponse (v2) ────────────────────────────────────────────────────
+    sla_response_deadline = fields.Datetime(
+        string='Deadline SLA Réponse',
+        compute='_compute_sla_response_deadline', store=True,
+        help='Calculé depuis create_date. Arrêté dès le passage à Assigné.'
+    )
+    sla_response_status = fields.Selection([
+        ('on_track', 'Dans les temps'),
+        ('at_risk',  'À risque'),
+        ('breached', 'Dépassé'),
+        ('met',      'Respecté ✓'),
+    ], string='Statut SLA Réponse', compute='_compute_sla_response_status', store=True)
+
+    date_first_assigned = fields.Datetime(
+        string='Date de Première Assignation', readonly=True,
+        help='Horodatage figé dès le premier passage à Assigné. Jamais écrasé.'
+    )
+
+    # ─── Escalade Dynamique (v2) ─────────────────────────────────────────────
+    date_escalated = fields.Datetime(string="Date d'Escalade", readonly=True)
+    escalation_sla_bonus_hours = fields.Float(
+        string='Bonus SLA Escalade (h)', default=0.0, readonly=True)
 
     # ─── Pause SLA (waiting_material) ────────────────────────────────────────
     x_last_pause_date = fields.Datetime(
@@ -88,9 +112,13 @@ class SupportTicket(models.Model):
     
     # Résolution apportée par le technicien
     resolution = fields.Text(string='Résolution Appliquée')
+    
+    # Flag to prevent AI from overwriting manual classification
+    x_is_manual_classification = fields.Boolean(string='Classification Manuelle', default=False)
 
     # Acceptation explicite par le technicien
     x_accepted = fields.Boolean(string='Accepté par le technicien', default=False)
+    date_accepted = fields.Datetime(string="Date d'Acceptation", readonly=True)
 
     # Pièces jointes (logs, images, captures d'écran)
     attachment_ids = fields.Many2many(
@@ -157,30 +185,102 @@ class SupportTicket(models.Model):
             else:
                 ticket.sla_deadline = False
 
-    @api.depends('sla_deadline', 'state', 'date_done', 'x_last_pause_date')
+    # ─── SLA V2 COMPUTES ─────────────────────────────────────────────────────
+
+    @api.depends('create_date', 'priority')
+    def _compute_sla_response_deadline(self):
+        SLA_RESPONSE_HOURS = {
+            '3': 0.5,  # Critique  → 30 min
+            '2': 1.0,  # Haute     → 1h
+            '1': 4.0,  # Moyenne   → 4h
+            '0': 8.0,  # Basse     → 8h
+        }
+        for ticket in self:
+            if not ticket.create_date:
+                ticket.sla_response_deadline = False
+                continue
+            hours = SLA_RESPONSE_HOURS.get(ticket.priority, 4.0)
+            ticket.sla_response_deadline = ticket.create_date + timedelta(hours=hours)
+
+    @api.depends('sla_response_deadline', 'date_first_assigned', 'state')
+    def _compute_sla_response_status(self):
+        now = fields.Datetime.now()
+        for ticket in self:
+            if not ticket.sla_response_deadline:
+                ticket.sla_response_status = False
+                continue
+            if ticket.date_first_assigned:
+                # Statut figé une fois assigné
+                if ticket.date_first_assigned <= ticket.sla_response_deadline:
+                    ticket.sla_response_status = 'met'
+                else:
+                    ticket.sla_response_status = 'breached'
+            elif now > ticket.sla_response_deadline:
+                ticket.sla_response_status = 'breached'
+            elif now > (ticket.sla_response_deadline - timedelta(minutes=30)):
+                ticket.sla_response_status = 'at_risk'
+            else:
+                ticket.sla_response_status = 'on_track'
+
+    @api.depends('sla_deadline', 'state', 'date_done')
     def _compute_sla_status(self):
         now = fields.Datetime.now()
         for ticket in self:
             if not ticket.sla_deadline:
                 ticket.sla_status = False
                 continue
-                
-            # Calcul de la date d'évaluation selon le statut
-            if ticket.state in ('resolved', 'closed'):
-                target_date = ticket.date_done or now
-            elif ticket.state in ('waiting', 'waiting_material'):
-                # En pause (attente client OU matériel), on évalue la situation
-                # telle qu'elle était au moment de la mise en pause
-                target_date = ticket.x_last_pause_date or now
-            else:
-                target_date = now
+            
+            # Nouveau statut "met" si le ticket est résolu dans les temps
+            if ticket.state in ('resolved', 'closed') and ticket.date_done:
+                if ticket.date_done <= ticket.sla_deadline:
+                    ticket.sla_status = 'met'
+                else:
+                    ticket.sla_status = 'breached'
+                continue
 
-            if target_date > ticket.sla_deadline:
+            if now > ticket.sla_deadline:
                 ticket.sla_status = 'breached'
-            elif ticket.state not in ('resolved', 'closed') and target_date > (ticket.sla_deadline - timedelta(hours=1)):
+            elif now > (ticket.sla_deadline - timedelta(hours=1)):
                 ticket.sla_status = 'at_risk'
             else:
                 ticket.sla_status = 'on_track'
+
+    # ─── Calcul Centralisé des Statistiques SLA ──────────────────────────────
+    @api.model
+    def _compute_sla_metrics_for_tickets(self, resolved_tickets):
+        """
+        Calcule de manière centralisée les métriques SLA (MTTR, Taux de réussite)
+        pour un ensemble de tickets résolus.
+        Compare directement date_done et sla_deadline pour garantir un calcul fixe.
+        """
+        total_duration_hours = 0
+        sla_ok_count = 0
+        count = len(resolved_tickets)
+        
+        for rt in resolved_tickets:
+            # Date de résolution (fallback sur write_date si date_done est absent exceptionnellement)
+            final_date = rt.date_done if rt.date_done else rt.write_date
+            
+            # Calcul MTTR
+            if rt.create_date and final_date:
+                diff = final_date - rt.create_date
+                total_duration_hours += diff.total_seconds() / 3600.0
+            
+            # La logique "gagnante" (comme dans le frontend /tech/tickets) : 
+            # On se fie UNIQUEMENT au statut gelé en base de données pour les tickets résolus.
+            if rt.sla_status == 'met':
+                sla_ok_count += 1
+
+        mttr = round(total_duration_hours / count, 1) if count > 0 else 0
+        sla_compliance = round((sla_ok_count / count) * 100, 1) if count > 0 else 0
+        
+        return {
+            'mttr': mttr,
+            'sla_compliance': sla_compliance,
+            'volume': count,
+            'sla_ok_count': sla_ok_count,
+            'breached_volume': count - sla_ok_count
+        }
 
     # ─── Actions des boutons de l'interface Odoo ──────────────────────────────
     def action_pause_ticket(self):
@@ -205,6 +305,18 @@ class SupportTicket(models.Model):
             else:
                 vals['date_done'] = False
 
+        # Figer date_first_assigned dès qu'un agent est assigné
+        if 'assigned_to_id' in vals and vals['assigned_to_id']:
+            for ticket in self:
+                if not ticket.date_first_assigned:
+                    vals['date_first_assigned'] = fields.Datetime.now()
+
+        # Figer date_accepted lors de l'acceptation
+        if vals.get('x_accepted'):
+            for ticket in self:
+                if not ticket.date_accepted:
+                    vals['date_accepted'] = fields.Datetime.now()
+
         result = super(SupportTicket, self).write(vals)
 
         # --- Décrémentation du stock à la résolution ---
@@ -222,12 +334,41 @@ class SupportTicket(models.Model):
         # Après la mise à jour, appliquer la logique de pause SLA
         if 'state' in vals:
             now = fields.Datetime.now()
-            new_state = vals['state']
-            # Les deux états qui déclenchent une pause SLA
-            PAUSED_STATES = ('waiting', 'waiting_material')
+            # 1. Capture date_first_assigned at first transition to 'assigned'
+            if vals['state'] == 'assigned':
+                for ticket in self:
+                    if not ticket.date_first_assigned:
+                        # Write bypassing checks, avoiding recursion loop
+                        ticket.sudo().write({'date_first_assigned': now})
+
+            # Extension du Smart Timer à 'blocked'
+            PAUSED_STATES = ('waiting', 'waiting_material', 'blocked')
+            pause_type_labels = {
+                'waiting':          'Attente client',
+                'waiting_material': 'Attente matériel',
+                'blocked':          'Blocage externe',
+            }
 
             for ticket in self:
                 old_state = old_states.get(ticket.id)
+                new_state = vals['state']
+
+                # 2. Gestion de l'escalade
+                if new_state == 'escalated' and old_state != 'escalated':
+                    ESCALATION_BONUS_HOURS = { '3': 1.0, '2': 2.0, '1': 4.0, '0': 8.0 }
+                    bonus = ESCALATION_BONUS_HOURS.get(ticket.priority, 2.0)
+                    new_total = (ticket.x_total_paused_duration or 0.0) + bonus
+                    ticket.sudo().write({
+                        'x_total_paused_duration': new_total,
+                        'date_escalated': now,
+                        'escalation_sla_bonus_hours': bonus,
+                    })
+                    # Recompute la deadline immédiatement
+                    ticket._compute_sla_deadline()
+                    ticket.message_post(
+                        body=f"🚨 <b>Escalade N2</b> — Bonus SLA de <b>{bonus}h</b> accordé. La deadline a été repoussée d'autant.",
+                        message_type='notification',
+                    )
 
                 # ── CAS 1 : On entre dans un état pausé ───────────────────────
                 if new_state in PAUSED_STATES and old_state not in PAUSED_STATES:

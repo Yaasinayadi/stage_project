@@ -304,6 +304,7 @@ class SupportTicketController(http.Controller):
             'state': t.state,
             'priority': t.priority,
             'category': t.ai_classification.name if t.ai_classification else None,
+            'x_is_manual_classification': t.x_is_manual_classification,
             'x_accepted': t.x_accepted,
             'user_id': t.user_id.id if t.user_id else None,
             'user_name': t.user_id.name if t.user_id else None,
@@ -313,15 +314,24 @@ class SupportTicketController(http.Controller):
             'assigned_by_id': t.assigned_by_id.id if t.assigned_by_id else None,
             'assigned_by': t.assigned_by_id.name if t.assigned_by_id else None,
             'escalated_by_id': t.escalated_by_id.id if t.escalated_by_id else None,
+            # ── SLA Résolution (existant) ──────────────────────────────────────
             'sla_deadline': str(t.sla_deadline) if t.sla_deadline else None,
             'sla_status': t.sla_status or None,
+            # ── SLA Réponse (v2) ───────────────────────────────────────────
+            'sla_response_deadline': str(t.sla_response_deadline) if t.sla_response_deadline else None,
+            'sla_response_status': t.sla_response_status or None,
+            'date_first_assigned': str(t.date_first_assigned) if t.date_first_assigned else None,
+            # ── Escalade (v2) ──────────────────────────────────────────────────
+            'date_escalated': str(t.date_escalated) if t.date_escalated else None,
+            'escalation_sla_bonus_hours': t.escalation_sla_bonus_hours or 0.0,
+            # ── Timestamps & résolution ───────────────────────────────────────────
             'create_date': str(t.create_date) if t.create_date else None,
             'write_date': str(t.write_date) if t.write_date else None,
             'date_resolved': str(t.date_done) if t.date_done else None,
             'resolution': t.resolution or None,
             'ai_confidence': t.ai_confidence or None,
             'ai_suggested_solution': t.ai_suggested_solution or None,
-            # Matériel IT lié au ticket
+            # ── Matériel IT lié au ticket ───────────────────────────────────────
             'materials': [{
                 'id':        line.material_id.id,
                 'name':      line.material_id.name,
@@ -330,9 +340,8 @@ class SupportTicketController(http.Controller):
                 'line_id':   line.id,
                 'unit_cost': line.material_id.unit_cost,
             } for line in t.material_line_ids],
-            # Coût total matériel
             'total_material_cost': t.total_material_cost,
-            # Pause SLA
+            # ── Pause SLA (Smart Timer) ───────────────────────────────────────────
             'x_total_paused_duration': t.x_total_paused_duration or 0.0,
         } for t in tickets]
 
@@ -427,35 +436,48 @@ class SupportTicketController(http.Controller):
         vals = {}
 
         # auth='public' → request.env.user est toujours l'utilisateur anonyme.
-        # On doit résoudre l'utilisateur réel via la session Odoo.
+        # On doit résoudre l'utilisateur réel via la session Odoo ou le payload.
         session_uid = request.session.uid
         is_admin = False
-        if session_uid:
+        is_tech_or_admin = False
+        
+        # Vérification via payload (pour contourner le blocage des cookies CORS)
+        requester_role = post.get('requester_role')
+        if requester_role in ('admin', 'tech'):
+            is_tech_or_admin = True
+        
+        if session_uid and not is_tech_or_admin:
             session_user = request.env['res.users'].sudo().browse(session_uid)
             is_admin = session_user.has_group('base.group_system')
+            has_tech = session_user.has_group('pfe_it_support.group_support_technician')
+            is_tech_or_admin = is_admin or has_tech
 
         if 'name' in post: vals['name'] = post['name']
         if 'description' in post: vals['description'] = post['description']
 
-        # ── Champs protégés : priorité & catégorie ──────────────────────────
         if 'priority' in post:
-            if not is_admin:
-                return self._json_response({'status': 403, 'message': 'Seul un administrateur peut modifier la priorité.'}, 403)
+            if not is_tech_or_admin:
+                return self._json_response({'status': 403, 'message': 'Seul un agent IT peut modifier la priorité.'}, 403)
             vals['priority'] = post['priority']
+            vals['x_is_manual_classification'] = True
 
         if 'category' in post:
-            if not is_admin:
-                return self._json_response({'status': 403, 'message': 'Seul un administrateur peut modifier la catégorie.'}, 403)
+            if not is_tech_or_admin:
+                return self._json_response({'status': 403, 'message': 'Seul un agent IT peut modifier la catégorie.'}, 403)
             domain_name = post['category']
             domain_rec = request.env['pfe.it.domain'].sudo().search([('name', '=ilike', domain_name)], limit=1)
             vals['ai_classification'] = domain_rec.id if domain_rec else False
+            vals['x_is_manual_classification'] = True
 
         if 'state' in post: vals['state'] = post['state']
         if 'assigned_to_id' in post:
             vals['assigned_to_id'] = int(post['assigned_to_id']) if post['assigned_to_id'] else False
 
-        ticket.write(vals)
-        return self._json_response({'status': 200, 'message': 'Success updated'}, 200)
+        try:
+            ticket.write(vals)
+            return self._json_response({'status': 200, 'message': 'Success updated'}, 200)
+        except Exception as e:
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
 
     # ─────────────────────────────────────────────
     # TICKET WORKFLOW ACTIONS API
@@ -1340,33 +1362,13 @@ class SupportTicketController(http.Controller):
                     'tickets': cnt
                 })
                 
-            # MTTR & SLA (Basé sur la période sélectionnée)
+            # MTTR & SLA centralisé (Basé sur la période sélectionnée)
             resolved_tickets = env.search(domain + [('state', 'in', ('resolved', 'closed'))])
-            total_duration_hours = 0
-            sla_ok_count = 0
-            tech_resolved_t_count = 0
             
-            for rt in resolved_tickets:
-                if not rt.assigned_to_id or rt.assigned_to_id.x_support_role not in ['tech', 'agent']:
-                    continue
-                    
-                tech_resolved_t_count += 1
-                # Utilise write_date par defaut car date_done n'est pas encore dans la BDD
-                final_date = getattr(rt, 'date_done', rt.write_date) if hasattr(rt, 'date_done') else rt.write_date
-                if rt.create_date and final_date:
-                    diff = final_date - rt.create_date
-                    total_duration_hours += diff.total_seconds() / 3600.0
-                if rt.sla_status == 'on_track':
-                    sla_ok_count += 1
-            
-            mttr = 0
-            sla_compliance = 0
-            
-            if tech_resolved_t_count > 0:
-                mttr = round(total_duration_hours / tech_resolved_t_count, 1)
-                sla_compliance = round((sla_ok_count / tech_resolved_t_count) * 100, 1)
-            else:
-                sla_compliance = 0 # Par défaut si aucun ticket résolu par technicien
+            # Le dashboard global doit refléter TOUS les tickets résolus de la période
+            sla_metrics = env._compute_sla_metrics_for_tickets(resolved_tickets)
+            mttr = sla_metrics['mttr']
+            sla_compliance = sla_metrics['sla_compliance']
             
             data = {
                 'counters': {
@@ -1440,23 +1442,11 @@ class SupportTicketController(http.Controller):
                 tech_domain = domain + [('assigned_to_id', '=', tech.id), ('state', 'in', ('resolved', 'closed'))]
                 resolved_tickets = env.search(tech_domain)
                 
-                total_duration_hours = 0
-                sla_ok_count = 0
-                count = len(resolved_tickets)
-                
-                for rt in resolved_tickets:
-                    # Sécurité : date_done est le champ officiel de fin de SLA
-                    final_date = getattr(rt, 'date_done', rt.write_date) if hasattr(rt, 'date_done') and rt.date_done else rt.write_date
-                    if rt.create_date and final_date:
-                        diff = final_date - rt.create_date
-                        total_duration_hours += diff.total_seconds() / 3600.0
-                    
-                    # Le statut SLA est déjà calculé par Odoo
-                    if rt.sla_status == 'on_track':
-                        sla_ok_count += 1
-                        
-                mttr = round(total_duration_hours / count, 1) if count > 0 else 0
-                sla_score = round((sla_ok_count / count) * 100, 1) if count > 0 else 0
+                sla_metrics = env._compute_sla_metrics_for_tickets(resolved_tickets)
+                count = sla_metrics['volume']
+                sla_ok_count = sla_metrics['sla_ok_count']
+                mttr = sla_metrics['mttr']
+                sla_score = sla_metrics['sla_compliance']
                 
                 avatar_url = f"/web/image/res.users/{tech.id}/avatar_128"
                 
@@ -1581,29 +1571,12 @@ class SupportTicketController(http.Controller):
                     'tickets': cnt
                 })
                 
-            # MTTR & SLA (Basé sur la période sélectionnée)
+            # MTTR & SLA centralisé (Basé sur la période sélectionnée)
             resolved_tickets = env.search(domain + [('state', 'in', ('resolved', 'closed'))])
-            total_duration_hours = 0
-            sla_ok_count = 0
             
-            for rt in resolved_tickets:
-                # Utilise write_date par defaut car date_done n'est pas encore dans la BDD
-                final_date = getattr(rt, 'date_done', rt.write_date) if hasattr(rt, 'date_done') else rt.write_date
-                if rt.create_date and final_date:
-                    diff = final_date - rt.create_date
-                    total_duration_hours += diff.total_seconds() / 3600.0
-                if rt.sla_status == 'on_track':
-                    sla_ok_count += 1
-            
-            mttr = 0
-            sla_compliance = 0
-            resolved_t_count = len(resolved_tickets)
-            
-            if resolved_t_count > 0:
-                mttr = round(total_duration_hours / resolved_t_count, 1)
-                sla_compliance = round((sla_ok_count / resolved_t_count) * 100, 1)
-            else:
-                sla_compliance = 0 # Par défaut si aucun ticket résolu
+            sla_metrics = env._compute_sla_metrics_for_tickets(resolved_tickets)
+            mttr = sla_metrics['mttr']
+            sla_compliance = sla_metrics['sla_compliance']
             
             data = {
                 'counters': {

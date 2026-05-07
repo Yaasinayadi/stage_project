@@ -79,10 +79,23 @@ class TicketController(http.Controller):
                     'assigned_to_id': t.assigned_to_id.id if t.assigned_to_id else None,
                     'assigned_by_id': t.assigned_by_id.id if t.assigned_by_id else None,
                     'create_date': str(t.create_date) if t.create_date else None,
+                    # ── SLA Résolution ───────────────────────────────────────────
                     'sla_deadline': str(t.sla_deadline) if t.sla_deadline else None,
                     'sla_status': t.sla_status or None,
+                    # ── SLA Réponse (v2) ───────────────────────────────────────
+                    'sla_response_deadline': str(t.sla_response_deadline) if t.sla_response_deadline else None,
+                    'sla_response_status': t.sla_response_status or None,
+                    'date_first_assigned': str(t.date_first_assigned) if t.date_first_assigned else None,
+                    # ── Escalade (v2) ──────────────────────────────────────────────────
+                    'date_escalated': str(t.date_escalated) if t.date_escalated else None,
+                    'escalation_sla_bonus_hours': t.escalation_sla_bonus_hours or 0.0,
+                    # ── Timestamps & résolution ───────────────────────────────────────────
+                    'date_resolved': str(t.date_done) if getattr(t, 'date_done', False) else None,
+                    # ── Divers ──────────────────────────────────────────────────────────
                     'user_id': t.user_id.name if t.user_id else None,
                     'category': t.ai_classification.name if t.ai_classification else None,
+                    'x_is_manual_classification': t.x_is_manual_classification,
+                    'x_total_paused_duration': t.x_total_paused_duration or 0.0,
                 })
             
             priorities_list = sorted(list(priority_counts.values()), key=lambda x: str(x['id']), reverse=True)
@@ -332,11 +345,17 @@ class TicketController(http.Controller):
                 ai_data = resp.json()
                 ai_cat_name = ai_data.get('category')
                 domain_rec = request.env['pfe.it.domain'].sudo().search([('name', '=ilike', ai_cat_name)], limit=1)
-                ticket.write({
-                    'ai_classification': domain_rec.id if domain_rec else False,
+                
+                # Mise à jour conditionnelle : L'IA ne doit recalculer ces champs
+                # que si aucun changement manuel n'a été fait par un technicien auparavant
+                vals_to_write = {
                     'ai_confidence': ai_data.get('confidence'),
                     'ai_suggested_solution': ai_data.get('suggested_solution')
-                })
+                }
+                if not ticket.x_is_manual_classification:
+                    vals_to_write['ai_classification'] = domain_rec.id if domain_rec else False
+                    
+                ticket.write(vals_to_write)
                 return request.make_response(
                     json.dumps({'status': 'success', 'data': ai_data}),
                     headers=[('Content-Type', 'application/json')]

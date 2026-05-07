@@ -4,6 +4,7 @@ import { useState } from "react";
 import axios from "axios";
 import { Globe, Key, Laptop, HardDrive, Mail, Server, AlertCircle, Clock, User } from "lucide-react";
 import TicketDetailsModal from "./TicketDetailsModal";
+import CompactTimeline from "./CompactTimeline";
 type Ticket = {
   id: number;
   name: string;
@@ -16,6 +17,7 @@ type Ticket = {
   write_date?: string | null;
   sla_deadline?: string | null;
   sla_status?: string | null;
+  date_resolved?: string | null;
 };
 
 type TicketCardProps = {
@@ -103,11 +105,11 @@ export default function TicketCard({ ticket, index, onRefresh }: TicketCardProps
         style={{ animationDelay: `${index * 60}ms` }}
         onClick={() => setIsModalOpen(true)}
       >
-        {/* Top row: icon + priority */}
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center gap-3">
+        {/* Top row: icon + ID + Badges */}
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center transition-colors duration-200"
+              className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors duration-200 flex-shrink-0"
               style={{
                 background: `${catColor}14`,
                 color: catColor,
@@ -115,11 +117,17 @@ export default function TicketCard({ ticket, index, onRefresh }: TicketCardProps
             >
               {getCategoryIcon(ticket.category)}
             </div>
-            <span className="text-xs font-mono font-semibold text-[hsl(var(--muted-foreground))]">
+            <span className="text-[10px] font-mono font-semibold text-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted))] px-1.5 py-0.5 rounded uppercase">
               {formatTicketRef(ticket.id)}
             </span>
+            {/* Priority */}
+            {getPriorityBadge(ticket.priority)}
+            {/* Status */}
+            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[10px] font-semibold tracking-wider ${status.dotClass === 'resolved' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-[hsl(var(--muted)/0.3)] border-[hsl(var(--border))] text-[hsl(var(--foreground))]'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full bg-current opacity-70`} />
+              {status.label}
+            </span>
           </div>
-          {getPriorityBadge(ticket.priority)}
         </div>
 
         {/* Title */}
@@ -132,15 +140,21 @@ export default function TicketCard({ ticket, index, onRefresh }: TicketCardProps
           {ticket.description}
         </p>
 
-        {/* Footer: status + category */}
+        {/* Footer: Timeline + Category */}
         <div className="flex items-center justify-between pt-3 mt-auto border-t border-[hsl(var(--border)/0.5)]">
-          <div className="flex items-center gap-2">
-            <span className={`status-dot ${status.dotClass}`} />
-            <span className="text-xs font-medium text-[hsl(var(--muted-foreground))]">
-              {status.label}
-            </span>
+          {/* Timeline Compacte Contextuelle */}
+          <div className="flex items-center flex-wrap gap-2">
+            {ticket.create_date && (
+              <CompactTimeline
+                createDate={ticket.create_date}
+                slaDeadline={ticket.sla_deadline}
+                slaStatus={ticket.sla_status}
+                dateResolved={ticket.date_resolved}
+                state={ticket.state}
+              />
+            )}
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-[hsl(var(--muted-foreground))]">
+          <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
             <Clock size={12} />
             <span>{ticket.category || "Non classé"}</span>
           </div>

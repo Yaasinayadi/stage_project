@@ -58,6 +58,13 @@ type Ticket = {
   sla_deadline?: string | null;
   sla_status?: string | null;
   date_resolved?: string | null;
+  // SLA v2
+  sla_response_deadline?: string | null;
+  sla_response_status?: string | null;
+  date_first_assigned?: string | null;
+  date_escalated?: string | null;
+  escalation_sla_bonus_hours?: number;
+  x_total_paused_duration?: number;
 };
 
 type Attachment = {
@@ -268,10 +275,14 @@ function SlaCountdown({
   deadline,
   state,
   dateResolved,
+  createDate,
+  totalPausedHours = 0,
 }: {
   deadline: string | null | undefined;
   state: string;
   dateResolved: string | null | undefined;
+  createDate?: string | null | undefined;
+  totalPausedHours?: number;
 }) {
   const [now, setNow] = useState(() => Date.now());
 
@@ -291,10 +302,25 @@ function SlaCountdown({
 
   const end = parseOdooDate(deadline).getTime();
   let timeToCompare = now;
+  const isResolved = state === "resolved" || state === "closed" || dateResolved != null;
 
-  const isResolved = state === "resolved" || state === "closed";
   if (isResolved && dateResolved) {
     timeToCompare = parseOdooDate(dateResolved).getTime();
+    
+    if (createDate) {
+      const start = parseOdooDate(createDate).getTime();
+      let consumedMs = timeToCompare - start;
+      if (totalPausedHours > 0) consumedMs -= totalPausedHours * 3600000;
+      if (consumedMs < 0) consumedMs = 0;
+      
+      const consumedH = Math.floor(consumedMs / 3600000);
+      const consumedM = Math.floor((consumedMs % 3600000) / 60000);
+      return (
+        <span className="text-[hsl(var(--foreground))] font-bold font-mono tracking-wider text-sm bg-[hsl(var(--muted)/0.5)] px-2 py-1 rounded">
+          Temps consommé : {consumedH}h {consumedM.toString().padStart(2, "0")}min
+        </span>
+      );
+    }
   }
 
   const diff = end - timeToCompare;
@@ -870,6 +896,10 @@ export default function TicketDetailsModal({
       }
 
       if (Object.keys(fieldUpdates).length > 0) {
+        // Ajout des infos de l'utilisateur pour l'autorisation backend (contournement CORS)
+        fieldUpdates.requester_id = user?.id;
+        fieldUpdates.requester_role = user?.x_support_role;
+
         const res = await axios.put(
           `${ODOO_BASE}/api/ticket/update/${ticket.id}`,
           fieldUpdates,
@@ -922,8 +952,9 @@ export default function TicketDetailsModal({
       } else {
         setIsEditing(false);
       }
-    } catch (err) {
-      toast.error("Erreur lors de la sauvegarde.");
+    } catch (err: any) {
+      const msg = err.response?.data?.message || "Erreur lors de la sauvegarde.";
+      toast.error(msg);
     } finally {
       setIsAnalyzing(false);
     }
@@ -1300,43 +1331,98 @@ export default function TicketDetailsModal({
                 </div>
               </div>
 
-              {/* ── SLA Progress ── */}
-              {ticket.sla_deadline && (
-                <div className="p-4 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))] space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg border ${slaInfo.bgClass}`}
-                      >
-                        {slaInfo.icon}
-                        SLA : {slaInfo.label}
-                      </span>
+              {/* ── Performance SLA (v2) ── */}
+              {(ticket.sla_deadline || ticket.sla_response_deadline) && (
+                <div className="p-4 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))] space-y-4">
+                  <h4 className="text-sm font-bold flex items-center gap-2 mb-2">
+                    <ShieldCheck size={16} className="text-[hsl(var(--primary))]" />
+                    Performance SLA
+                  </h4>
+                  
+                  {/* SLA Réponse */}
+                  {ticket.sla_response_deadline && (
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[16px]">🎯</span>
+                        <span className="font-medium text-[hsl(var(--muted-foreground))] w-28">SLA Réponse :</span>
+                        {(() => {
+                          const info = getSlaInfo(ticket.sla_response_status);
+                          return (
+                            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-bold ${info.bgClass}`}>
+                              {info.icon} {info.label}
+                            </span>
+                          );
+                        })()}
+                      </div>
+                      <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                        <SlaCountdown 
+                          deadline={ticket.sla_response_deadline} 
+                          state={ticket.date_first_assigned ? "resolved" : "new"} 
+                          dateResolved={ticket.date_first_assigned} 
+                          createDate={ticket.create_date} 
+                        />
+                      </div>
                     </div>
-                    <div className="flex items-center justify-end">
-                      <SlaCountdown deadline={ticket.sla_deadline} state={ticket.state} dateResolved={ticket.date_resolved} />
+                  )}
+
+                  {/* SLA Résolution */}
+                  {ticket.sla_deadline && (
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[16px]">⏱️</span>
+                        <span className="font-medium text-[hsl(var(--muted-foreground))] w-28">SLA Résolution :</span>
+                        {(() => {
+                          const info = getSlaInfo(ticket.sla_status);
+                          return (
+                            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-bold ${info.bgClass}`}>
+                              {info.icon} {info.label}
+                            </span>
+                          );
+                        })()}
+                      </div>
+                      <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                        <SlaCountdown 
+                          deadline={ticket.sla_deadline} 
+                          state={ticket.state} 
+                          dateResolved={ticket.date_resolved} 
+                          createDate={ticket.create_date}
+                          totalPausedHours={ticket.x_total_paused_duration}
+                        />
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  {/* Progress bar */}
-                  <div className="relative h-2.5 rounded-full bg-[hsl(var(--muted))] overflow-hidden">
-                    <div
-                      className="absolute inset-y-0 left-0 rounded-full transition-all duration-1000 ease-out"
-                      style={{
-                        width: `${slaProgress}%`,
-                        background:
-                          slaProgress < 60
-                            ? "#10b981"
-                            : slaProgress < 85
-                              ? "#f59e0b"
-                              : "#ef4444",
-                      }}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between text-[0.65rem] text-[hsl(var(--muted-foreground))]">
-                    <span>Créé le {formatFullDate(ticket.create_date)}</span>
-                    <span className="font-semibold">{slaProgress}%</span>
-                  </div>
+                  {/* Infos Bonus & Pause */}
+                  {(ticket.x_total_paused_duration || ticket.escalation_sla_bonus_hours) ? (
+                    <>
+                      <div className="border-t border-[hsl(var(--border)/0.5)] my-1" />
+                      <div className="space-y-2">
+                        {ticket.x_total_paused_duration ? (
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="text-[14px]">⏸️</span>
+                            <span className="font-medium text-[hsl(var(--muted-foreground))]">Pause totale :</span>
+                            <span className="font-mono bg-[hsl(var(--muted))] px-1.5 py-0.5 rounded text-[hsl(var(--foreground))]">
+                              {ticket.x_total_paused_duration.toFixed(1)}h
+                            </span>
+                          </div>
+                        ) : null}
+                        {ticket.escalation_sla_bonus_hours ? (
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="text-[14px]">🚨</span>
+                            <span className="font-medium text-[hsl(var(--muted-foreground))]">Escalade :</span>
+                            <span className="font-bold text-purple-500 bg-purple-500/10 px-1.5 py-0.5 rounded">
+                              +{ticket.escalation_sla_bonus_hours}h accordées
+                            </span>
+                            {ticket.date_escalated && (
+                              <span className="text-[10px] text-[hsl(var(--muted-foreground))] ml-1">
+                                (le {formatFullDate(ticket.date_escalated)})
+                              </span>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                    </>
+                  ) : null}
                 </div>
               )}
 

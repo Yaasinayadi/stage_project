@@ -7,7 +7,7 @@
         <field name="arch" type="xml">
             <list decoration-danger="sla_status=='breached'"
                   decoration-warning="sla_status=='at_risk'"
-                  decoration-success="state=='resolved'">
+                  decoration-success="state=='resolved' or state=='closed'">
                 <field name="name"/>
                 <field name="user_id"/>
                 <field name="assigned_to_id" optional="show"/>
@@ -15,12 +15,23 @@
                 <field name="priority" widget="badge"/>
                 <field name="ai_classification"/>
                 <field name="state" widget="badge"
-                       decoration-info="state=='new'"
-                       decoration-warning="state in ('waiting','waiting_material')"
-                       decoration-success="state=='resolved'"/>
+                       decoration-info="state in ('new','assigned')"
+                       decoration-warning="state in ('waiting','waiting_material','blocked')"
+                       decoration-danger="state=='escalated'"
+                       decoration-success="state in ('resolved','closed')"/>
+                <!-- SLA Réponse -->
+                <field name="sla_response_status" widget="badge"
+                       decoration-success="sla_response_status=='met'"
+                       decoration-warning="sla_response_status=='at_risk'"
+                       decoration-danger="sla_response_status=='breached'"
+                       string="SLA Réponse"
+                       optional="show"/>
+                <!-- SLA Résolution -->
                 <field name="sla_status" widget="badge"
+                       decoration-success="sla_status=='met'"
+                       decoration-warning="sla_status=='at_risk'"
                        decoration-danger="sla_status=='breached'"
-                       decoration-warning="sla_status=='at_risk'"/>
+                       string="SLA Résolution"/>
                 <field name="create_date"/>
             </list>
         </field>
@@ -69,23 +80,57 @@
                         </group>
                         <group string="SLA &amp; Statut">
                             <field name="ai_confidence" widget="progressbar"/>
-                            <field name="sla_deadline"/>
-                            <field name="sla_status"/>
                             <field name="x_accepted" widget="boolean_toggle"/>
                         </group>
                     </group>
 
-                    <!-- Groupe Pause SLA (visible uniquement si données existantes) -->
-                    <group string="⏱️ Pause SLA (En attente matériel)"
-                           invisible="x_total_paused_duration == 0.0">
+                    <!-- Groupe Historique Temporel -->
+                    <group string="🕒 Historique Temporel">
+                        <group string="Phase 1: Prise en charge">
+                            <field name="create_date" string="Créé le" readonly="1"/>
+                            <field name="sla_response_deadline" string="Cible SLA Réponse"/>
+                            <field name="date_first_assigned" string="Assigné le" readonly="1"
+                                   invisible="date_first_assigned == False"/>
+                            <field name="date_accepted" string="Accepté le" readonly="1"
+                                   invisible="date_accepted == False"/>
+                            <field name="sla_response_status" widget="badge"
+                                   decoration-success="sla_response_status=='met'"
+                                   decoration-warning="sla_response_status=='at_risk'"
+                                   decoration-danger="sla_response_status=='breached'"
+                                   string="Performances Réponse"/>
+                        </group>
+                        <group string="Phase 2: Résolution">
+                            <field name="sla_deadline" string="Cible SLA Résolution"/>
+                            <field name="date_done" string="Résolu le" readonly="1"
+                                   invisible="date_done == False"/>
+                            <field name="sla_status" widget="badge"
+                                   decoration-success="sla_status=='met'"
+                                   decoration-warning="sla_status=='at_risk'"
+                                   decoration-danger="sla_status=='breached'"
+                                   string="Performances Résolution"/>
+                        </group>
+                    </group>
+
+                    <!-- Groupe Pause SLA + Escalade -->
+                    <group string="⏱️ Historique SLA"
+                           invisible="x_total_paused_duration == 0.0 and date_escalated == False">
                         <field name="x_total_paused_duration"
-                               string="Durée totale pausée (heures)"
+                               string="Durée totale pausée (h)"
                                readonly="1"
                                widget="float_time"/>
                         <field name="x_last_pause_date"
                                string="Début de pause en cours"
                                readonly="1"
                                invisible="x_last_pause_date == False"/>
+                        <field name="date_escalated"
+                               string="Date d'escalade"
+                               readonly="1"
+                               invisible="date_escalated == False"/>
+                        <field name="escalation_sla_bonus_hours"
+                               string="Bonus SLA accordé (h)"
+                               readonly="1"
+                               invisible="escalation_sla_bonus_hours == 0.0"
+                               widget="float_time"/>
                     </group>
 
                     <!-- Groupe Finances / Ressources (visible si des matériels sont liés) -->
