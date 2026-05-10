@@ -1,5 +1,5 @@
-from odoo import http
-from odoo.http import request
+from odoo import http  # type: ignore
+from odoo.http import request  # type: ignore
 import json
 import logging
 
@@ -417,6 +417,275 @@ class TicketController(http.Controller):
                 headers=[('Content-Type', 'application/json')],
                 status=500
             )
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # TIMELINE — Historique temporel du ticket
+    # ═══════════════════════════════════════════════════════════════════════
+
+    @http.route('/api/ticket/<int:ticket_id>/timeline', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
+    def get_ticket_timeline(self, ticket_id, **kwargs):
+        """
+        Reconstruit l'historique temporel complet du ticket depuis le chatter Odoo.
+        Retourne des événements typés avec durations calculées entre chaque segment.
+        Types: creation, assignment, status_change, waiting, escalation, resolved, comment
+        """
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+
+        try:
+            ticket = request.env['support.ticket'].sudo().browse(ticket_id)
+            if not ticket.exists():
+                return self._cors_response({'status': 404, 'message': 'Ticket introuvable.'}, status=404)
+
+            events = []
+
+            # ── Événement 0 : Création ─────────────────────────────────────
+            if ticket.create_date:
+                events.append({
+                    'id': f'evt_creation_{ticket.id}',
+                    'type': 'creation',
+                    'date': ticket.create_date.isoformat() + 'Z',
+                    'author': ticket.user_id.name if ticket.user_id else 'Système',
+                    'author_role': 'user',
+                    'message': f'Ticket créé par {ticket.user_id.name if ticket.user_id else "l\'utilisateur"}',
+                    'detail': {
+                        'sujet': ticket.name,
+                        'priorité': dict(ticket._fields['priority'].selection).get(ticket.priority, ticket.priority),
+                        'catégorie': ticket.ai_classification.name if ticket.ai_classification else 'Non classé',
+                    }
+                })
+
+            # ── Messages du chatter (mail.message) ────────────────────────
+            messages = request.env['mail.message'].sudo().search(
+                [
+                    ('res_id', '=', ticket_id),
+                    ('model', '=', 'support.ticket'),
+                    ('message_type', 'in', ['notification', 'comment', 'email']),
+                ],
+                order='date asc'
+            )
+
+            STATE_LABELS = {
+                'new': 'Nouveau',
+                'assigned': 'Assigné',
+                'in_progress': 'En Cours',
+                'waiting': 'Attente Client',
+                'waiting_material': 'En attente matériel',
+                'blocked': 'Bloqué',
+                'escalated': 'Escaladé',
+                'resolved': 'Résolu',
+                'closed': 'Fermé',
+            }
+
+            import re
+            import html as html_lib
+
+            GENERIC_NAMES = {'Public User', 'Gemini Furniture', 'Administrator', 'OdooBot', 'Douglas Fletcher', ''}
+
+            # On track l'assigné au fil du temps pour attribuer les actions auto
+            # au technicien réellement en charge au moment T.
+            current_tech = ticket.user_id.name if ticket.user_id else 'Système'
+
+            for msg in messages:
+                if not msg.date:
+                    continue
+
+                body_text = html_lib.unescape(re.sub(r'<[^>]+>', ' ', msg.body or '')).strip()
+
+                # ── Auteur de base (celui qui a déclenché l'API) ──────────────
+                if msg.author_id and msg.author_id.name not in GENERIC_NAMES:
+                    base_author = msg.author_id.name
+                elif msg.create_uid and msg.create_uid.name not in GENERIC_NAMES:
+                    base_author = msg.create_uid.name
+                else:
+                    base_author = current_tech
+
+                # Rôle de l'auteur
+                author_role = 'user'
+                if msg.author_id and hasattr(msg.author_id, 'user_ids') and msg.author_id.user_ids:
+                    linked_user = msg.author_id.user_ids[0]
+                    if hasattr(linked_user, 'x_support_role') and linked_user.x_support_role:
+                        author_role = linked_user.x_support_role
+                elif msg.create_uid and hasattr(msg.create_uid, 'x_support_role'):
+                    author_role = msg.create_uid.x_support_role or 'user'
+
+                msg_date = msg.date.isoformat() + 'Z'
+
+                # Détection des tracking de champs (assignation, statut)
+                if msg.tracking_value_ids:
+                    for tracking in msg.tracking_value_ids:
+                        field_name = ''
+                        if hasattr(tracking, 'field_id') and tracking.field_id:
+                            field_name = tracking.field_id.name
+                        elif hasattr(tracking, 'field') and tracking.field:
+                            field_name = tracking.field.name
+                        elif hasattr(tracking, 'field_desc') and tracking.field_desc:
+                            field_name = tracking.field_desc
+
+                        if field_name in ('assigned_to_id', 'user_id'):
+                            old_val = tracking.old_value_char or 'Non assigné'
+                            new_val = tracking.new_value_char or 'Non assigné'
+
+                            if new_val == 'Non assigné':
+                                continue
+
+                            # On met à jour l'assigné courant pour les événements futurs
+                            current_tech = new_val
+
+                            events.append({
+                                'id': f'evt_assign_{msg.id}_{tracking.id}',
+                                'type': 'assignment',
+                                'date': msg_date,
+                                'author': base_author,
+                                'author_role': author_role,
+                                'message': f'A assigné le ticket à {new_val}',
+                                'detail': {
+                                    'de': old_val,
+                                    'vers': new_val,
+                                    'par': base_author,
+                                }
+                            })
+
+                        elif field_name in ('state', 'stage_id'):
+                            old_state = tracking.old_value_char or ''
+                            new_state = tracking.new_value_char or ''
+                            old_label = STATE_LABELS.get(old_state, old_state)
+                            new_label = STATE_LABELS.get(new_state, new_state)
+
+                            evt_type = 'status_change'
+                            if new_state in ('waiting', 'waiting_material'):
+                                evt_type = 'waiting'
+                            elif new_state == 'escalated':
+                                evt_type = 'escalation'
+                            elif new_state in ('resolved', 'closed'):
+                                evt_type = 'resolved'
+
+                            # Attribution contextuelle selon le type de statut :
+                            # - Statuts "tech" (En cours, Attente, Résolu) → technicien assigné
+                            # - Statuts "admin" (Assigné) → admin
+                            # - Escalade → tech qui a demandé l'escalade
+                            if evt_type == 'waiting':
+                                pause_kind = 'Attente Client' if new_state == 'waiting' else 'Attente Matériel'
+                                message = f'Mise en pause — {pause_kind}'
+                            elif evt_type == 'resolved':
+                                message = 'A résolu le ticket'
+                            elif evt_type == 'escalation':
+                                # Enrichir avec le nouveau technicien si connu
+                                new_tech_name = ticket.assigned_to_id.name if ticket.assigned_to_id else None
+                                message = 'A escaladé le ticket'
+                                if new_tech_name:
+                                    message = f'A escaladé le ticket → {new_tech_name}'
+                            else:
+                                message = f'A passé le statut à {new_label}'
+
+                            # Attribution contextuelle :
+                            # Les changements de statut métier sont toujours faits par le tech en charge
+                            tech_author = current_tech if evt_type in ('status_change', 'waiting', 'escalation', 'resolved') else base_author
+
+                            event_data = {
+                                'id': f'evt_state_{msg.id}_{tracking.id}',
+                                'type': evt_type,
+                                'date': msg_date,
+                                'author': tech_author,
+                                'author_role': author_role,
+                                'message': message,
+                                'detail': {
+                                    'ancien_statut': old_label,
+                                    'nouveau_statut': new_label,
+                                    'par': tech_author,
+                                }
+                            }
+                            # Pour l'escalade, ajouter le nouveau technicien dans les détails
+                            if evt_type == 'escalation' and ticket.assigned_to_id:
+                                event_data['detail']['nouveau_technicien'] = ticket.assigned_to_id.name
+                            events.append(event_data)
+
+                        elif field_name in ('priority', 'x_accepted'):
+                            old_val = tracking.old_value_char or str(tracking.old_value_integer) or ''
+                            new_val = tracking.new_value_char or str(tracking.new_value_integer) or ''
+
+                            if field_name == 'x_accepted':
+                                is_accepted = new_val not in ('0', 'False', '')
+                                evt_type = 'acceptance'
+                                message = 'A accepté la mission' if is_accepted else 'A refusé la mission'
+                                events.append({
+                                    'id': f'evt_field_{msg.id}_{tracking.id}',
+                                    'type': evt_type,
+                                    'date': msg_date,
+                                    'author': current_tech,
+                                    'author_role': author_role,
+                                    'message': message,
+                                    'detail': {}
+                                })
+
+                else:
+                    # Messages textuels (commentaires, notifications SLA, etc.)
+                    if not body_text or len(body_text) < 3:
+                        continue
+
+                    # Filtrer les messages système bruyants non informatifs
+                    skip_patterns = ['Log note', 'Send message', 'TICKET RÉSOLU']
+                    if any(p in body_text for p in skip_patterns):
+                        continue
+
+                    body_lower = body_text.lower()
+                    evt_type = 'comment'
+
+                    # Détection des pauses (toutes variantes)
+                    if any(kw in body_lower for kw in [
+                        'pause sla', 'attente matériel', 'waiting_material', 'en attente matériel',
+                        'en attente client', 'attente client', 'waiting'
+                    ]):
+                        evt_type = 'waiting'
+                    elif any(kw in body_lower for kw in ['sla repris', 'repasse en cours', 'reprise du travail']):
+                        evt_type = 'status_change'
+                    elif 'escalad' in body_text.lower():
+                        evt_type = 'escalation'
+
+                    # On ne garde que les jalons importants (pas les commentaires simples)
+                    if evt_type != 'comment':
+                        text_author = base_author
+
+                        if evt_type == 'escalation':
+                            match = re.search(r'ESCALADE par\s+([^:]+):', body_text, re.IGNORECASE)
+                            if match:
+                                text_author = match.group(1).strip()
+                        elif evt_type in ('status_change', 'waiting', 'resolved'):
+                            text_author = current_tech
+
+                        event_data = {
+                            'id': f'evt_msg_{msg.id}',
+                            'type': evt_type,
+                            'date': msg_date,
+                            'author': text_author,
+                            'author_role': author_role,
+                            'message': body_text[:200],
+                            'detail': {'par': text_author}
+                        }
+                        if evt_type == 'escalation' and ticket.assigned_to_id:
+                            event_data['detail']['nouveau_technicien'] = ticket.assigned_to_id.name
+                        events.append(event_data)
+
+            # ── Tri chronologique ──────────────────────
+            events.sort(key=lambda e: e['date'])
+
+            # ── SLA deadline initiale ──────────────────────────────────────
+            sla_deadline_initial = None
+            if ticket.sla_deadline_initial:
+                sla_deadline_initial = ticket.sla_deadline_initial.isoformat() + 'Z'
+
+            return self._cors_response({
+                'status': 200,
+                'data': events,
+                'sla_deadline_initial': sla_deadline_initial,
+                'sla_deadline_adjusted': ticket.sla_deadline.isoformat() + 'Z' if ticket.sla_deadline else None,
+                'total_paused_hours': ticket.x_total_paused_duration or 0.0,
+            })
+
+        except Exception as e:
+            import traceback
+            _logger.error("get_ticket_timeline error: %s\n%s", e, traceback.format_exc())
+            return self._cors_response({'status': 500, 'message': str(e)}, status=500)
 
     # ═══════════════════════════════════════════════════════════════════════
     # HELPERS & CORS

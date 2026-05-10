@@ -59,7 +59,6 @@ import { ODOO_URL } from "@/lib/config";
 import { toast } from "sonner";
 import KnowledgeModal from "@/components/KnowledgeModal";
 
-// @ts-expect-error: Ignore missing types
 // Attachments are now handled directly by Odoo (ir.attachment) — no Flask needed here
 
 // ── Inline markdown renderer (no external dependency) ──────────────────────

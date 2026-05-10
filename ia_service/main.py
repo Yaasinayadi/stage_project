@@ -173,14 +173,7 @@ def extract_keywords():
 # ─────────────────────────────────────────────
 # ROUTE : Chatbot IA
 # ─────────────────────────────────────────────
-CHAT_SYSTEM_PROMPT_BASE = """Tu es l'assistant du support IT. Tu as accès aux tickets de l'utilisateur ci-dessous. Si l'utilisateur pose une question sur ses tickets, utilise ces informations pour lui répondre précisément. Ne demande jamais de numéro de ticket si tu l'as déjà dans ta liste.
-Règles STRICTES :
-1. Réponds TOUJOURS en français.
-2. Sois CONCIS et DIRECT : maximum 3 phrases par réponse.
-3. Va droit au but : donne la solution ou la question de diagnostic la plus utile immédiatement.
-4. Pas d'introduction, pas de conclusion vide.
-5. Si le problème est clair, donne des étapes numérotées courtes (max 3 étapes).
-6. Si tu as besoin d'info, pose UNE seule question précise."""
+import re as _re
 
 @app.route("/chat", methods=["POST"])
 def chat_with_bot():
@@ -191,18 +184,26 @@ def chat_with_bot():
     user_message = data["user_message"]
     session_id = data.get("session_id", "default")
     user_tickets = data.get("user_tickets", [])
+    user_name = data.get("user_name", "Utilisateur")
     
-    # Construire le prompt système dynamique
-    tickets_context = "\n\nTickets de l'utilisateur :\n"
     if user_tickets:
         try:
-            tickets_context += json.dumps(user_tickets, ensure_ascii=False, indent=2)
+            tickets_data_str = json.dumps(user_tickets, ensure_ascii=False, indent=2)
         except Exception:
-            tickets_context += "Aucun ticket lisible."
+            tickets_data_str = "Erreur de lecture des tickets."
     else:
-        tickets_context += "L'utilisateur n'a aucun ticket en cours."
+        tickets_data_str = "LISTE VIDE"
         
-    dynamic_system_prompt = CHAT_SYSTEM_PROMPT_BASE + tickets_context
+    dynamic_system_prompt = f"""ALERTE : Tu es intégré à Odoo. Voici les tickets de l'utilisateur {user_name} :
+{tickets_data_str}
+
+RÈGLES STRICTES :
+1. Ne demande JAMAIS l'ID ou le nom à l'utilisateur.
+2. Si l'utilisateur demande la LISTE de ses tickets (plusieurs), génère EXACTEMENT la balise : [SHOW_TICKETS: TK-XXXX, TK-YYYY].
+3. Si l'utilisateur pose une question sur UN SEUL ticket précis (ex: statut, assigné, priorité), réponds avec une phrase courte et professionnelle. Inclus OBLIGATOIREMENT à la fin de ta réponse la balise : [TICKET_ID: TK-XXXX] où XXXX est la référence numérique du ticket concerné.
+4. Les statuts Odoo correspondent à ceci : new = Nouveau | waiting_material = En attente de matériel | in_progress = En cours | done / resolved / closed = Résolu.
+5. N'UTILISE AUCUN EMOJI. Rédige ton texte de manière ultra-concise et professionnelle.
+6. Si la liste de l'utilisateur est VIDE (LISTE VIDE), dis simplement : "Vous n'avez pas de tickets ouverts"."""
     
     if not llm:
         return jsonify(_mock_chat(user_message))
@@ -221,9 +222,24 @@ def chat_with_bot():
             history = chat_histories[session_id]
             
         response = llm.invoke(history)
-        history.append(AIMessage(content=response.content))
+        raw_reply = response.content
+        history.append(AIMessage(content=raw_reply))
         
-        return jsonify({"bot_reply": response.content})
+        # Extraire un ticket unique si présent dans la réponse
+        ticket_id = None
+        ticket_id_match = _re.search(r'\[TICKET_ID:\s*(TK-\d+)\]', raw_reply)
+        if ticket_id_match:
+            ticket_id = ticket_id_match.group(1)
+            # Nettoyer le texte en retirant la balise
+            clean_text = _re.sub(r'\s*\[TICKET_ID:\s*TK-\d+\]', '', raw_reply).strip()
+        else:
+            clean_text = raw_reply
+        
+        return jsonify({
+            "bot_reply": clean_text,
+            "text": clean_text,
+            "ticket_id": ticket_id
+        })
     except Exception as e:
         print(f"Erreur LLM chat: {e}")
         return jsonify(_mock_chat(user_message))
@@ -263,7 +279,7 @@ def _mock_chat(user_message: str) -> dict:
     reply = "Simulation IA : Je comprends. Pouvez-vous détailler ?"
     if "bonjour" in user_message.lower():
         reply = "Bonjour ! Je suis l'assistant IT simulé."
-    return {"bot_reply": reply}
+    return {"bot_reply": reply, "text": reply, "ticket_id": None}
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=False)

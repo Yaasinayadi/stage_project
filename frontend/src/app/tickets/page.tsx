@@ -304,10 +304,13 @@ function Dashboard() {
     const safeName = (ticket.name || "").toLowerCase();
     const safeDesc = (ticket.description || "").toLowerCase();
     const safeSearch = activeFilters.search.toLowerCase();
+    const ticketRef = `tk-${String(ticket.id).padStart(4, "0")}`;
     const matchesSearch =
       !safeSearch ||
       safeName.includes(safeSearch) ||
-      safeDesc.includes(safeSearch);
+      safeDesc.includes(safeSearch) ||
+      ticketRef.includes(safeSearch) ||
+      String(ticket.id) === safeSearch;
 
     // 2. Categories (Already filtered by the backend if one is selected, but kept for consistency)
     const ticketCat = ticket.category ? ticket.category.toLowerCase() : "autre";

@@ -25,6 +25,7 @@
         'views/knowledge_views.xml',
         'views/material_views.xml',  # Vue catalogue matériel + menu Matériel
         'views/config_views.xml',
+        'views/chat_history_views.xml',
     ],
     'installable': True,
     'application': True,

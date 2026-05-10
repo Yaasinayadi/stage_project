@@ -1908,3 +1908,156 @@ class SupportTicketController(http.Controller):
 
 
 
+    # ─────────────────────────────────────────────
+    # CHATBOT HISTORY API
+    # ─────────────────────────────────────────────
+
+    @http.route('/api/chat/debug', type='http', auth='public', methods=['GET'], csrf=False)
+    def debug_chat(self, **kw):
+        histories = request.env['pfe.chat.history'].sudo().search([])
+        data = []
+        for h in histories:
+            msgs = []
+            for m in h.message_ids:
+                msgs.append({'id': m.id, 'role': m.role, 'content': m.content})
+            data.append({'id': h.id, 'name': h.name, 'session_id': h.session_id, 'msgs': msgs})
+        return self._cors_response({'data': data})
+
+    @http.route('/api/chat/history', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
+    def get_chat_history(self, **kw):
+        origin = request.httprequest.headers.get('Origin', 'http://localhost:3000')
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response({'status': 'ok'})
+
+        user_id = kw.get('user_id')
+        if not user_id:
+            return self._cors_response({'status': 'error', 'message': 'user_id requis.'}, status_code=400)
+
+        try:
+            histories = request.env['pfe.chat.history'].sudo().search([('user_id', '=', int(user_id))], order='write_date desc')
+            data = []
+            for h in histories:
+                messages = []
+                for msg in h.message_ids:
+                    messages.append({
+                        'sender': 'bot' if msg.role == 'assistant' else 'user',
+                        'text': msg.content,
+                        'ticketId': msg.ticket_id,
+                        'timestamp': msg.timestamp.isoformat() + 'Z' if msg.timestamp else None
+                    })
+                
+                data.append({
+                    'id': h.id,
+                    'session_id': h.session_id,
+                    'title': h.name,
+                    'is_pinned': h.is_pinned,
+                    'messages': messages,
+                    'date': h.write_date.isoformat() + 'Z' if h.write_date else None
+                })
+            return self._cors_response({'status': 'success', 'data': data})
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error("get_chat_history error: %s", e)
+            return self._cors_response({'status': 'error', 'message': str(e)}, status_code=500)
+
+    @http.route('/api/chat/history', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
+    def save_chat_history(self, **kw):
+        origin = request.httprequest.headers.get('Origin', 'http://localhost:3000')
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response({'status': 'ok'})
+
+        try:
+            import json
+            post = json.loads(request.httprequest.data.decode('utf-8'))
+            user_id = post.get('user_id')
+            session_id = post.get('session_id')
+            messages = post.get('messages', [])
+            title = post.get('title', 'Nouvelle discussion')
+
+            if not user_id or not session_id:
+                return self._cors_response({'status': 'error', 'message': 'user_id et session_id requis.'}, status_code=400)
+
+            # Auto-generate title if it's default
+            if title == 'Nouvelle discussion' and messages:
+                for msg in messages:
+                    if msg.get('sender') == 'user' or msg.get('role') == 'user':
+                        content = msg.get('text') or msg.get('content', '')
+                        if isinstance(content, str) and content:
+                            title = content[:50] + ('...' if len(content) > 50 else '')
+                            break
+
+            history = request.env['pfe.chat.history'].sudo().search([
+                ('user_id', '=', int(user_id)),
+                ('session_id', '=', session_id)
+            ], limit=1)
+
+            if not history:
+                history = request.env['pfe.chat.history'].sudo().create({
+                    'user_id': int(user_id),
+                    'session_id': session_id,
+                    'name': title
+                })
+            else:
+                if title != 'Nouvelle discussion':
+                    history.sudo().write({'name': title})
+
+            history.message_ids.sudo().unlink()
+
+            for msg in messages:
+                role = 'assistant' if msg.get('sender') == 'bot' or msg.get('role') == 'assistant' else 'user'
+                content = msg.get('text')
+                if content is None:
+                    content = msg.get('content', '')
+                if not isinstance(content, str):
+                    content = str(content)
+
+                request.env['pfe.chat.message'].sudo().create({
+                    'history_id': history.id,
+                    'role': role,
+                    'content': content,
+                    'ticket_id': msg.get('ticketId')
+                })
+
+            return self._cors_response({'status': 'success'})
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error("save_chat_history error: %s", e)
+            return self._cors_response({'status': 'error', 'message': str(e)}, status_code=500)
+
+    @http.route('/api/chat/history/action', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
+    def chat_history_action(self, **kw):
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response({'status': 'ok'})
+
+        try:
+            import json
+            post = json.loads(request.httprequest.data.decode('utf-8'))
+            user_id = post.get('user_id')
+            session_id = post.get('session_id')
+            action = post.get('action')
+
+            if not user_id or not session_id or not action:
+                return self._cors_response({'status': 'error', 'message': 'user_id, session_id et action requis.'}, status_code=400)
+
+            history = request.env['pfe.chat.history'].sudo().search([
+                ('user_id', '=', int(user_id)),
+                ('session_id', '=', session_id)
+            ], limit=1)
+
+            if not history:
+                return self._cors_response({'status': 'error', 'message': 'Historique non trouvé.'}, status_code=404)
+
+            if action == 'delete':
+                history.unlink()
+            elif action == 'pin':
+                history.sudo().write({'is_pinned': not history.is_pinned})
+            elif action == 'rename':
+                new_title = post.get('title')
+                if new_title:
+                    history.sudo().write({'name': new_title})
+
+            return self._cors_response({'status': 'success'})
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error("chat_history_action error: %s", e)
+            return self._cors_response({'status': 'error', 'message': str(e)}, status_code=500)

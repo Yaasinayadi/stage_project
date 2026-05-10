@@ -19,3 +19,5 @@ access_pfe_it_material_manager,pfe.it.material.manager,model_pfe_it_material,bas
 access_support_ticket_material_line_user,support.ticket.material.line.user,model_support_ticket_material_line,base.group_user,1,1,1,1
 access_support_ticket_material_line_technician,support.ticket.material.line.technician,model_support_ticket_material_line,pfe_it_support.group_support_technician,1,1,1,1
 access_support_ticket_material_line_manager,support.ticket.material.line.manager,model_support_ticket_material_line,base.group_system,1,1,1,1
+access_pfe_chat_history_user,pfe.chat.history.user,model_pfe_chat_history,base.group_user,1,1,1,1
+access_pfe_chat_message_user,pfe.chat.message.user,model_pfe_chat_message,base.group_user,1,1,1,1

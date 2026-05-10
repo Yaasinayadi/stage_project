@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="action_pfe_chat_history" model="ir.actions.act_window">
+        <field name="name">Conversations IA</field>
+        <field name="res_model">pfe.chat.history</field>
+        <field name="view_mode">list,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Aucune conversation enregistrée pour le moment.
+            </p>
+            <p>
+                L'historique des interactions avec le Chatbot s'affichera ici.
+            </p>
+        </field>
+    </record>
+
+    <record id="view_pfe_chat_history_tree" model="ir.ui.view">
+        <field name="name">pfe.chat.history.tree</field>
+        <field name="model">pfe.chat.history</field>
+        <field name="arch" type="xml">
+            <list string="Conversations IA" decoration-bf="is_pinned == True">
+                <field name="name" string="Titre"/>
+                <field name="user_id"/>
+                <field name="session_id" optional="hide"/>
+                <field name="write_date" string="Dernière interaction"/>
+                <field name="is_pinned" widget="boolean_toggle"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_pfe_chat_history_form" model="ir.ui.view">
+        <field name="name">pfe.chat.history.form</field>
+        <field name="model">pfe.chat.history</field>
+        <field name="arch" type="xml">
+            <form string="Conversation IA">
+                <sheet>
+                    <widget name="web_ribbon" title="Épinglé" bg_color="text-bg-warning" invisible="is_pinned == False"/>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1>
+                            <field name="name" placeholder="Titre de la discussion..."/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="user_id"/>
+                            <field name="session_id"/>
+                        </group>
+                        <group>
+                            <field name="is_pinned" widget="boolean_toggle"/>
+                            <field name="write_date" readonly="1"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Dialogue" name="messages">
+                            <field name="message_ids" readonly="1">
+                                <list decoration-info="role == 'user'" decoration-success="role == 'assistant'" default_order="timestamp asc">
+                                    <field name="timestamp" string="Heure"/>
+                                    <field name="role"/>
+                                    <field name="content"/>
+                                </list>
+                                <form>
+                                    <group>
+                                        <field name="timestamp"/>
+                                        <field name="role"/>
+                                        <field name="content"/>
+                                    </group>
+                                </form>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <menuitem id="menu_pfe_chat_history"
+              name="Conversations IA"
+              parent="menu_root"
+              action="action_pfe_chat_history"
+              sequence="26"/>
+</odoo>

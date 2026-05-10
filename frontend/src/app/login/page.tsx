@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { Mail, Lock, LogIn, Loader2, AlertCircle, Headphones, Sparkles, Eye, EyeOff } from "lucide-react";
@@ -18,8 +18,13 @@ export default function LoginPage() {
   const [shake, setShake] = useState(false);
 
   // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.replace("/");
+    }
+  }, [isAuthenticated, router]);
+
   if (isAuthenticated) {
-    router.replace("/");
     return null;
   }
 

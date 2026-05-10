@@ -1,5 +1,5 @@
-from odoo import api, fields, models
-from odoo.exceptions import UserError
+from odoo import api, fields, models  # type: ignore
+from odoo.exceptions import UserError  # type: ignore
 from datetime import timedelta
 
 class SupportTicket(models.Model):
@@ -60,6 +60,13 @@ class SupportTicket(models.Model):
     # ─── SLA ─────────────────────────────────────────────────────────────────
     sla_id = fields.Many2one('support.sla', string='Règle SLA', compute='_compute_sla', store=True)
     sla_deadline = fields.Datetime(string='Date Limite SLA', compute='_compute_sla_deadline', store=True)
+    # Deadline initiale AVANT toute pause matériel — pour comparer avant/après
+    sla_deadline_initial = fields.Datetime(
+        string='Deadline SLA Initiale (sans pauses)',
+        compute='_compute_sla_deadline_initial',
+        store=True,
+        help='Deadline SLA originale calculée uniquement depuis la règle SLA, sans tenir compte des pauses matériel.',
+    )
     sla_status = fields.Selection([
         ('on_track', 'Dans les temps'),
         ('at_risk',  'À risque'),
@@ -233,7 +240,23 @@ class SupportTicket(models.Model):
             else:
                 ticket.sla_response_status = 'on_track'
 
-    @api.depends('sla_deadline', 'state', 'date_done')
+    @api.depends('create_date', 'priority')
+    def _compute_sla_deadline_initial(self):
+        """Deadline SLA brute sans ajustement de pause — pour transparence dans le rapport."""
+        sla_hours = {
+            '0': 48,  # Basse
+            '1': 24,  # Moyenne
+            '2': 8,   # Haute
+            '3': 2    # Critique
+        }
+        for ticket in self:
+            if ticket.create_date and ticket.priority:
+                hours = sla_hours.get(ticket.priority, 24)
+                ticket.sla_deadline_initial = ticket.create_date + timedelta(hours=hours)
+            else:
+                ticket.sla_deadline_initial = False
+
+    @api.depends('sla_deadline', 'state', 'date_done', 'x_last_pause_date')
     def _compute_sla_status(self):
         now = fields.Datetime.now()
         for ticket in self:
@@ -490,13 +513,6 @@ class SupportTicketMaterialLine(models.Model):
                     # Incrémentation (annulation)
                     record.material_id.qty_available += 1
         return super().write(vals)
-
-    def unlink(self):
-        for record in self:
-            # Si on supprime une ligne qui était validée, on rend le stock
-            if record.status == 'ready' and record.material_id:
-                record.material_id.qty_available += 1
-        return super().unlink()
 
     def unlink(self):
         for record in self:

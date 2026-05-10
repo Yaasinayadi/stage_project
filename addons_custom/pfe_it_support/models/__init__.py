@@ -4,5 +4,6 @@ from . import material       # pfe.it.material — doit être importé AVANT tic
 from . import ticket
 from . import sla
 from . import comment
+from . import chat_history
 from . import knowledge_tag  # doit être importé AVANT knowledge (relation Many2many)
 from . import knowledge
