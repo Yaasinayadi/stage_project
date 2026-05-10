@@ -174,6 +174,13 @@ function getSlaInfo(status: string | null | undefined): {
   bgClass: string;
 } {
   switch (status) {
+    case "met":
+      return {
+        label: "Respecté",
+        color: "#10b981",
+        icon: <ShieldCheck size={14} />,
+        bgClass: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+      };
     case "on_track":
       return {
         label: "Dans les temps",
@@ -188,6 +195,7 @@ function getSlaInfo(status: string | null | undefined): {
         icon: <ShieldAlert size={14} />,
         bgClass: "bg-amber-500/10 text-amber-500 border-amber-500/20",
       };
+    case "failed":
     case "breached":
       return {
         label: "Dépassé",
@@ -1081,7 +1089,7 @@ export default function TicketDetailsModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* ══ HEADER ══ */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[hsl(var(--border))] bg-[hsl(var(--background)/0.5)] flex-shrink-0">
+        <div className="flex items-center justify-between px-4 py-4 border-b border-[hsl(var(--border))] bg-[hsl(var(--background)/0.5)] flex-shrink-0">
           <div className="flex items-center gap-3">
             <div
               className="w-10 h-10 rounded-xl flex items-center justify-center"
@@ -1156,7 +1164,7 @@ export default function TicketDetailsModal({
 
         {/* ══ CORPS SCROLLABLE ══ */}
         <div className="flex-1 overflow-y-auto custom-scrollbar">
-          <form onSubmit={handleGroupedSave} className="p-6 space-y-6">
+          <form onSubmit={handleGroupedSave} className="p-4 space-y-6">
             {/* ── Titre ── */}
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))] mb-2">
@@ -1341,53 +1349,68 @@ export default function TicketDetailsModal({
                   
                   {/* SLA Réponse */}
                   {ticket.sla_response_deadline && (
-                    <div className="flex items-center justify-between text-sm">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-[hsl(var(--background))] p-2.5 rounded-lg border border-[hsl(var(--border)/0.3)]">
                       <div className="flex items-center gap-2">
                         <span className="text-[16px]">🎯</span>
-                        <span className="font-medium text-[hsl(var(--muted-foreground))] w-28">SLA Réponse :</span>
+                        <span className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">SLA Réponse</span>
+                      </div>
+                      <div className="flex items-center justify-between sm:justify-end gap-3">
                         {(() => {
-                          const info = getSlaInfo(ticket.sla_response_status);
+                          let effectiveStatus = ticket.sla_response_status;
+                          if (!ticket.date_first_assigned && ticket.sla_response_deadline) {
+                             const end = parseOdooDate(ticket.sla_response_deadline).getTime();
+                             if (Date.now() > end) effectiveStatus = "breached";
+                          }
+                          const info = getSlaInfo(effectiveStatus);
                           return (
-                            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-bold ${info.bgClass}`}>
+                            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold shrink-0 ${info.bgClass}`}>
                               {info.icon} {info.label}
                             </span>
                           );
                         })()}
-                      </div>
-                      <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                        <SlaCountdown 
-                          deadline={ticket.sla_response_deadline} 
-                          state={ticket.date_first_assigned ? "resolved" : "new"} 
-                          dateResolved={ticket.date_first_assigned} 
-                          createDate={ticket.create_date} 
-                        />
+                        <div className="text-xs shrink-0">
+                          <SlaCountdown 
+                            deadline={ticket.sla_response_deadline} 
+                            state={ticket.date_first_assigned ? "resolved" : "new"} 
+                            dateResolved={ticket.date_first_assigned} 
+                            createDate={ticket.create_date} 
+                          />
+                        </div>
                       </div>
                     </div>
                   )}
 
                   {/* SLA Résolution */}
                   {ticket.sla_deadline && (
-                    <div className="flex items-center justify-between text-sm">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-[hsl(var(--background))] p-2.5 rounded-lg border border-[hsl(var(--border)/0.3)]">
                       <div className="flex items-center gap-2">
                         <span className="text-[16px]">⏱️</span>
-                        <span className="font-medium text-[hsl(var(--muted-foreground))] w-28">SLA Résolution :</span>
+                        <span className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">SLA Résolution</span>
+                      </div>
+                      <div className="flex items-center justify-between sm:justify-end gap-3">
                         {(() => {
-                          const info = getSlaInfo(ticket.sla_status);
+                          let effectiveStatus = ticket.sla_status;
+                          const isResolved = ticket.state === "resolved" || ticket.state === "closed" || ticket.date_resolved != null;
+                          if (!isResolved && ticket.sla_deadline) {
+                             const end = parseOdooDate(ticket.sla_deadline).getTime();
+                             if (Date.now() > end) effectiveStatus = "breached";
+                          }
+                          const info = getSlaInfo(effectiveStatus);
                           return (
-                            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-bold ${info.bgClass}`}>
+                            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold shrink-0 ${info.bgClass}`}>
                               {info.icon} {info.label}
                             </span>
                           );
                         })()}
-                      </div>
-                      <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                        <SlaCountdown 
-                          deadline={ticket.sla_deadline} 
-                          state={ticket.state} 
-                          dateResolved={ticket.date_resolved} 
-                          createDate={ticket.create_date}
-                          totalPausedHours={ticket.x_total_paused_duration}
-                        />
+                        <div className="text-xs shrink-0">
+                          <SlaCountdown 
+                            deadline={ticket.sla_deadline} 
+                            state={ticket.state} 
+                            dateResolved={ticket.date_resolved} 
+                            createDate={ticket.create_date}
+                            totalPausedHours={ticket.x_total_paused_duration}
+                          />
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1427,15 +1450,15 @@ export default function TicketDetailsModal({
               )}
 
               {/* ── Métadonnées ── */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="p-3 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))] flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-[hsl(var(--primary)/0.1)] flex items-center justify-center flex-shrink-0">
+                  <div className="w-6 h-6 rounded-md bg-[hsl(var(--primary)/0.1)] flex items-center justify-center flex-shrink-0 mt-0.5">
                     <CalendarDays
-                      size={14}
+                      size={12}
                       className="text-[hsl(var(--primary))]"
                     />
                   </div>
-                  <div>
+                  <div className="w-full">
                     <span className="block text-[0.65rem] font-semibold opacity-50 uppercase tracking-wide">
                       Créé le
                     </span>
@@ -1445,10 +1468,10 @@ export default function TicketDetailsModal({
                   </div>
                 </div>
                 <div className="p-3 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))] flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center flex-shrink-0">
-                    <RefreshCw size={14} className="text-amber-500" />
+                  <div className="w-6 h-6 rounded-md bg-amber-500/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <RefreshCw size={12} className="text-amber-500" />
                   </div>
-                  <div>
+                  <div className="w-full">
                     <span className="block text-[0.65rem] font-semibold opacity-50 uppercase tracking-wide">
                       Mis à jour
                     </span>
@@ -1458,10 +1481,10 @@ export default function TicketDetailsModal({
                   </div>
                 </div>
                 <div className="p-3 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))] flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center flex-shrink-0">
-                    <User size={14} className="text-indigo-500" />
+                  <div className="w-6 h-6 rounded-md bg-indigo-500/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <User size={12} className="text-indigo-500" />
                   </div>
-                  <div>
+                  <div className="w-full">
                     <span className="block text-[0.65rem] font-semibold opacity-50 uppercase tracking-wide">
                       Agent assigné
                     </span>
@@ -1492,7 +1515,7 @@ export default function TicketDetailsModal({
                       />
                     ) : (
                       <div className="flex flex-col mt-0.5 gap-0.5">
-                        <span className="text-xs font-semibold">
+                        <span className="text-xs font-semibold block truncate max-w-[90%]">
                           {ticket.assigned_to || "Non assigné"}
                         </span>
                         {ticket.assigned_to && (
@@ -1509,12 +1532,12 @@ export default function TicketDetailsModal({
                 {ticket.sla_deadline && (
                   <div className="p-3 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))] flex items-start gap-3">
                     <div
-                      className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                      className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5"
                       style={{ background: `${slaInfo.color}15` }}
                     >
-                      <Clock size={14} style={{ color: slaInfo.color }} />
+                      <Clock size={12} style={{ color: slaInfo.color }} />
                     </div>
-                    <div>
+                    <div className="w-full">
                       <span className="block text-[0.65rem] font-semibold opacity-50 uppercase tracking-wide">
                         Deadline SLA
                       </span>
@@ -1782,7 +1805,7 @@ export default function TicketDetailsModal({
           {/* ══════════════════════════════════════
               SECTION COMMENTAIRES
           ══════════════════════════════════════ */}
-          <div className="px-6 pb-6 pt-0 space-y-4">
+          <div className="px-4 pb-4 pt-0 space-y-4">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))] flex items-center gap-2 border-t border-[hsl(var(--border)/0.5)] pt-6">
               Commentaires
               {!commentsLoading && (

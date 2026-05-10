@@ -102,46 +102,65 @@ function SlaCountdown({
   deadline,
   state,
   dateResolved,
+  xLastPauseDate,
 }: {
   deadline: string | null | undefined;
   state: string;
   dateResolved: string | null | undefined;
+  xLastPauseDate?: string | null | undefined;
 }) {
-  const [now, setNow] = useState(() => Date.now());
+  const isPaused   = ["waiting", "waiting_material", "blocked", "escalated"].includes(state);
+  const isResolved = ["resolved", "closed"].includes(state);
 
+  // ── `now` is the live millisecond clock.
+  // When the ticket is already paused on mount we freeze it immediately
+  // to the pause timestamp so the display is static from the first render.
+  const [now, setNow] = useState<number>(() => {
+    if (isPaused && xLastPauseDate) {
+      return parseOdooDate(xLastPauseDate).getTime();
+    }
+    return Date.now();
+  });
+
+  // ── Kill / restart the interval based on pause/resume ───────────────────
   useEffect(() => {
-    // Si en pause (client OU matériel) ou résolu, le chronomètre s'arrête
-    const isPaused = state === "waiting_material" || state === "waiting";
-    const isResolved = state === "resolved" || state === "closed";
-    if (isPaused || isResolved) return;
-
-    const interval = setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
+    if (isPaused || isResolved) return;           // clock is dead
+    const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
-  }, [state]);
+  }, [isPaused, isResolved]);
+
+  // ── Snap `now` the moment state or pause timestamp changes ───────────────
+  useEffect(() => {
+    if (isPaused) {
+      // Freeze to the exact pause instant (fallback: current moment, one-shot)
+      setNow(xLastPauseDate ? parseOdooDate(xLastPauseDate).getTime() : Date.now());
+    } else if (!isResolved) {
+      setNow(Date.now());                         // resume: live again immediately
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, xLastPauseDate]);
 
   if (!deadline) return <span className="text-[hsl(var(--muted-foreground))]">—</span>;
 
   const end = parseOdooDate(deadline).getTime();
-  let timeToCompare = now;
 
-  const isResolved = state === "resolved" || state === "closed";
-  if (isResolved && dateResolved) {
-    timeToCompare = parseOdooDate(dateResolved).getTime();
-  }
+  // When resolved, pin the display to the resolution timestamp
+  const timeToCompare = isResolved && dateResolved
+    ? parseOdooDate(dateResolved).getTime()
+    : now;
 
-  const diff = end - timeToCompare;
+  const diff    = end - timeToCompare;
   const isOverdue = diff <= 0;
   const absDiff = Math.abs(diff);
 
   const hours = Math.floor(absDiff / 3600000);
-  const mins = Math.floor((absDiff % 3600000) / 60000);
-  const secs = Math.floor((absDiff % 60000) / 1000);
+  const mins  = Math.floor((absDiff % 3600000) / 60000);
+  const secs  = Math.floor((absDiff % 60000) / 1000);
 
-  const formatUnit = (u: number) => u.toString().padStart(2, "0");
-  const timeStr = `${formatUnit(hours)}:${formatUnit(mins)}:${formatUnit(secs)}`;
+  const fmt = (u: number) => u.toString().padStart(2, "0");
+  const timeStr = `${fmt(hours)}:${fmt(mins)}:${fmt(secs)}`;
 
+  // ── Paused states ────────────────────────────────────────────────────────
   if (state === "waiting_material") {
     return (
       <div className="flex flex-col items-start mt-1">
@@ -162,6 +181,18 @@ function SlaCountdown({
           {timeStr}
         </span>
         <span className="text-[10px] text-amber-400/70 mt-0.5">SLA suspendu &mdash; Attente client</span>
+      </div>
+    );
+  }
+
+  if (state === "escalated") {
+    return (
+      <div className="flex flex-col items-start mt-1">
+        <span className="text-purple-400 font-bold font-mono tracking-wider flex items-center text-sm">
+          <PauseCircle size={16} className="animate-pulse mr-1.5" />
+          {timeStr}
+        </span>
+        <span className="text-[10px] text-purple-400/70 mt-0.5">SLA suspendu &mdash; En attente N2</span>
       </div>
     );
   }
@@ -269,6 +300,9 @@ type Ticket = {
   ai_confidence?: number | null;
   resolution?: string | null;
   escalated_by_id?: number | null;
+  escalated_by_name?: string | null;
+  x_escalation_note?: string | null;
+  x_last_pause_date?: string | null;
   date_resolved?: string | null;
   materials?: { id: number; name: string; category: string; status?: "requested" | "ready" | "ordered"; line_id?: number; unit_cost?: number }[];
   total_material_cost?: number;
@@ -352,6 +386,11 @@ function TicketDetailPage() {
   const [resolution, setResolution] = useState("");
   const [addToKb, setAddToKb] = useState(false);
   const [resolving, setResolving] = useState(false);
+
+  // Escalation modal state
+  const [showEscalateModal, setShowEscalateModal] = useState(false);
+  const [escalationNote, setEscalationNote] = useState("");
+  const [escalating, setEscalating] = useState(false);
 
   // KB draft modal state (opened automatically after resolve when toggle is ON)
   const [kbDraftData, setKbDraftData] = useState<{
@@ -603,21 +642,29 @@ function TicketDetailPage() {
   };
 
   const handleEscalate = async () => {
-    setActionLoading("escalate");
+    if (!escalationNote.trim()) return;
+    setEscalating(true);
     try {
       await axios.post(
         `${ODOO_URL}/api/ticket/${id}/escalate`,
-        { tech_id: user?.id },
+        { tech_id: user?.id, escalation_note: escalationNote },
         { withCredentials: true },
       );
-      toast.success("Ticket escaladé. L'admin a été notifié.", {
-        icon: <ArrowUpCircle size={18} />,
-      });
+      toast.success(
+        <div className="flex flex-col gap-1">
+          <span className="font-semibold text-sm">Escalade enregistrée</span>
+          <span className="text-xs opacity-90">La note a été transmise à l&apos;administrateur N2.</span>
+        </div>,
+        { icon: <ArrowUpCircle size={18} /> },
+      );
+      setShowEscalateModal(false);
+      setEscalationNote("");
       fetchTicket();
+      fetchComments();
     } catch {
       toast.error("Erreur lors de l'escalade.");
     } finally {
-      setActionLoading(null);
+      setEscalating(false);
     }
   };
 
@@ -988,6 +1035,59 @@ function TicketDetailPage() {
                   </div>
                 </div>
               )}
+              {/* ── Chaîne de commandement ─────────────────────────────────── */}
+              {(ticket.assigned_to || ticket.escalated_by_id) && (
+                <div className="col-span-2 p-3 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--muted)/0.2)] space-y-2">
+                  <p className="text-[0.6rem] font-bold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">Chaîne de commandement</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* Créateur */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-5 h-5 rounded-full bg-slate-500/20 border border-slate-500/30 flex items-center justify-center text-[0.55rem] font-bold text-slate-400">
+                        {(ticket.user_name ?? "?").slice(0, 1).toUpperCase()}
+                      </span>
+                      <span className="text-[0.65rem] text-[hsl(var(--muted-foreground))] truncate max-w-[80px]">{ticket.user_name ?? "Inconnu"}</span>
+                      <span className="text-[0.55rem] bg-slate-500/10 text-slate-400 px-1.5 py-0.5 rounded-full">Créateur</span>
+                    </div>
+
+                    {/* Escalateur */}
+                    {ticket.escalated_by_id && (
+                      <>
+                        <span className="text-purple-500/60 text-xs">→</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-5 h-5 rounded-full bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-[0.55rem] font-bold text-purple-400">
+                            {(ticket.escalated_by_name ?? "?").slice(0, 1).toUpperCase()}
+                          </span>
+                          <span className="text-[0.65rem] text-purple-300 truncate max-w-[80px]">{ticket.escalated_by_name ?? `Tech #${ticket.escalated_by_id}`}</span>
+                          <span className="text-[0.55rem] bg-purple-500/10 text-purple-400 px-1.5 py-0.5 rounded-full">Escaladé</span>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Agent actuel */}
+                    {ticket.assigned_to && (
+                      <>
+                        <span className="text-emerald-500/60 text-xs">→</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-5 h-5 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-[0.55rem] font-bold text-emerald-400">
+                            {ticket.assigned_to.slice(0, 1).toUpperCase()}
+                          </span>
+                          <span className="text-[0.65rem] text-emerald-300 truncate max-w-[80px]">{ticket.assigned_to}</span>
+                          <span className="text-[0.55rem] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded-full">Assigné</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Note d'escalade */}
+                  {ticket.x_escalation_note && (
+                    <div className="mt-2 p-2.5 rounded-lg bg-purple-500/5 border border-purple-500/15">
+                      <p className="text-[0.55rem] font-bold uppercase tracking-wider text-purple-400 mb-1">Note d&apos;escalade</p>
+                      <p className="text-[0.65rem] text-[hsl(var(--muted-foreground))] leading-relaxed whitespace-pre-wrap">{ticket.x_escalation_note}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {ticket.create_date && (
                 <div className="flex items-center gap-2 text-sm">
                   <Clock
@@ -1015,6 +1115,7 @@ function TicketDetailPage() {
                 deadline={ticket.sla_deadline}
                 state={ticket.state}
                 dateResolved={ticket.date_resolved}
+                xLastPauseDate={ticket.x_last_pause_date}
               />
             </div>
           </div>
@@ -1346,12 +1447,15 @@ function TicketDetailPage() {
                 ) : (
                   ticket.state !== "escalated" && (
                     <button
-                      disabled={actionLoading === "escalate"}
-                      onClick={handleEscalate}
+                      disabled={escalating}
+                      onClick={() => {
+                        setEscalationNote("");
+                        setShowEscalateModal(true);
+                      }}
                       className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg border border-purple-500/30
                       bg-purple-500/10 text-purple-500 hover:bg-purple-500/20 transition-colors disabled:opacity-60"
                     >
-                      {actionLoading === "escalate" ? (
+                      {escalating ? (
                         <Loader2 size={13} className="animate-spin" />
                       ) : (
                         <ArrowUpCircle size={13} />
@@ -2123,6 +2227,83 @@ function TicketDetailPage() {
           userId={user?.id}
           userRole={user?.x_support_role}
         />
+      )}
+      {/* ══════════ ESCALATE MODAL ══════════ */}
+      {showEscalateModal && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+          onClick={() => setShowEscalateModal(false)}
+        >
+          <div
+            className="glass-card w-full max-w-lg p-6 space-y-5 animate-scale-in shadow-2xl border-[hsl(var(--border))]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* ── Header ── */}
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-500">
+                <ArrowUpCircle size={20} />
+              </div>
+              <div>
+                <h2 className="text-base font-bold leading-tight">
+                  Note d&apos;Escalade — Ticket #{ticket.id}
+                </h2>
+                <p className="text-[10px] text-[hsl(var(--muted-foreground))] mt-0.5">
+                  Le prochain intervenant lira cette note pour comprendre ce qui a déjà été tenté.
+                </p>
+              </div>
+            </div>
+
+            {/* ── Alerte contexte ── */}
+            <div className="flex items-start gap-2.5 p-3 rounded-xl bg-purple-500/5 border border-purple-500/15">
+              <ShieldAlert size={15} className="text-purple-400 mt-0.5 flex-shrink-0" />
+              <p className="text-[11px] text-purple-300 leading-relaxed">
+                Le SLA Résolution sera <strong>mis en pause</strong> pendant le transfert.
+                Un bonus de temps sera automatiquement accordé sur votre deadline.
+              </p>
+            </div>
+
+            {/* ── Textarea ── */}
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-[hsl(var(--muted-foreground))] mb-2 block">
+                Actions déjà tentées <span className="text-red-400">*</span>
+              </label>
+              <textarea
+                autoFocus
+                value={escalationNote}
+                onChange={(e) => setEscalationNote(e.target.value)}
+                rows={5}
+                placeholder="Ex: J'ai redémarré le service, vérifié les logs — l'erreur persiste au niveau réseau. Nécessite accès Admin..."
+                className="input-field w-full resize-none text-sm p-4"
+              />
+              <p className="text-[10px] text-[hsl(var(--muted-foreground))] mt-1.5 italic">
+                Ce champ est obligatoire. Il garantit la continuité de la prise en charge.
+              </p>
+            </div>
+
+            {/* ── Footer ── */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowEscalateModal(false)}
+                className="flex-1 btn-ghost text-sm"
+              >
+                Annuler
+              </button>
+              <button
+                disabled={!escalationNote.trim() || escalating}
+                onClick={handleEscalate}
+                className="flex-1 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-sm font-bold
+                  flex items-center justify-center gap-2 disabled:opacity-50 transition-all py-2"
+              >
+                {escalating ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <ArrowUpCircle size={15} />
+                )}
+                Confirmer l&apos;escalade
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

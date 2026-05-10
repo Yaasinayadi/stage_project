@@ -63,7 +63,7 @@ export default function CompactTimeline({
   const created = fmt(createDate);
 
   const deadlineColorClass =
-    effectiveStatus === "breached"
+    (effectiveStatus === "breached" || effectiveStatus === "failed")
       ? "text-red-500 font-bold"
       : effectiveStatus === "at_risk"
       ? "text-orange-400 font-bold"

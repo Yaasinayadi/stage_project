@@ -314,9 +314,12 @@ class SupportTicketController(http.Controller):
             'assigned_by_id': t.assigned_by_id.id if t.assigned_by_id else None,
             'assigned_by': t.assigned_by_id.name if t.assigned_by_id else None,
             'escalated_by_id': t.escalated_by_id.id if t.escalated_by_id else None,
+            'escalated_by_name': t.escalated_by_id.name if t.escalated_by_id else None,
+            'x_escalation_note': t.x_escalation_note,
             # ── SLA Résolution (existant) ──────────────────────────────────────
             'sla_deadline': str(t.sla_deadline) if t.sla_deadline else None,
             'sla_status': t.sla_status or None,
+            'x_last_pause_date': str(t.x_last_pause_date) if t.x_last_pause_date else None,
             # ── SLA Réponse (v2) ───────────────────────────────────────────
             'sla_response_deadline': str(t.sla_response_deadline) if t.sla_response_deadline else None,
             'sla_response_status': t.sla_response_status or None,
@@ -547,27 +550,36 @@ class SupportTicketController(http.Controller):
                 return self._json_response({'status': 404, 'message': 'Ticket introuvable.'}, 404)
 
             tech_id = post.get('tech_id')
+            escalation_note = post.get('escalation_note')
+            if not escalation_note:
+                return self._json_response({'status': 400, 'message': 'Le motif d\'escalade est obligatoire.'}, 400)
+
             tech_name = 'Technicien'
             if tech_id:
                 tech_user = request.env['res.users'].sudo().browse(int(tech_id))
                 if tech_user.exists():
                     tech_name = tech_user.name
 
-            ticket.write({
+            vals = {
                 'state': 'escalated',
                 'assigned_to_id': False,  # Remet dans la file d'attente admin
                 'x_accepted': False,      # Réinitialise l'acceptation
                 'escalated_by_id': int(tech_id) if tech_id else False,
-            })
+                'x_escalation_note': escalation_note,
+            }
+            if tech_id:
+                vals['escalated_by_tech_ids'] = [(4, int(tech_id))]
+            ticket.write(vals)
 
             # Enregistrer un commentaire système pour notifier l'admin
-            escalation_note = (
-                f"🚨 ESCALADE par {tech_name} : Ce ticket nécessite l'intervention d'un administrateur."
+            log_note = (
+                f"🚨 <b>ESCALADE</b> par <b>{tech_name}</b><br/>"
+                f"<b>Motif :</b> {escalation_note}"
             )
             
             # Message public dans le chatter
             ticket.message_post(
-                body=escalation_note,
+                body=log_note,
                 message_type='comment',
                 subtype_xmlid='mail.mt_comment'
             )
@@ -575,7 +587,7 @@ class SupportTicketController(http.Controller):
             try:
                 request.env['support.ticket.comment'].sudo().create({
                     'ticket_id': ticket_id,
-                    'body': escalation_note,
+                    'body': log_note,
                     'author_id': int(tech_id) if tech_id else False,
                 })
             except Exception as comment_err:
@@ -1892,6 +1904,7 @@ class SupportTicketController(http.Controller):
             return self._json_response({'status': 200, 'message': 'Matériel marqué comme en commande.'})
         except Exception as e:
             return self._json_response({'status': 500, 'message': str(e)}, 500)
+
 
 
 

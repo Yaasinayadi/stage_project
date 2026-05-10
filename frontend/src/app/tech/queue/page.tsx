@@ -77,6 +77,10 @@ type QueueTicket = {
   sla_response_deadline?: string | null;
   sla_response_status?: string | null;
   date_first_assigned?: string | null;
+  date_resolved?: string | null;
+  x_escalation_note?: string | null;
+  escalated_by_tech_ids?: number[];
+  x_last_pause_date?: string | null;
   user_id: number | null;
   user_name?: string | null;
   user_email?: string | null;
@@ -523,10 +527,13 @@ function QueuePage() {
                       <DualSlaGauge
                         priority={ticket.priority}
                         state={ticket.state}
+                        slaDeadline={null} // Ne jamais afficher la jauge résolution dans la file
+                        slaStatus={null}
                         slaResponseDeadline={ticket.sla_response_deadline}
                         slaResponseStatus={ticket.sla_response_status || null}
                         dateFirstAssigned={ticket.date_first_assigned}
                         dateResolved={ticket.date_resolved}
+                        xLastPauseDate={ticket.x_last_pause_date}
                         size={96}
                       />
                     </div>
@@ -735,11 +742,12 @@ function QueuePage() {
                 </h3>
 
                 {(() => {
-                  const availableTechs = agents.filter((tech) =>
-                    dispatchTicket?.state === "escalated"
-                      ? tech.id !== dispatchTicket.user_id
-                      : true,
-                  );
+                  const availableTechs = agents.filter((tech) => {
+                    if (dispatchTicket?.state === "escalated") {
+                      return !dispatchTicket.escalated_by_tech_ids?.includes(tech.id);
+                    }
+                    return true;
+                  });
 
                   return loadingAgents ? (
                     <div className="text-center text-sm text-muted-foreground py-8 flex items-center justify-center gap-2">

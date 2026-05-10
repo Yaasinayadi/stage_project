@@ -56,7 +56,7 @@ class TicketController(http.Controller):
                     '&', ('assigned_to_id', '=', False), ('ai_classification', 'in', expertise_ids)
                 ] + domain
                 # Hide tickets escalated by this tech
-                domain = ['|', ('escalated_by_id', '=', False), ('escalated_by_id', '!=', calling_user.id)] + domain
+                domain = [('escalated_by_tech_ids', 'not in', [calling_user.id])] + domain
             else:
                 domain = [('assigned_to_id', '=', False)] + domain
 
@@ -82,6 +82,7 @@ class TicketController(http.Controller):
                     # ── SLA Résolution ───────────────────────────────────────────
                     'sla_deadline': str(t.sla_deadline) if t.sla_deadline else None,
                     'sla_status': t.sla_status or None,
+                    'x_last_pause_date': str(t.x_last_pause_date) if t.x_last_pause_date else None,
                     # ── SLA Réponse (v2) ───────────────────────────────────────
                     'sla_response_deadline': str(t.sla_response_deadline) if t.sla_response_deadline else None,
                     'sla_response_status': t.sla_response_status or None,
@@ -89,6 +90,10 @@ class TicketController(http.Controller):
                     # ── Escalade (v2) ──────────────────────────────────────────────────
                     'date_escalated': str(t.date_escalated) if t.date_escalated else None,
                     'escalation_sla_bonus_hours': t.escalation_sla_bonus_hours or 0.0,
+                    'escalated_by_id': t.escalated_by_id.id if t.escalated_by_id else None,
+                    'escalated_by_name': t.escalated_by_id.name if t.escalated_by_id else None,
+                    'escalated_by_tech_ids': t.escalated_by_tech_ids.ids,
+                    'x_escalation_note': t.x_escalation_note,
                     # ── Timestamps & résolution ───────────────────────────────────────────
                     'date_resolved': str(t.date_done) if getattr(t, 'date_done', False) else None,
                     # ── Divers ──────────────────────────────────────────────────────────

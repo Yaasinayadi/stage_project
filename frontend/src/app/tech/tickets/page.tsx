@@ -99,6 +99,7 @@ type Ticket = {
   // ── Escalade (v2) ───────────────────────────────────────────────────
   date_escalated?: string | null;
   escalation_sla_bonus_hours?: number;
+  x_last_pause_date?: string | null;
   // ── Divers ──────────────────────────────────────────────────────────
   user_id: string | null;
   assigned_to_id?: string | null;
@@ -401,6 +402,7 @@ function MyTicketsPage() {
             priority={ticket.priority}
             state={ticket.state}
             dateResolved={ticket.date_resolved}
+            xLastPauseDate={ticket.x_last_pause_date}
             size={108}
           />
         </div>

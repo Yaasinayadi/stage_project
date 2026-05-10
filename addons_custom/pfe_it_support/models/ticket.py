@@ -89,6 +89,16 @@ class SupportTicket(models.Model):
     date_escalated = fields.Datetime(string="Date d'Escalade", readonly=True)
     escalation_sla_bonus_hours = fields.Float(
         string='Bonus SLA Escalade (h)', default=0.0, readonly=True)
+    escalated_by_id = fields.Many2one('res.users', string="Escaladé par (Dernier)", readonly=True)
+    escalated_by_tech_ids = fields.Many2many(
+        'res.users', 
+        'support_ticket_escalated_tech_rel', 
+        'ticket_id', 
+        'user_id', 
+        string="Historique des escalades (Techs)",
+        readonly=True
+    )
+    x_escalation_note = fields.Text(string="Note d'escalade", tracking=True)
 
     # ─── Pause SLA (waiting_material) ────────────────────────────────────────
     x_last_pause_date = fields.Datetime(
@@ -187,7 +197,7 @@ class SupportTicket(models.Model):
 
     # ─── SLA V2 COMPUTES ─────────────────────────────────────────────────────
 
-    @api.depends('create_date', 'priority')
+    @api.depends('create_date', 'priority', 'x_total_paused_duration')
     def _compute_sla_response_deadline(self):
         SLA_RESPONSE_HOURS = {
             '3': 0.5,  # Critique  → 30 min
@@ -200,7 +210,8 @@ class SupportTicket(models.Model):
                 ticket.sla_response_deadline = False
                 continue
             hours = SLA_RESPONSE_HOURS.get(ticket.priority, 4.0)
-            ticket.sla_response_deadline = ticket.create_date + timedelta(hours=hours)
+            total_hours = hours + (ticket.x_total_paused_duration or 0.0)
+            ticket.sla_response_deadline = ticket.create_date + timedelta(hours=total_hours)
 
     @api.depends('sla_response_deadline', 'date_first_assigned', 'state')
     def _compute_sla_response_status(self):
@@ -341,12 +352,13 @@ class SupportTicket(models.Model):
                         # Write bypassing checks, avoiding recursion loop
                         ticket.sudo().write({'date_first_assigned': now})
 
-            # Extension du Smart Timer à 'blocked'
-            PAUSED_STATES = ('waiting', 'waiting_material', 'blocked')
+            # États qui suspendent le SLA (y compris escalated)
+            PAUSED_STATES = ('waiting', 'waiting_material', 'blocked', 'escalated')
             pause_type_labels = {
                 'waiting':          'Attente client',
                 'waiting_material': 'Attente matériel',
                 'blocked':          'Blocage externe',
+                'escalated':        'Escalade N2',
             }
 
             for ticket in self:
@@ -357,21 +369,35 @@ class SupportTicket(models.Model):
                 if new_state == 'escalated' and old_state != 'escalated':
                     ESCALATION_BONUS_HOURS = { '3': 1.0, '2': 2.0, '1': 4.0, '0': 8.0 }
                     bonus = ESCALATION_BONUS_HOURS.get(ticket.priority, 2.0)
-                    new_total = (ticket.x_total_paused_duration or 0.0) + bonus
+                    
+                    # ── PAUSE SLA Résolution ────────────────────────────────
+                    paused_resolution_hours = 0.0
+                    if old_state not in ('waiting', 'waiting_material', 'blocked'):
+                        pause_update = {'x_last_pause_date': now}
+                    else:
+                        if ticket.x_last_pause_date:
+                            delta = now - ticket.x_last_pause_date
+                            paused_resolution_hours = delta.total_seconds() / 3600.0
+                        pause_update = {'x_last_pause_date': now}
+
+                    new_total = (ticket.x_total_paused_duration or 0.0) + bonus + paused_resolution_hours
+
                     ticket.sudo().write({
                         'x_total_paused_duration': new_total,
                         'date_escalated': now,
                         'escalation_sla_bonus_hours': bonus,
+                        'date_first_assigned': False, # Réactive le chronomètre Réponse
+                        **pause_update,
                     })
                     # Recompute la deadline immédiatement
                     ticket._compute_sla_deadline()
                     ticket.message_post(
-                        body=f"🚨 <b>Escalade N2</b> — Bonus SLA de <b>{bonus}h</b> accordé. La deadline a été repoussée d'autant.",
+                        body=f"🚨 <b>Escalade N2</b> — SLA Résolution mis en pause. SLA Réponse réactivé. Bonus de <b>{bonus}h</b>.",
                         message_type='notification',
                     )
 
                 # ── CAS 1 : On entre dans un état pausé ───────────────────────
-                if new_state in PAUSED_STATES and old_state not in PAUSED_STATES:
+                if new_state in PAUSED_STATES and new_state != 'escalated' and old_state not in PAUSED_STATES:
                     ticket.sudo().write({'x_last_pause_date': now})
 
                 # ── CAS 2 : On sort d'un état pausé ──────────────────────────
@@ -394,7 +420,7 @@ class SupportTicket(models.Model):
                         # Log dans le chatter
                         hours_int = int(paused_hours)
                         minutes_int = int((paused_hours - hours_int) * 60)
-                        pause_type = "Attente client" if old_state == 'waiting' else "Attente matériel"
+                        pause_type = pause_type_labels.get(old_state, "Pause")
                         ticket.message_post(
                             body=(
                                 f"⏱️ <b>Pause SLA terminée ({pause_type})</b> — Durée : "
@@ -464,6 +490,13 @@ class SupportTicketMaterialLine(models.Model):
                     # Incrémentation (annulation)
                     record.material_id.qty_available += 1
         return super().write(vals)
+
+    def unlink(self):
+        for record in self:
+            # Si on supprime une ligne qui était validée, on rend le stock
+            if record.status == 'ready' and record.material_id:
+                record.material_id.qty_available += 1
+        return super().unlink()
 
     def unlink(self):
         for record in self:

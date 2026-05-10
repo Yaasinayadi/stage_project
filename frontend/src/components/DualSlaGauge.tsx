@@ -61,13 +61,15 @@ interface ArcProps {
   title: string;
 }
 
-function SlaArc({ pct, isBreached, isAtRisk, isMet, label, size, title }: ArcProps) {
+function SlaArc({ pct, isBreached, isAtRisk, isMet, isPaused, label, size, title }: ArcProps & { isPaused?: boolean }) {
   const sw = 5;
   const r = (size - sw) / 2;
   const circ = 2 * Math.PI * r;
   const offset = circ * (1 - Math.min(pct, 1));
 
-  const color = isMet
+  const color = isPaused
+    ? "#9ca3af" // Gray for paused
+    : isMet
     ? "#4ade80"
     : isBreached
     ? "#ef4444"
@@ -75,7 +77,9 @@ function SlaArc({ pct, isBreached, isAtRisk, isMet, label, size, title }: ArcPro
     ? "#fbbf24"
     : "#4ade80";
 
-  const glow = isMet
+  const glow = isPaused
+    ? "rgba(156,163,175,0.30)"
+    : isMet
     ? "rgba(74,222,128,0.35)"
     : isBreached
     ? "rgba(239,68,68,0.45)"
@@ -145,12 +149,17 @@ function SlaArc({ pct, isBreached, isAtRisk, isMet, label, size, title }: ArcPro
             strokeWidth={2.5}
           />
         ) : (
-          <span
-            className="font-bold tabular-nums leading-none select-none text-center flex items-center justify-center w-full px-1"
-            style={{ fontSize, color: textColor, letterSpacing: "-0.5px" }}
-          >
-            {label}
-          </span>
+            <div className="flex flex-col items-center justify-center w-full px-1">
+              {isPaused && (
+                <span className="text-[10px] font-bold text-gray-400 mb-0.5 tracking-wider">PAUSE</span>
+              )}
+              <span
+                className="font-bold tabular-nums leading-none select-none text-center"
+                style={{ fontSize: isPaused ? fontSize * 0.85 : fontSize, color: textColor, letterSpacing: "-0.5px" }}
+              >
+                {label}
+              </span>
+            </div>
         )}
       </div>
     </div>
@@ -169,6 +178,7 @@ export interface DualSlaGaugeProps {
   slaResponseStatus?: string | null;
   dateFirstAssigned?: string | null;
   dateResolved?: string | null;
+  xLastPauseDate?: string | null;
   /** Outer diameter in px — default 64 per gauge */
   size?: number;
 }
@@ -185,10 +195,25 @@ export default function DualSlaGauge({
   slaResponseStatus,
   dateFirstAssigned,
   dateResolved,
+  xLastPauseDate,
   size = 68,
 }: DualSlaGaugeProps) {
-  const [now, setNow] = useState<Date>(() => new Date());
-  const isResolved = RESOLVED_STATES.includes(state);
+  const isResolved   = RESOLVED_STATES.includes(state);
+  // Resolution SLA paused for waiting / waiting_material / blocked / escalated
+  const isResPaused  = ["waiting", "waiting_material", "blocked", "escalated"].includes(state);
+  // Response SLA active even when escalated (re-armed), paused only on waiting states
+  const isRespPaused = ["waiting", "waiting_material", "blocked"].includes(state);
+
+  // ── `now` is the live clock used for SLA maths.
+  // When paused we freeze it to the exact moment the pause started,
+  // so the displayed countdown never moves.
+  const [now, setNow] = useState<Date>(() => {
+    if (isResPaused && xLastPauseDate) {
+      const frozen = toUTC(xLastPauseDate);
+      if (frozen) return frozen;
+    }
+    return new Date();
+  });
 
   // Inject keyframes once
   useEffect(() => {
@@ -199,12 +224,27 @@ export default function DualSlaGauge({
     document.head.appendChild(el);
   }, []);
 
-  // Tick every 60s for active tickets
+  // ── Freeze / unfreeze the clock based on pause state ─────────────────────
   useEffect(() => {
-    if (isResolved) return;
+    // Completely stop the clock for paused/resolved tickets
+    if (isResolved || isResPaused) return;
+
     const id = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(id);
-  }, [isResolved]);
+  }, [isResolved, isResPaused]);
+
+  // Whenever pause starts/ends, immediately snap `now` to the correct anchor
+  useEffect(() => {
+    if (isResPaused) {
+      // Freeze: snap to the pause timestamp (or current moment as a one-time snapshot)
+      const frozen = (xLastPauseDate ? toUTC(xLastPauseDate) : null) ?? new Date();
+      setNow(frozen);
+    } else if (!isResolved) {
+      // Resume: snap back to live time immediately so there's no stale display
+      setNow(new Date());
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, xLastPauseDate]);
 
   // ── Resolution SLA maths ─────────────────────────────────────────────────
   const resDeadline = toUTC(slaDeadline);
@@ -217,6 +257,8 @@ export default function DualSlaGauge({
     const start = new Date(resDeadline.getTime() - totalMin * 60_000);
     const evalAt = isResolved && dateResolved
       ? toUTC(dateResolved)! 
+      : isResPaused && xLastPauseDate
+      ? toUTC(xLastPauseDate)!
       : now;
     const elapsed = (evalAt.getTime() - start.getTime()) / 60_000;
     const remaining = totalMin - elapsed;
@@ -284,10 +326,13 @@ export default function DualSlaGauge({
             isBreached={resBreached}
             isAtRisk={resRisk}
             isMet={resMet}
+            isPaused={isResPaused}
             label={resLabel}
             size={size}
             title={
-              resMet
+              isResPaused 
+                ? "SLA Résolution en pause ⏸️" 
+                : resMet
                 ? "SLA Résolution respecté ✓"
                 : resBreached
                 ? `SLA dépassé de ${resLabel.replace("+", "")}`
