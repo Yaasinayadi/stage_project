@@ -113,9 +113,14 @@ class SupportTicket(models.Model):
         help='Horodatage du dernier passage en "En attente matériel" — utilisé pour calculer la durée de pause',
     )
     x_total_paused_duration = fields.Float(
-        string='Total pausé (heures)',
+        string='Total pausé pour SLA (heures)',
         default=0.0,
-        help='Cumul des durées de pause "En attente matériel" en heures — ajouté à la deadline SLA',
+        help='Cumul des durées de pause + bonus escalade en heures — utilisé uniquement pour ajuster la deadline SLA',
+    )
+    x_actual_paused_duration = fields.Float(
+        string='Durée réelle suspendue (heures)',
+        default=0.0,
+        help='Cumul des durées de pause réelles (sans les bonus d’escalade) — utilisé pour l’affichage du Temps Suspendu',
     )
 
     date_done = fields.Datetime(string='Date de Résolution')
@@ -404,9 +409,12 @@ class SupportTicket(models.Model):
                         pause_update = {'x_last_pause_date': now}
 
                     new_total = (ticket.x_total_paused_duration or 0.0) + bonus + paused_resolution_hours
+                    # x_actual_paused_duration ne prend QUE la vraie pause, pas le bonus artificiel
+                    new_actual = (ticket.x_actual_paused_duration or 0.0) + paused_resolution_hours
 
                     ticket.sudo().write({
                         'x_total_paused_duration': new_total,
+                        'x_actual_paused_duration': new_actual,
                         'date_escalated': now,
                         'escalation_sla_bonus_hours': bonus,
                         'date_first_assigned': False, # Réactive le chronomètre Réponse
@@ -430,10 +438,12 @@ class SupportTicket(models.Model):
                         delta = now - ticket.x_last_pause_date
                         paused_hours = delta.total_seconds() / 3600.0
                         new_total = (ticket.x_total_paused_duration or 0.0) + paused_hours
+                        new_actual = (ticket.x_actual_paused_duration or 0.0) + paused_hours
 
                         # Décaler la deadline SLA du même montant (non pénalisant)
                         ticket.sudo().write({
                             'x_total_paused_duration': new_total,
+                            'x_actual_paused_duration': new_actual,
                             'x_last_pause_date': False,
                         })
 
@@ -460,8 +470,10 @@ class SupportTicket(models.Model):
                         delta = now - ticket.x_last_pause_date
                         paused_hours = delta.total_seconds() / 3600.0
                         new_total = (ticket.x_total_paused_duration or 0.0) + paused_hours
+                        new_actual = (ticket.x_actual_paused_duration or 0.0) + paused_hours
                         ticket.sudo().write({
                             'x_total_paused_duration': new_total,
+                            'x_actual_paused_duration': new_actual,
                             'x_last_pause_date': now,  # repartir depuis maintenant
                         })
                         ticket._compute_sla_deadline()

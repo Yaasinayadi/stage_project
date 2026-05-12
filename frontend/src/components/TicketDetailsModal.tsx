@@ -28,6 +28,8 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
+  Users,
   PauseCircle,
   Cpu,
   Wallet,
@@ -43,6 +45,7 @@ import {
   UserCheck,
   History,
   Flag,
+  Target,
   CheckCircle2 as CheckCircleFilled,
   PlayCircle,
   MessageSquare,
@@ -83,12 +86,15 @@ type Ticket = {
   materials?: { id: number; name: string; status: string; unit_cost: number }[];
   total_material_cost?: number;
   x_total_paused_duration?: number;
+  x_actual_paused_duration?: number;
+
   // SLA v2
   sla_response_deadline?: string | null;
   sla_response_status?: string | null;
   date_first_assigned?: string | null;
   date_escalated?: string | null;
   escalation_sla_bonus_hours?: number;
+  x_accepted?: boolean;
 };
 
 type TimelineEvent = {
@@ -116,6 +122,7 @@ type TimelineData = {
   sla_deadline_initial: string | null;
   sla_deadline_adjusted: string | null;
   total_paused_hours: number;
+  actual_paused_hours: number;
 };
 
 type Attachment = {
@@ -364,7 +371,8 @@ function SlaCountdown({
   const end = parseOdooDate(deadline).getTime();
   let timeToCompare = now;
 
-  const isResolved = state === "resolved" || state === "closed" || dateResolved != null;
+  const isResolved =
+    state === "resolved" || state === "closed" || dateResolved != null;
   if (isResolved && dateResolved) {
     timeToCompare = parseOdooDate(dateResolved).getTime();
 
@@ -378,7 +386,8 @@ function SlaCountdown({
       const consumedM = Math.floor((consumedMs % 3600000) / 60000);
       return (
         <span className="text-[hsl(var(--foreground))] font-bold font-mono tracking-wider text-sm bg-[hsl(var(--muted)/0.5)] px-2 py-1 rounded">
-          Temps consommé : {consumedH}h {consumedM.toString().padStart(2, "0")}min
+          Temps consommé : {consumedH}h {consumedM.toString().padStart(2, "0")}
+          min
         </span>
       );
     }
@@ -447,6 +456,7 @@ function useTimeline(ticketId: number, isOpen: boolean) {
             sla_deadline_initial: res.data.sla_deadline_initial || null,
             sla_deadline_adjusted: res.data.sla_deadline_adjusted || null,
             total_paused_hours: res.data.total_paused_hours || 0,
+            actual_paused_hours: res.data.actual_paused_hours || 0,
           });
         }
       })
@@ -564,11 +574,16 @@ function getEventConfig(evt: TimelineEvent): {
     };
   }
   if (
-    msg.includes("reprise") ||
-    msg.includes("prise en charge") ||
+    msg.toLowerCase().includes("prise en charge") ||
     evt.type === "acceptance" ||
-    msg.includes("cours")
+    msg.includes("accepté")
   ) {
+    return {
+      bgClass: "bg-indigo-500/15",
+      icon: <UserCheck size={14} className="text-indigo-500" />,
+    };
+  }
+  if (msg.includes("reprise") || msg.includes("cours")) {
     return {
       bgClass: "bg-sky-500/15",
       icon: <PlayCircle size={14} className="text-sky-500" />,
@@ -586,9 +601,20 @@ function humanizeMessage(msg: string, type: string): string {
   // Strip HTML, asterisks, emojis, technical labels
   let t = msg
     .replace(/<[^>]+>/g, " ")
-    .replace(/[*✅❌⚠️🔄📦⏰]/g, "")
+    .replace(
+      /[*✅❌⚠️🔄📦⏰▶\u25A0\u25C6\u2665\u2666\u2663\u2660\u2022\u25CF\u26A0]/g,
+      "",
+    )
     .replace(/TICKET RÉSOLU\s*:/gi, "")
-    .replace(/Pause SLA\s*—\s*/gi, "");
+    .replace(/Pause SLA\s*—\s*/gi, "")
+    .replace(/SLA R[eé]solution mis en pause\.?/gi, "")
+    .replace(/SLA R[eé]ponse r[eé]activ[eé]\.?/gi, "")
+    .replace(/Bonus de \d+(?:\.\d+)?h\.?/gi, "")
+    .replace(/Dur[eé]e\s*:\s*\d+[smh]?\d*[smh]?\.?/gi, "")
+    .replace(/Pause SLA termin[eé]e[^.]*\.?/gi, "")
+    .replace(/Escalade N\d\s*—?/gi, "")
+    .replace(/Motif\s*:?/i, "Raison :")
+    .replace(/&nbsp;/g, " ");
 
   const MAP: [RegExp, string | ((m: string) => string)][] = [
     // New backend format (direct, passthrough / light clean)
@@ -612,12 +638,33 @@ function humanizeMessage(msg: string, type: string): string {
     ],
     // Legacy/chatter messages — other patterns
     [
-      /mise en pause\s*[—-]\s*attente client/gi,
+      /^mise en pause\s*[—-]\s*attente client/gi,
       "Mise en pause — Attente client",
     ],
     [
-      /mise en pause\s*[—-]\s*attente mat[eé]riel/gi,
+      /^mise en pause\s*[—-]\s*attente mat[eé]riel/gi,
       "Mise en pause — Attente matériel",
+    ],
+    [
+      /mise en pause\s*[—-]\s*(attente client|attente mat[eé]riel)\s*:\s*(.+)/gi,
+      (m: string) => {
+        const parts = m.split(":");
+        return `Mise en pause — Raison : ${parts.slice(1).join(":").trim()}`;
+      },
+    ],
+    [
+      /^(attente client|en attente client)\s*:\s*(.+)/gi,
+      (m: string) => {
+        const parts = m.split(":");
+        return `Mise en pause — Raison : ${parts.slice(1).join(":").trim()}`;
+      },
+    ],
+    [
+      /^(attente mat[eé]riel|en attente mat[eé]riel)\s*:\s*(.+)/gi,
+      (m: string) => {
+        const parts = m.split(":");
+        return `Mise en pause — Raison : ${parts.slice(1).join(":").trim()}`;
+      },
     ],
     [
       /statut\s*[:\-→]+\s*en attente mat[eé]riel/gi,
@@ -650,6 +697,14 @@ function humanizeMessage(msg: string, type: string): string {
       /en attente mat[eé]riel\s*(attente de\s*)?/gi,
       "Mise en pause — Attente matériel",
     ],
+    [
+      /^Motif\s*:\s*(.+)/gi,
+      (m: string) => {
+        const match = m.match(/^Motif\s*:\s*(.+)/i);
+        return match ? `Mise en pause — Raison : ${match[1].trim()}` : m;
+      },
+    ],
+    [/^\s*en attente client\s*$/gi, "Mise en pause — Attente client"],
   ];
   for (const [re, rep] of MAP) {
     if (re.test(t)) {
@@ -690,13 +745,18 @@ function mergeByMinute(events: TimelineEvent[]): TimelineEvent[] {
     const diff = Math.abs(
       new Date(evt.date).getTime() - new Date(last.date).getTime(),
     );
+    const msg1 = last.message.toLowerCase().trim();
+    const msg2 = evt.message.toLowerCase().trim();
+
     // Fusionner assignation + changement de statut "Assigné" dans la même minute
+    // Mais NE PAS fusionner si c'est une transition vers "En cours" (reprise)
     if (
       diff < 60000 &&
       ((last.type === "assignment" && evt.type === "status_change") ||
-        (last.type === "status_change" && evt.type === "assignment"))
+        (last.type === "status_change" && evt.type === "assignment")) &&
+      !msg1.includes("reprise") &&
+      !msg2.includes("reprise")
     ) {
-      // Garder l'événement d'assignation comme référence, enrichir le message
       const assign = last.type === "assignment" ? last : evt;
       out[out.length - 1] = {
         ...assign,
@@ -704,9 +764,17 @@ function mergeByMinute(events: TimelineEvent[]): TimelineEvent[] {
       };
       continue;
     }
-    // Dédupliquer les événements identiques dans la même minute
-    if (diff < 60000 && last.type === evt.type && last.message === evt.message)
+
+    // Dédupliquer agressivement les "Reprise de l'intervention" (fenêtre de 2 minutes)
+    if (diff < 120000 && msg1.includes("reprise") && msg2.includes("reprise")) {
       continue;
+    }
+
+    // Dédupliquer les événements ayant le même message dans la même minute
+    if (diff < 60000 && msg1 === msg2) {
+      continue;
+    }
+
     out.push(evt);
   }
   return out;
@@ -725,6 +793,7 @@ function VerticalTimeline({
     date_resolved?: string | null;
     assigned_to?: string | null;
     resolution?: string | null;
+    x_accepted?: boolean;
   };
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -734,11 +803,39 @@ function VerticalTimeline({
   const processedEvents = useMemo(() => {
     if (!events || events.length === 0) return [];
 
-    // 1. Clean + humanize messages
-    let filtered: TimelineEvent[] = events.map((e) => ({
-      ...e,
-      message: humanizeMessage(e.message, e.type),
-    }));
+    // 1. Clean + humanize messages, filter out redundant status changes and system noise
+    let filtered: TimelineEvent[] = events
+      .filter((e) => {
+        const mL = e.message.toLowerCase();
+        if (mL.includes("pause sla terminée")) return false;
+        if (
+          mL.includes("a passé le statut à assigné") ||
+          mL === "statut : assigné"
+        )
+          return false;
+        if (
+          mL.includes("a passé le statut à nouveau") ||
+          mL === "statut : nouveau"
+        )
+          return false;
+
+        // Exclure les changements de statut fantômes
+        if (e.type === "status_change" && mL.includes("a passé le statut à")) {
+          if (mL.trim().endsWith("à")) return false;
+        }
+
+        return true;
+      })
+      .map((e) => ({
+        ...e,
+        message: humanizeMessage(e.message, e.type),
+      }))
+      .filter((e) => {
+        // Exclure les messages qui sont devenus vides ou inutiles (ex: juste "Raison : ")
+        const cleanL = e.message.toLowerCase().trim();
+        if (!cleanL || cleanL.length < 2 || cleanL === "raison :") return false;
+        return true;
+      });
 
     // 2. Remove noise: comments that duplicate a milestone in the same minute
     filtered = filtered.filter((e, _i, arr) => {
@@ -757,8 +854,8 @@ function VerticalTimeline({
       }
 
       // Supprime les status_change (tracking auto Odoo = auteur admin)
-      // quand un événement humain existe dans la même fenêtre de 5s.
-      // L'événement humain (waiting/escalation/acceptance) a l'auteur réel.
+      // quand un événement humain existe dans la même fenêtre.
+      // Fenêtre élargie à 60s pour l'acceptation (deux champs écrits dans le même write()).
       if (e.type === "status_change") {
         const humanShadow = arr.find(
           (a) =>
@@ -767,18 +864,201 @@ function VerticalTimeline({
               a.type,
             ) &&
             Math.abs(new Date(a.date).getTime() - new Date(e.date).getTime()) <
-              5000,
+              (a.type === "acceptance" ? 60000 : 5000),
         );
         if (humanShadow) return false;
+
+        // Filtre aussi les "Reprise de l'intervention" qui tombent juste après
+        // une acceptation (même fenêtre 60s) — doublon du status in_progress
+        const msgL = e.message.toLowerCase();
+        if (msgL.includes("reprise") || msgL.includes("en cours")) {
+          const nearAcceptance = arr.find(
+            (a) =>
+              a.id !== e.id &&
+              a.type === "acceptance" &&
+              Math.abs(
+                new Date(a.date).getTime() - new Date(e.date).getTime(),
+              ) < 60000,
+          );
+          if (nearAcceptance) return false;
+        }
       }
 
       return true;
     });
 
+    // 2b. Override authors for escalations and operational actions (since backend gives admin)
+    let currentTechTracker: string | null = null;
+    filtered = filtered.map((e, _, arr) => {
+      // 1. Mettre à jour le technicien en charge si c'est une assignation
+      if (e.type === "assignment" && e.detail && e.detail.vers) {
+        currentTechTracker = e.detail.vers;
+      }
+
+      let realAuthor = e.author;
+
+      // 2. Extraire l'auteur depuis le message d'escalade
+      const match = e.message.match(
+        /ESCALADE par\s+([A-Za-z\u00C0-\u00FF\s\-']+?)(?:\s+(?:Motif|Raison)\b|$)/i,
+      );
+      if (match && match[1]) {
+        realAuthor = match[1].trim();
+      } else if (
+        e.type === "escalation" ||
+        e.message.toLowerCase().includes("escalade")
+      ) {
+        const related = arr.find(
+          (a) =>
+            a.id !== e.id &&
+            Math.abs(new Date(a.date).getTime() - new Date(e.date).getTime()) <
+              60000 &&
+            a.message.match(
+              /ESCALADE par\s+([A-Za-z\u00C0-\u00FF\s\-']+?)(?:\s+(?:Motif|Raison)\b|$)/i,
+            ),
+        );
+        if (related) {
+          const rMatch = related.message.match(
+            /ESCALADE par\s+([A-Za-z\u00C0-\u00FF\s\-']+?)(?:\s+(?:Motif|Raison)\b|$)/i,
+          );
+          if (rMatch) realAuthor = rMatch[1].trim();
+        } else if (currentTechTracker) {
+          realAuthor = currentTechTracker;
+        }
+      } else if (
+        ["waiting", "status_change", "acceptance", "resolved"].includes(
+          e.type,
+        ) ||
+        e.message.toLowerCase().includes("reprise") ||
+        e.message.toLowerCase().includes("pause") ||
+        e.message.toLowerCase().includes("résolu")
+      ) {
+        // Pour les actions opérationnelles, forcer l'auteur au technicien en charge,
+        // à moins que l'auteur actuel ne soit explicitement un client/système,
+        // mais souvent c'est l'admin qui fait l'action pour le compte du tech.
+        if (currentTechTracker) {
+          realAuthor = currentTechTracker;
+        }
+      }
+
+      return { ...e, author: realAuthor };
+    });
+
+    // 2c. Injection automatique de la "Prise en charge" si manquante après une assignation
+    const injected: TimelineEvent[] = [];
+    for (let i = 0; i < filtered.length; i++) {
+      const e = filtered[i];
+      injected.push(e);
+      if (e.type === "assignment") {
+        if (!ticketProp?.x_accepted) continue;
+
+        const next = filtered[i + 1];
+        const newTech = e.detail?.vers || e.author;
+        // Si le prochain événement n'est pas une reprise/acceptation, on l'injecte
+        if (
+          !next ||
+          (next.type !== "acceptance" &&
+            !next.message.toLowerCase().includes("reprise"))
+        ) {
+          injected.push({
+            id: `synth_accept_${e.id}`,
+            type: "acceptance",
+            date: new Date(new Date(e.date).getTime() + 1000).toISOString(), // +1 sec
+            author: newTech,
+            author_role: "technician",
+            message: "Prise en charge du ticket", // Directement le bon label
+            detail: { par: newTech },
+          });
+        }
+      }
+    }
+    filtered = injected;
+
     // 3. Semantic grouping: merge events in the same minute
     filtered = mergeByMinute(filtered);
 
-    // 4. Compute durations (only show if > 59s)
+    // 4. Distinction "Prise en charge" (1ère fois par technicien) vs "Reprise" (fois suivantes)
+    // hasStarted se réinitialise après chaque escalade ou nouvelle assignation,
+    // pour que chaque nouveau technicien ait sa propre "Prise en charge du ticket".
+    let hasStarted = false;
+    let lastAssignedTech: string | null = null;
+    filtered = filtered.map((e, index, arr) => {
+      // Réinitialiser si c'est une nouvelle assignation à un technicien différent
+      if (e.type === "assignment") {
+        const newTech = e.detail?.vers || null;
+        if (newTech && newTech !== lastAssignedTech) {
+          lastAssignedTech = newTech;
+          hasStarted = false; // Nouveau technicien → attendre sa prise en charge
+        }
+        return e;
+      }
+
+      // Réinitialiser aussi sur une escalade (un nouveau tech va prendre en charge)
+      if (e.type === "escalation") {
+        hasStarted = false;
+        return e;
+      }
+
+      const msgL = e.message.toLowerCase();
+      const isStartAction =
+        e.type === "acceptance" ||
+        msgL.includes("accepté la mission") ||
+        msgL === "reprise de l'intervention" ||
+        msgL === "prise en charge du ticket";
+
+      if (isStartAction) {
+        if (!hasStarted) {
+          hasStarted = true;
+
+          // L'auteur de la "Prise en charge" doit toujours être le technicien assigné.
+          // On cherche la dernière assignation qui a eu lieu avant cet événement.
+          let realTech = e.author;
+          for (let j = index - 1; j >= 0; j--) {
+            if (arr[j].type === "assignment") {
+              const asgn = arr[j];
+              if (asgn.detail && asgn.detail.vers) {
+                realTech = asgn.detail.vers;
+              }
+              break;
+            }
+          }
+
+          return {
+            ...e,
+            message: "Prise en charge du ticket",
+            author: realTech,
+          };
+        }
+      }
+      return e;
+    });
+
+    // 4.5. Logical reordering: "Prise en charge" must precede "En attente" or "Pause"
+    for (let i = 1; i < filtered.length; i++) {
+      if (filtered[i].message === "Prise en charge du ticket") {
+        let j = i - 1;
+        while (
+          j >= 0 &&
+          (filtered[j].message.toUpperCase().includes("ATTENTE") ||
+            filtered[j].message.includes("Mise en pause") ||
+            filtered[j].type === "waiting")
+        ) {
+          // Swap elements
+          const temp = filtered[i];
+          filtered[i] = filtered[j];
+          filtered[j] = temp;
+
+          // Swap dates so the timeline remains chronologically correct visually
+          const tempDate = filtered[i].date;
+          filtered[i].date = filtered[j].date;
+          filtered[j].date = tempDate;
+
+          i = j;
+          j--;
+        }
+      }
+    }
+
+    // 5. Compute durations (only show if > 59s)
     return filtered.map((e, i) => {
       if (i === 0) return { ...e, duration_label: null as string | null };
       const diffSec = Math.max(
@@ -821,33 +1101,45 @@ function VerticalTimeline({
       return h > 0 ? `${d} j ${h} h` : `${d} j`;
     };
 
-    // ── Group events within 10s for Report View ──
+    // ── Group events for Report View ──
     const groupedForReport: TimelineEvent[] = [];
     for (const evt of processedEvents) {
       const last = groupedForReport[groupedForReport.length - 1];
-      if (last) {
-        const diff = Math.abs(
-          new Date(evt.date).getTime() - new Date(last.date).getTime(),
-        );
-        if (diff <= 10000) {
-          // Priority to human actions (like waiting/comment/acceptance) over automated status_change
-          const isLastTech = last.type === "status_change";
-          const isEvtHuman =
+      if (!last) {
+        groupedForReport.push(evt);
+        continue;
+      }
+      const diff = Math.abs(
+        new Date(evt.date).getTime() - new Date(last.date).getTime(),
+      );
+      if (diff <= 10000) {
+        // Priority to human actions over automated status_change
+        if (last.type === "status_change") {
+          const isHuman =
             evt.type === "waiting" ||
             evt.type === "comment" ||
             evt.type === "acceptance" ||
+            evt.type === "escalation" ||
+            evt.type === "resolved" ||
             evt.message.toLowerCase().includes("pause") ||
             evt.message.toLowerCase().includes("attente");
-          if (isLastTech && isEvtHuman) {
+          if (isHuman) {
             groupedForReport[groupedForReport.length - 1] = {
               ...evt,
               date: last.date,
             };
+          } else {
+            groupedForReport.push(evt);
           }
-          continue; // skip duplicate/secondary event
+        } else if (last.type === evt.type) {
+          // skip true duplicate
+        } else {
+          // Keep different types happening at the same time
+          groupedForReport.push(evt);
         }
+      } else {
+        groupedForReport.push(evt);
       }
-      groupedForReport.push(evt);
     }
 
     const evtCreation = groupedForReport.find((e) => e.type === "creation");
@@ -928,8 +1220,8 @@ function VerticalTimeline({
       // Pause sans reprise formelle (ex: résolu directement)
       const endToUse = resolvedDate
         ? new Date(resolvedDate).getTime()
-        // eslint-disable-next-line
-        : Date.now();
+        : // eslint-disable-next-line
+          Date.now();
       const durationSec = Math.max(
         0,
         Math.floor(
@@ -1069,57 +1361,80 @@ function VerticalTimeline({
       rawIntermediates.push({ id, date, node });
     };
 
-    // 1. Assignation
-    const evtAssign = groupedForReport.find((e) => e.type === "assignment");
-    if (evtAssign) {
+    const evtAssignments = groupedForReport.filter(
+      (e) => e.type === "assignment",
+    );
+
+    evtAssignments.forEach((evtAssign, idx) => {
+      // Le technicien cible est dans detail.vers. S'il n'y est pas, on fallback
+      const targetTech = evtAssign.detail?.vers || "Technicien inconnu";
+      // L'auteur réel de l'action d'assignation (l'admin)
+      const adminAuthor = evtAssign.author;
+
       addIntermediate(
-        "assign",
+        `assign_${idx}`,
         evtAssign.id,
         evtAssign.date,
         <MRow
           bgClass="bg-indigo-500/15"
           icon={<UserPlus size={14} className="text-indigo-500" />}
-          label="Assignation"
-          author={evtAssign.author}
+          label={`Attribution du ticket à ${targetTech}`}
+          author={adminAuthor}
           date={evtAssign.date}
           durationFromPrev={null}
         />,
       );
-    }
+    });
 
-    // 2. Début des travaux (Prise en charge / Acceptance)
-    const evtStart = groupedForReport.find(
-      (e) =>
-        e.type === "acceptance" ||
-        (e.type === "status_change" &&
-          (e.message.toLowerCase().includes("prise en charge") ||
-            e.message.toLowerCase().includes("cours"))),
-    );
-    if (evtStart) {
+    // Commentaires
+    const evtComments = groupedForReport.filter((e) => e.type === "comment");
+    evtComments.forEach((evtComment, idx) => {
       addIntermediate(
-        "start",
-        evtStart.id,
-        evtStart.date,
+        `comment_${idx}`,
+        evtComment.id,
+        evtComment.date,
         <MRow
-          bgClass="bg-sky-500/15"
-          icon={<PlayCircle size={14} className="text-sky-500" />}
-          label={
-            evtStart.type === "acceptance"
-              ? "Mission acceptée"
-              : "Prise en charge"
-          }
-          author={evtStart.author}
-          date={evtStart.date}
+          bgClass="bg-zinc-500/15"
+          icon={<MessageSquare size={14} className="text-zinc-400" />}
+          label={`Commentaire / Réponse`}
+          author={evtComment.author}
+          date={evtComment.date}
+          note={evtComment.message}
           durationFromPrev={null}
         />,
       );
-    }
+    });
 
     // 3. Pauses logistiques (toutes variantes)
     pauseIntervals.forEach((interval, i) => {
-      const note = interval.resume
-        ? `Durée : ${fmtSec(interval.durationSec)}`
-        : "Pause toujours en cours";
+      // Nettoyage radical du message de pause
+      const cleanMsg = interval.pause.message
+        .replace(/<[^>]*>?/gm, "") // Retire HTML (<b>, <br>, etc.)
+        .replace(/&nbsp;/g, " ")
+        .replace(/[\u25C6\u2665\u2666\u2663\u2660\u2022\u25CF\u26A0]/g, "") // Retire symboles comme ♦
+        .replace(/\*+/g, "") // Retire astérisques markdown
+        .replace(/SLA R[eé]solution mis en pause\.?/gi, "")
+        .replace(/Dur[eé]e\s*:\s*\d+[smh]?\d*[smh]?\.?/gi, "")
+        .replace(/Pause SLA termin[eé]e[^.]*\.?/gi, "")
+        .trim();
+
+      // Extraction du motif exact
+      let motif = cleanMsg;
+      const motifMatch = cleanMsg.match(/Motif\s*:?\s*(.+)/i);
+      if (motifMatch && motifMatch[1]) {
+        motif = motifMatch[1].trim();
+      } else {
+        // Fallback si pas de mot "Motif" mais un tiret
+        const dashParts = cleanMsg.split("—");
+        if (dashParts.length > 1) {
+          motif = dashParts[dashParts.length - 1].trim();
+        }
+      }
+
+      // Si le motif est vide après nettoyage
+      if (!motif) {
+        motif = "Raison non spécifiée";
+      }
 
       addIntermediate(
         `pause_${i}`,
@@ -1128,37 +1443,23 @@ function VerticalTimeline({
         <MRow
           bgClass="bg-amber-500/15"
           icon={<PauseCircle size={14} className="text-amber-500" />}
-          label={`Mise en pause \u2014 ${interval.pauseKind}`}
+          label={`Mise en pause — Raison : ${motif}`}
           author={interval.pause.author}
           date={interval.pause.date}
-          note={note}
+          note={null} // Pas de note technique en dessous, tout est dans le label
           durationFromPrev={null}
         />,
       );
-
-      if (interval.resume) {
-        addIntermediate(
-          `resume_${i}`,
-          interval.resume.id,
-          interval.resume.date,
-          <MRow
-            bgClass="bg-sky-500/15"
-            icon={<PlayCircle size={14} className="text-sky-500" />}
-            label="Reprise de l'intervention"
-            author={interval.resume.author}
-            date={interval.resume.date}
-            durationFromPrev={null}
-          />,
-        );
-      }
     });
 
     // 4. Escalade comme milestone
-    const evtEscalation = groupedForReport.find((e) => e.type === "escalation");
-    if (evtEscalation) {
+    const evtEscalations = groupedForReport.filter(
+      (e) => e.type === "escalation",
+    );
+    evtEscalations.forEach((evtEscalation, idx) => {
       const newTech = evtEscalation.detail?.nouveau_technicien;
       addIntermediate(
-        "escalation",
+        `escalation_${idx}`,
         evtEscalation.id,
         evtEscalation.date,
         <MRow
@@ -1170,7 +1471,7 @@ function VerticalTimeline({
           durationFromPrev={null}
         />,
       );
-    }
+    });
 
     // Sort chronologically
     rawIntermediates.sort(
@@ -1210,7 +1511,7 @@ function VerticalTimeline({
       <div className="space-y-0">
         <div className="relative pl-3">
           <div className="absolute left-[11px] top-3 bottom-3 w-[1px] bg-[hsl(var(--border)/0.4)]" />
-          <div className="space-y-1">
+          <div className="space-y-4">
             {/* ── Always visible: Ouverture ── */}
             <MRow
               bgClass="bg-blue-500/15"
@@ -1220,45 +1521,33 @@ function VerticalTimeline({
               date={evtCreation?.date ?? null}
             />
 
-            {/* ── Toggle button ── */}
-            {intermediates.length > 0 && (
-              <div className="pl-7 py-1">
+            {/* ── Toggle button for intermediates ── */}
+            {intermediates.length > 0 && !showDetail && (
+              <div className="mb-3 flex justify-start pl-7">
                 <button
-                  onClick={() => setShowDetail((v) => !v)}
-                  className="flex items-center gap-2 text-xs font-semibold text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] border border-[hsl(var(--border)/0.5)] hover:border-[hsl(var(--border))] rounded-lg px-3 py-1.5 transition-all duration-200"
+                  onClick={() => setShowDetail(true)}
+                  className="flex items-center gap-2 text-xs font-semibold text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] border border-[hsl(var(--border)/0.5)] hover:border-[hsl(var(--border))] rounded-lg px-4 py-2 transition-all duration-200"
                 >
-                  <History size={13} />
-                  {showDetail
-                    ? "Masquer le parcours"
-                    : "Afficher le parcours détaillé"}
-                  <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-[hsl(var(--muted)/0.4)] text-[10px] font-bold">
+                  <History size={14} className="mr-1" />
+                  Afficher l&apos;historique
+                  <span className="ml-1 inline-flex items-center justify-center h-4 w-4 rounded-full bg-[hsl(var(--muted)/0.4)] text-[10px] font-bold">
                     {intermediates.length}
                   </span>
-                  {showDetail ? (
-                    <ChevronUp size={11} />
-                  ) : (
-                    <ChevronDown size={11} />
-                  )}
+                  <ChevronDown size={13} className="ml-1" />
                 </button>
               </div>
             )}
 
-            {/* ── Intermediate milestones (animated) ── */}
-            <AnimatePresence initial={false}>
-              {showDetail &&
-                intermediates.map((m) => (
-                  <motion.div
-                    key={m.id}
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.22 }}
-                    className="overflow-hidden"
-                  >
-                    {m.node}
-                  </motion.div>
-                ))}
-            </AnimatePresence>
+            {/* ── All milestones (collapsible) ── */}
+            {showDetail &&
+              intermediates.map((m) => (
+                <div
+                  key={m.id}
+                  className="animate-in fade-in zoom-in-95 duration-300"
+                >
+                  {m.node}
+                </div>
+              ))}
 
             {/* ── Always visible: Résolution ── */}
             <MRow
@@ -1277,6 +1566,20 @@ function VerticalTimeline({
             />
           </div>
         </div>
+
+        {/* ── Hide button — below the list when expanded ── */}
+        {showDetail && intermediates.length > 0 && (
+          <div className="mt-3 flex justify-start pl-7">
+            <button
+              onClick={() => setShowDetail(false)}
+              className="flex items-center gap-2 text-xs font-semibold text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] border border-[hsl(var(--border)/0.5)] hover:border-[hsl(var(--border))] rounded-lg px-4 py-2 transition-all duration-200"
+            >
+              <History size={14} className="mr-1" />
+              Masquer l&apos;historique
+              <ChevronUp size={13} className="ml-1" />
+            </button>
+          </div>
+        )}
 
         {/* ── Total processing time footer ── */}
         {totalActiveSec !== null && (
@@ -2171,6 +2474,248 @@ export default function TicketDetailsModal({
     ticket.date_resolved,
   );
 
+  // ── Extraction des données pour la Chaîne de Commandement ──
+  const rawEvents = timelineData?.events || [];
+  const assignments = rawEvents.filter((e) => e.type === "assignment");
+
+  const chainNodes: {
+    action: string;
+    name: string;
+    badge: string;
+    colorType: "slate" | "indigo" | "purple" | "emerald" | "amber" | "sky";
+    isIcon?: boolean;
+  }[] = [];
+
+  // Node 1: Creator
+  chainNodes.push({
+    action: "A CRÉÉ",
+    name: (ticket as any).user_name || "Utilisateur",
+    badge: "UTILISATEUR",
+    colorType: "slate",
+  });
+
+  if (assignments.length > 0) {
+    assignments.forEach((asgn, index) => {
+      const isEscalation =
+        asgn.message && asgn.message.toLowerCase().includes("escalade");
+      const isReassignment = index > 0;
+
+      let adminAction = "A ASSIGNÉ";
+      let adminColorType: "slate" | "indigo" | "purple" | "emerald" | "amber" =
+        "indigo";
+
+      if (isEscalation) {
+        adminAction = "A ESCALADÉ";
+        adminColorType = "purple";
+      } else if (isReassignment) {
+        adminAction = "A RÉ-ASSIGNÉ";
+      }
+
+      // Node Admin
+      chainNodes.push({
+        action: adminAction,
+        name: asgn.author,
+        badge: "ADMIN",
+        colorType: adminColorType,
+      });
+      // Node Tech
+      const techName = asgn.detail?.vers || "Technicien inconnu";
+      const isLast = index === assignments.length - 1;
+
+      let action = "ASSIGNÉ";
+      let techColor:
+        | "slate"
+        | "indigo"
+        | "purple"
+        | "emerald"
+        | "amber"
+        | "sky" = "sky";
+      const techBadge = "TECHNICIEN";
+
+      if (!isLast) {
+        // Technicien précédent qui a escaladé
+        action = "ESCALADÉ";
+        techColor = "purple";
+      } else {
+        action =
+          ticket.state === "resolved" || ticket.state === "closed"
+            ? "A RÉSOLU"
+            : ticket.state === "escalated" && !isReassignment
+              ? "A ESCALADÉ" // Seul tech, c'est lui qui a escaladé
+              : !ticket.x_accepted
+                ? "EN ATTENTE"
+                : ticket.state === "escalated"
+                  ? "A ESCALADÉ" // Nouveau tech qui a accepté et a escaladé ensuite
+                  : "EN CHARGE";
+
+        techColor =
+          ticket.state === "resolved" || ticket.state === "closed"
+            ? "emerald"
+            : ticket.state === "escalated" && !isReassignment
+              ? "purple" // Seul tech escaladé → toujours purple
+              : !ticket.x_accepted
+                ? "amber"
+                : ticket.state === "escalated"
+                  ? "purple"
+                  : "sky";
+
+      }
+
+      chainNodes.push({
+        action: action,
+        name: techName,
+        badge: techBadge,
+        colorType: techColor,
+      });
+    });
+  } else {
+    // Not assigned yet
+    if (ticket.assigned_to) {
+      chainNodes.push({
+        action:
+          ticket.state === "resolved" || ticket.state === "closed"
+            ? "A RÉSOLU"
+            : !ticket.x_accepted
+              ? "EN ATTENTE"
+              : ticket.state === "escalated"
+                ? "A ESCALADÉ"
+                : "EN CHARGE",
+        name: ticket.assigned_to,
+        badge: "TECHNICIEN",
+        colorType:
+          ticket.state === "resolved" || ticket.state === "closed"
+            ? "emerald"
+            : ticket.x_accepted
+              ? "sky"
+              : ticket.state === "escalated"
+                ? "purple"
+                : "amber",
+      });
+    } else {
+      if (ticket.state === "escalated" && (ticket as any).escalated_by_name) {
+        chainNodes.push({
+          action: "A ESCALADÉ",
+          name: (ticket as any).escalated_by_name,
+          badge: "TECHNICIEN",
+          colorType: "purple",
+        });
+      } else {
+        chainNodes.push({
+          action: "EN ATTENTE",
+          name: "En attente d'agent",
+          badge: "NON ASSIGNÉ",
+          colorType: "amber",
+          isIcon: true,
+        });
+      }
+    }
+  }
+
+  const getColorStyles = (type: string) => {
+    switch (type) {
+      case "indigo":
+        return {
+          text: "text-indigo-400",
+          bg: "bg-indigo-400/5",
+          border: "border-indigo-400/20",
+        };
+      case "purple":
+        return {
+          text: "text-purple-400",
+          bg: "bg-purple-400/5",
+          border: "border-purple-400/20",
+        };
+      case "emerald":
+        return {
+          text: "text-emerald-400",
+          bg: "bg-emerald-400/5",
+          border: "border-emerald-400/20",
+        };
+      case "amber":
+        return {
+          text: "text-amber-400",
+          bg: "bg-amber-400/5",
+          border: "border-amber-400/20",
+        };
+      case "sky":
+        return {
+          text: "text-sky-400",
+          bg: "bg-sky-500/10",
+          border: "border-sky-500/20",
+        };
+      case "slate":
+      default:
+        return {
+          text: "text-[hsl(var(--muted-foreground))] opacity-80",
+          bg: "bg-[hsl(var(--muted)/0.1)]",
+          border: "border-[hsl(var(--border)/0.5)]",
+        };
+    }
+  };
+
+  const renderChainOfCommand = () => {
+    return (
+      <div className="p-4 bg-[hsl(var(--secondary)/0.03)] border border-[hsl(var(--border)/0.5)] rounded-xl mb-6">
+        <h4 className="text-[10px] font-black uppercase tracking-widest text-[hsl(var(--muted-foreground))] flex items-center gap-1.5 mb-4">
+          <Users size={12} /> Chaîne de commandement
+        </h4>
+
+        <div className="flex items-start justify-center flex-wrap gap-y-4 gap-x-0 w-full overflow-hidden">
+          {chainNodes.map((node, i) => {
+            const isLast = i === chainNodes.length - 1;
+            const colors = getColorStyles(node.colorType);
+            return [
+              <div
+                key={`node-${i}`}
+                className="flex flex-col items-center w-[85px] flex-shrink-0"
+              >
+                <span
+                  className={`text-[8.5px] font-black tracking-[0.1em] ${colors.text} mb-1.5 uppercase text-center w-full`}
+                >
+                  {node.action}
+                </span>
+
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs uppercase shadow-sm ${colors.bg} ${colors.text} border ${colors.border} mb-1.5`}
+                >
+                  {node.isIcon ? (
+                    <UserPlus size={14} />
+                  ) : (
+                    node.name.substring(0, 2)
+                  )}
+                </div>
+
+                <span
+                  className="text-[10px] font-bold text-[hsl(var(--foreground))] text-center truncate w-[85px] px-0.5 mb-1"
+                  title={node.name}
+                >
+                  {node.name}
+                </span>
+
+                <span
+                  className={`text-[8px] font-black tracking-widest uppercase px-1.5 py-0.5 rounded-md border ${colors.bg} ${colors.text} ${colors.border}`}
+                >
+                  {node.badge}
+                </span>
+              </div>,
+              !isLast && (
+                <div
+                  key={`arrow-${i}`}
+                  className="flex items-center justify-center flex-shrink-0 mt-[23px] px-0.5"
+                >
+                  <ChevronRight
+                    size={14}
+                    className="text-[hsl(var(--muted-foreground)/0.3)]"
+                  />
+                </div>
+              ),
+            ];
+          })}
+        </div>
+      </div>
+    );
+  };
+
   // ─── Render ───
   return (
     <div className="modal-overlay" onClick={handleClose}>
@@ -2970,6 +3515,8 @@ export default function TicketDetailsModal({
                 </div>
               </div>
 
+              {renderChainOfCommand()}
+
               <div className="p-4 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))]">
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="text-xs font-black uppercase tracking-widest text-[hsl(var(--muted-foreground))] flex items-center gap-2">
@@ -3136,23 +3683,273 @@ export default function TicketDetailsModal({
                 </div>
                 <button
                   onClick={() => {
-                    const w = window.open("", "_blank", "width=800,height=900");
-                    if (!w) return;
-                    const mats =
-                      (ticket.materials || [])
-                        .map(
-                          (m) =>
-                            `<tr><td>${m.name}</td><td style="text-align:center">${m.status}</td><td style="text-align:right;font-family:monospace">${(m.unit_cost || 0).toFixed(2)}</td></tr>`,
-                        )
-                        .join("") ||
-                      `<tr><td colspan="3" style="text-align:center;color:#888">Aucun matériel</td></tr>`;
-                    const slaAdj =
-                      (ticket.x_total_paused_duration || 0) > 0
-                        ? `<p>Deadline ajustée : <strong>${ticket.sla_deadline ? new Date(ticket.sla_deadline + "Z").toLocaleString("fr-FR") : "—"}</strong> <em>(+${((ticket.x_total_paused_duration ?? 0) * 60).toFixed(0)} min de pause)</em></p>`
-                        : "";
-                    w.document.write(
-                      `<!DOCTYPE html><html><head><title>Rapport ${formatTicketRef(ticket.id)}</title><style>body{font-family:system-ui,sans-serif;padding:40px;color:#111;background:#fff}h1{font-size:22px;font-weight:900;margin:0 0 4px}.ref{font-size:13px;color:#555;margin-bottom:24px}.section{margin-bottom:20px;border:1px solid #e5e7eb;border-radius:8px;padding:16px}.section h2{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:#888;margin:0 0 12px;font-weight:700}table{width:100%;border-collapse:collapse}th{text-align:left;font-size:10px;text-transform:uppercase;color:#888;padding:6px 8px;border-bottom:1px solid #e5e7eb}td{padding:8px;font-size:12px;border-bottom:1px solid #f3f4f6}.total{font-weight:900;font-size:15px;color:#059669}.badge-ok{background:#d1fae5;color:#065f46;padding:3px 10px;border-radius:20px;font-weight:700;font-size:11px}.badge-bad{background:#fee2e2;color:#991b1b;padding:3px 10px;border-radius:20px;font-weight:700;font-size:11px}</style></head><body><h1>Fiche de Clôture — PFE IT Support</h1><div class="ref">Réf. ${formatTicketRef(ticket.id)} · ${ticket.category || "—"} · Priorité ${ticket.priority}</div><div class="section"><h2>Aperçu de la Demande</h2><table style="margin-bottom:0"><tr><td style="border:none;padding:0 0 8px 0;width:33%"><strong>Sujet :</strong><br/>${ticket.name}</td><td style="border:none;padding:0 0 8px 0;width:33%"><strong>Date de création :</strong><br/>${ticket.create_date ? new Date(ticket.create_date + "Z").toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</td><td style="border:none;padding:0 0 8px 0;width:33%"><strong>Auteur :</strong><br/>${(ticket as any).user_name || "Utilisateur"}</td></tr></table></div><div class="section"><h2>Note de Résolution</h2><p style="font-style:italic">${ticket.resolution || "Aucune note."}</p></div><div class="section"><h2>Ressources Utilisées</h2><table><thead><tr><th>Matériel</th><th style="text-align:center">Statut</th><th style="text-align:right">Coût (MAD)</th></tr></thead><tbody>${mats}</tbody></table><div style="text-align:right;margin-top:12px">Total : <span class="total">${(ticket.total_material_cost || 0).toFixed(2)} MAD</span></div></div><div class="section"><h2>Conformité SLA</h2><p>Deadline initiale : <strong>${ticket.sla_deadline_initial ? new Date(ticket.sla_deadline_initial + "Z").toLocaleString("fr-FR") : "—"}</strong></p>${slaAdj}<p>Statut : <span class="${ticket.sla_status === "on_track" ? "badge-ok" : "badge-bad"}">${ticket.sla_status === "on_track" ? "SLA Respecté" : "SLA Dépassé"}</span></p></div><div class="section"><h2>Dates Clés</h2><p>Créé : ${ticket.create_date ? new Date(ticket.create_date + "Z").toLocaleString("fr-FR") : "—"}</p><p>Résolu : ${ticket.date_resolved ? new Date(ticket.date_resolved + "Z").toLocaleString("fr-FR") : "—"}</p><p>Technicien : ${ticket.assigned_to || "—"}</p></div><script>window.onload=()=>window.print()</script></body></html>`,
+                    const fmtDate = (d: string | null | undefined) => {
+                      if (!d) return "—";
+                      return new Date(
+                        d.endsWith("Z") ? d : d + "Z",
+                      ).toLocaleString("fr-FR", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      });
+                    };
+
+                    // Compute SLA metrics
+                    const parseDateSafe = (s: string | null | undefined) =>
+                      s ? new Date(s.endsWith("Z") ? s : s + "Z").getTime() : 0;
+                    const createdTs = parseDateSafe(ticket.create_date);
+                    const resolvedTs = parseDateSafe(ticket.date_resolved);
+                    const adjustedSlaTs = parseDateSafe(ticket.sla_deadline);
+                    const pausedMin =
+                      (ticket.x_total_paused_duration || 0) * 60;
+                    const totalElapsedMin =
+                      createdTs && resolvedTs
+                        ? (resolvedTs - createdTs) / 60000
+                        : 0;
+                    const netMin = Math.max(0, totalElapsedMin - pausedMin);
+                    const totalAllowedMin =
+                      createdTs && adjustedSlaTs
+                        ? (adjustedSlaTs - createdTs) / 60000
+                        : 0;
+                    const remainingMin =
+                      adjustedSlaTs && resolvedTs
+                        ? (adjustedSlaTs - resolvedTs) / 60000
+                        : 0;
+                    const perfPct =
+                      totalAllowedMin > 0
+                        ? Math.round((remainingMin / totalAllowedMin) * 100)
+                        : null;
+                    const isSlaOk = remainingMin >= 0;
+                    const isActive =
+                      ticket.state !== "resolved" && ticket.state !== "closed";
+                    const formatDurMin = (mins: number, isNet = false) => {
+                      if (isNet && isActive && mins <= 0) return "< 1 min";
+                      if (mins > 0 && mins < 1) return "< 1 min";
+                      if (mins <= 0) return "0 min";
+                      const d = Math.floor(mins / 1440);
+                      const h = Math.floor((mins % 1440) / 60);
+                      const m = Math.floor(mins % 60);
+                      return [
+                        d > 0 ? `${d}j` : "",
+                        h > 0 ? `${h}h` : "",
+                        m > 0 ? `${m}min` : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ");
+                    };
+
+                    const prioMap: Record<string, string> = {
+                      "0": "Basse",
+                      "1": "Moyenne",
+                      "2": "Haute",
+                      "3": "Critique",
+                    };
+                    const prioLabel = ticket.priority
+                      ? prioMap[ticket.priority] || ticket.priority
+                      : "—";
+
+                    const mats = ticket.materials || [];
+                    const matsRows =
+                      mats.length > 0
+                        ? mats
+                            .map(
+                              (m) =>
+                                `<tr><td>${m.name}</td><td class="center">${m.status === "ready" ? "Disponible" : m.status || "—"}</td><td class="right mono">${(m.unit_cost || 0).toFixed(2)} MAD</td></tr>`,
+                            )
+                            .join("")
+                        : `<tr><td colspan="3" class="center muted">Aucun matériel utilisé</td></tr>`;
+                    const totalCost = (ticket.total_material_cost || 0).toFixed(
+                      2,
                     );
+
+                    const ref = formatTicketRef(ticket.id);
+                    const now = new Date().toLocaleString("fr-FR", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    });
+
+                    const resText =
+                      ticket.resolution || "Aucune note de résolution fournie.";
+                    const formattedRes =
+                      resText.charAt(0).toUpperCase() + resText.slice(1);
+
+                    const html = `<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="utf-8"/>
+<title>Compte-rendu ${ref}</title>
+<style>
+  @page { size: A4; margin: 20mm; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #1a1a1a; background: #fff; }
+  
+  /* HEADER */
+  .header { text-align: center; padding-bottom: 14px; border-bottom: 2px solid #1a1a1a; margin-bottom: 20px; }
+  .header-title { font-size: 18px; font-weight: 900; letter-spacing: 0.05em; text-transform: uppercase; }
+  .header-ref { font-size: 12px; color: #555; margin-top: 4px; }
+  .header-meta { font-size: 10px; color: #888; margin-top: 2px; }
+  
+  /* SECTIONS */
+  .section { margin-bottom: 14px; border: 1px solid #e0e0e0; border-radius: 6px; overflow: hidden; }
+  .section-title { background: #f5f5f5; padding: 7px 12px; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: #555; border-bottom: 1px solid #e0e0e0; }
+  .section-body { padding: 12px; }
+  
+  /* GRID */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; }
+  .field-label { font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #888; margin-bottom: 3px; }
+  .field-value { font-size: 11px; font-weight: 600; color: #1a1a1a; }
+  
+  /* TABLE */
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 9px; text-transform: uppercase; color: #777; padding: 6px 8px; border-bottom: 1.5px solid #ddd; font-weight: 700; letter-spacing: 0.08em; }
+  td { padding: 7px 8px; font-size: 11px; border-bottom: 1px solid #f0f0f0; }
+  tr:last-child td { border-bottom: none; }
+  .center { text-align: center; }
+  .right { text-align: right; }
+  .mono { font-family: monospace; }
+  .muted { color: #999; font-style: italic; }
+  .total-row td { font-weight: 900; font-size: 12px; background: #f9f9f9; padding: 8px; border-top: 2px solid #ddd; }
+  .total-amount { color: #059669; }
+  
+  /* BADGES */
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 9.5px; font-weight: 700; }
+  .badge-ok { background: #d1fae5; color: #064e3b; border: 1px solid #6ee7b7; font-weight: 900; }
+  .badge-bad { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+  .badge-pri { background: #ede9fe; color: #5b21b6; border: 1px solid #c4b5fd; }
+  
+  /* SLA GRID */
+  .sla-kpi { background: #f9f9f9; border: 1px solid #e5e5e5; border-radius: 5px; padding: 8px 10px; }
+  .sla-kpi-val { font-size: 15px; font-weight: 900; color: #1a1a1a; margin-top: 3px; }
+  .sla-kpi-val.ok { color: #059669; }
+  .sla-kpi-val.sky { color: #0284c7; }
+  
+  /* RESOLUTION */
+  .resolution-box { background: #f9fafb; border-left: 3px solid #6366f1; padding: 10px 14px; border-radius: 4px; font-style: italic; line-height: 1.6; }
+  
+  /* FOOTER */
+  .footer { margin-top: 16px; padding-top: 10px; border-top: 1px solid #e0e0e0; display: flex; justify-content: space-between; font-size: 9px; color: #aaa; }
+</style>
+</head><body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-title">Compte-rendu d&apos;intervention IT</div>
+  <div class="header-ref">Ticket ${ref}</div>
+  <div class="header-meta">Généré le ${now}</div>
+</div>
+
+<!-- BLOC 1: INFORMATIONS GÉNÉRALES -->
+<div class="section">
+  <div class="section-title">Informations Générales</div>
+  <div class="section-body">
+    <div class="grid-4">
+      <div>
+        <div class="field-label">Demandeur</div>
+        <div class="field-value">${(ticket as any).user_name || "—"}</div>
+      </div>
+      <div style="grid-column: span 2">
+        <div class="field-label">Sujet</div>
+        <div class="field-value">${ticket.name}</div>
+      </div>
+      <div>
+        <div class="field-label">Catégorie</div>
+        <div class="field-value">${ticket.category || "—"}</div>
+      </div>
+    </div>
+    <div style="margin-top:10px">
+      <div class="field-label">Priorité</div>
+      <span class="badge badge-pri">${prioLabel}</span>
+    </div>
+  </div>
+</div>
+
+<!-- BLOC 2: CHRONOLOGIE & SLA -->
+<div class="section">
+  <div class="section-title">Chronologie &amp; Conformité SLA</div>
+  <div class="section-body">
+    <div class="grid-2" style="margin-bottom:12px">
+      <div>
+        <div class="field-label">Date de création</div>
+        <div class="field-value">${fmtDate(ticket.create_date)}</div>
+      </div>
+      <div>
+        <div class="field-label">Date de résolution</div>
+        <div class="field-value">${fmtDate(ticket.date_resolved)}</div>
+      </div>
+    </div>
+    <div class="grid-4">
+      <div class="sla-kpi">
+        <div class="field-label">Temps total</div>
+        <div class="sla-kpi-val">${formatDurMin(totalElapsedMin)}</div>
+      </div>
+      <div class="sla-kpi">
+        <div class="field-label">Temps suspendu</div>
+        <div class="sla-kpi-val sky">+${formatDurMin(pausedMin)}</div>
+      </div>
+      <div class="sla-kpi">
+        <div class="field-label">Temps net</div>
+        <div class="sla-kpi-val">${formatDurMin(netMin, true)}</div>
+      </div>
+      <div class="sla-kpi">
+        <div class="field-label">Score performance</div>
+        <div class="sla-kpi-val ${isSlaOk ? "ok" : ""}">${perfPct !== null ? `${perfPct}%` : "—"}</div>
+      </div>
+    </div>
+    <div style="margin-top:12px;text-align:center">
+      <span class="badge ${isSlaOk ? "badge-ok" : "badge-bad"}" style="font-size:11px;padding:5px 20px">${isSlaOk ? "Objectif SLA Atteint" : "Objectif SLA Non Atteint"}</span>
+    </div>
+  </div>
+</div>
+
+<!-- BLOC 3: RESSOURCES UTILISÉES -->
+<div class="section">
+  <div class="section-title">Ressources Utilisées (Facture Interne)</div>
+  <div class="section-body" style="padding:0">
+    <table>
+      <thead><tr><th>Matériel</th><th class="center">Statut</th><th class="right">Coût</th></tr></thead>
+      <tbody>${matsRows}</tbody>
+    </table>
+    <table>
+      <tbody>
+        <tr class="total-row">
+          <td colspan="2">Total (Facture Interne)</td>
+          <td class="right total-amount">${totalCost} MAD</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- BLOC 4: RÉSOLUTION FINALE -->
+<div class="section">
+  <div class="section-title">Résolution Finale</div>
+  <div class="section-body">
+    <div style="margin-bottom:10px">
+      <div class="field-label">Intervention réalisée par :</div>
+      <div class="field-value">${ticket.assigned_to || "—"}</div>
+    </div>
+    <div class="resolution-box">${formattedRes}</div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  <span>PFE IT Support — Document généré automatiquement</span>
+  <span>${ref} · ${now}</span>
+</div>
+
+<script>window.onload = () => { document.title = "Compte-rendu ${ref}"; window.print(); }</script>
+</body></html>`;
+
+                    const w = window.open("", "_blank");
+                    if (!w) return;
+                    w.document.write(html);
                     w.document.close();
                   }}
                   className="flex items-center gap-2 h-9 px-4 rounded-xl text-xs font-bold bg-[hsl(var(--primary))] text-white hover:bg-[hsl(var(--primary)/0.85)] shadow-md transition-all"
@@ -3230,6 +4027,8 @@ export default function TicketDetailsModal({
                 </div>
               </div>
 
+              {renderChainOfCommand()}
+
               <div className="p-4 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))]">
                 <h4 className="text-xs font-black uppercase tracking-widest text-[hsl(var(--muted-foreground))] flex items-center gap-2 mb-3">
                   <FileText size={13} /> Note de résolution
@@ -3301,74 +4100,227 @@ export default function TicketDetailsModal({
                 <h4 className="text-xs font-black uppercase tracking-widest text-[hsl(var(--muted-foreground))] flex items-center gap-2 mb-4">
                   <ShieldCheck size={13} /> Conformité SLA
                 </h4>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-[hsl(var(--muted)/0.2)] border border-[hsl(var(--border)/0.5)]">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-[hsl(var(--muted-foreground))]">
-                        Deadline Initiale
-                      </p>
-                      <p className="text-xs font-semibold mt-0.5">
-                        {ticket.sla_deadline_initial
-                          ? formatFullDate(ticket.sla_deadline_initial)
-                          : "—"}
-                      </p>
-                    </div>
-                    <span className="text-[10px] text-[hsl(var(--muted-foreground))] italic">
-                      Sans pauses
-                    </span>
-                  </div>
-                  {(ticket.x_total_paused_duration || 0) > 0 && (
-                    <>
-                      <div className="flex items-center gap-2 justify-center">
-                        <div className="flex-1 h-px border-t border-dashed border-blue-500/40" />
-                        <span className="text-[10px] font-bold text-blue-500 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
-                          <PauseCircle size={9} /> +
-                          {((ticket.x_total_paused_duration ?? 0) * 60).toFixed(
-                            0,
-                          )}{" "}
-                          min pause matériel
-                        </span>
-                        <div className="flex-1 h-px border-t border-dashed border-blue-500/40" />
-                      </div>
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-blue-500/5 border border-blue-500/20">
-                        <div>
-                          <p className="text-[10px] font-bold uppercase tracking-wide text-blue-500">
+                {(() => {
+                  const parseDateSafe = (dStr: string | null | undefined) => {
+                    if (!dStr) return 0;
+                    return new Date(
+                      dStr.endsWith("Z") ? dStr : dStr + "Z",
+                    ).getTime();
+                  };
+
+                  const createdDate = parseDateSafe(ticket.create_date);
+                  const endDate =
+                    (ticket.state === "resolved" ||
+                      ticket.state === "closed") &&
+                    ticket.date_resolved
+                      ? parseDateSafe(ticket.date_resolved)
+                      : Date.now();
+
+                  const initialSlaStr =
+                    timelineData?.sla_deadline_initial ||
+                    (ticket as any).sla_deadline_initial;
+                  const adjustedSlaStr =
+                    timelineData?.sla_deadline_adjusted || ticket.sla_deadline;
+
+                  const initialSlaDate = parseDateSafe(initialSlaStr);
+                  const adjustedSlaDate = parseDateSafe(adjustedSlaStr);
+
+                  let totalElapsedMinutes = 0;
+                  if (createdDate && endDate) {
+                    // Unité unique : secondes → conversion finale en minutes
+                    const totalElapsedSeconds = (endDate - createdDate) / 1000;
+                    totalElapsedMinutes = totalElapsedSeconds / 60;
+                  }
+
+                  // actual_paused_hours = vraie durée de pause (sans les bonus d'escalade artificielle)
+                  // total_paused_hours = durée SLA ajustée (inclut les bonus → NE PAS afficher)
+                  const actualPausedHoursRaw =
+                    timelineData?.actual_paused_hours ??
+                    ticket.x_actual_paused_duration ??
+                    null;
+
+                  // Si le nouveau champ est disponible, on l'utilise directement.
+                  // Sinon on fallback sur l'ancien champ en loggant un avertissement.
+                  let pausedMinutes: number;
+                  if (actualPausedHoursRaw !== null) {
+                    pausedMinutes = actualPausedHoursRaw * 60;
+                  } else {
+                    const pausedHoursRaw =
+                      timelineData?.total_paused_hours ??
+                      ticket.x_total_paused_duration ??
+                      0;
+                    pausedMinutes = pausedHoursRaw * 60;
+                    if (pausedMinutes > totalElapsedMinutes && totalElapsedMinutes > 0) {
+                      console.warn(
+                        `[SLA] actual_paused_hours non disponible. Utilisation de total_paused_hours ` +
+                        `(${pausedMinutes.toFixed(1)} min) qui peut inclure des bonus d'escalade. ` +
+                        `Temps total : ${totalElapsedMinutes.toFixed(1)} min.`
+                      );
+                    }
+                    pausedMinutes = Math.min(pausedMinutes, totalElapsedMinutes);
+                  }
+
+                  const netMinutes = Math.max(0, totalElapsedMinutes - pausedMinutes);
+
+
+                  // Temps total imparti = Deadline Ajustée - Create Date
+                  let totalAllowedMinutes = 0;
+                  if (createdDate && adjustedSlaDate) {
+                    totalAllowedMinutes =
+                      (adjustedSlaDate - createdDate) / 60000;
+                  }
+
+                  let remainingMinutes = 0;
+                  if (adjustedSlaDate && endDate) {
+                    remainingMinutes = (adjustedSlaDate - endDate) / 60000;
+                  }
+
+                  let perfScore = "—";
+                  let isPerfPositive = false;
+
+                  if (totalAllowedMinutes > 0) {
+                    const percent =
+                      (remainingMinutes / totalAllowedMinutes) * 100;
+                    if (percent >= 0) {
+                      perfScore = `${Math.round(percent)}%`;
+                      isPerfPositive = true;
+                    } else {
+                      perfScore = `${Math.abs(Math.round(percent))}% Dépassé`;
+                      isPerfPositive = false;
+                    }
+                  }
+
+                  const isActive =
+                    ticket.state !== "resolved" && ticket.state !== "closed";
+                  const formatDur = (
+                    mins: number,
+                    isNetTime: boolean = false,
+                  ) => {
+                    if (isNetTime && isActive && mins <= 0) return "< 1 min";
+                    if (mins > 0 && mins < 1) return "< 1 min";
+                    if (mins <= 0) return "0 min";
+                    const d = Math.floor(mins / 1440);
+                    const h = Math.floor((mins % 1440) / 60);
+                    const m = Math.floor(mins % 60);
+                    let r = "";
+                    if (d > 0) r += `${d}j `;
+                    if (h > 0) r += `${h}h `;
+                    if (m > 0 || r === "") r += `${m}min`;
+                    return r.trim();
+                  };
+
+                  const formatDate24h = (dateStr: string) => {
+                    const d = new Date(
+                      dateStr.endsWith("Z") ? dateStr : dateStr + "Z",
+                    );
+                    return (
+                      d.toLocaleDateString("fr-FR", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                      }) +
+                      " " +
+                      d.toLocaleTimeString("fr-FR", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                        hour12: false,
+                      })
+                    );
+                  };
+
+                  const isSlaSuccess = remainingMinutes >= 0;
+                  const verdictText =
+                    ticket.state === "resolved" || ticket.state === "closed"
+                      ? isSlaSuccess
+                        ? "Objectif SLA Atteint"
+                        : "Objectif SLA Non Atteint"
+                      : isSlaSuccess
+                        ? "Dans les Temps"
+                        : "Objectif SLA Dépassé";
+
+                  return (
+                    <div className="space-y-4">
+                      {/* Dates */}
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 p-3 bg-[hsl(var(--secondary)/0.03)] border border-[hsl(var(--border)/0.5)] rounded-lg">
+                          <p className="text-[9px] font-bold uppercase tracking-widest text-[hsl(var(--muted-foreground))] mb-1">
+                            Deadline Initiale
+                          </p>
+                          <p className="text-xs font-semibold text-[hsl(var(--foreground))]">
+                            {initialSlaStr ? formatDate24h(initialSlaStr) : "—"}
+                          </p>
+                        </div>
+                        <div className="flex-1 p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg">
+                          <p className="text-[9px] font-bold uppercase tracking-widest text-blue-500 mb-1">
                             Deadline Ajustée
                           </p>
-                          <p className="text-xs font-semibold mt-0.5">
-                            {ticket.sla_deadline
-                              ? formatFullDate(ticket.sla_deadline)
+                          <p className="text-xs font-semibold text-blue-400">
+                            {adjustedSlaStr
+                              ? formatDate24h(adjustedSlaStr)
                               : "—"}
                           </p>
                         </div>
-                        <span className="text-[10px] text-blue-500 italic">
-                          Après pauses
-                        </span>
                       </div>
-                    </>
-                  )}
-                  <div className="flex justify-center pt-1">
-                    {ticket.sla_status === "on_track" ? (
-                      <div className="flex items-center gap-2 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider">
-                        <ShieldCheck size={16} /> SLA Respecté
+
+                      {/* Grid 2x2 */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-3 bg-[hsl(var(--secondary)/0.03)] border border-[hsl(var(--border)/0.5)] rounded-lg">
+                          <div className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-[hsl(var(--muted-foreground))] mb-1.5">
+                            <Clock size={12} /> Temps Total Écoulé
+                          </div>
+                          <div className="text-sm font-black text-[hsl(var(--foreground))]">
+                            {formatDur(totalElapsedMinutes)}
+                          </div>
+                        </div>
+                        <div className="p-3 bg-sky-500/5 border border-sky-500/20 rounded-lg">
+                          <div className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-sky-500 mb-1.5">
+                            <History size={12} /> Temps Suspendu
+                          </div>
+                          <div className="text-sm font-black text-sky-500">
+                            +{formatDur(pausedMinutes)}
+                          </div>
+                        </div>
+                        <div className="p-3 bg-[hsl(var(--secondary)/0.03)] border border-[hsl(var(--border)/0.5)] rounded-lg">
+                          <div className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-[hsl(var(--muted-foreground))] mb-1.5">
+                            <Timer size={12} /> Temps Net
+                          </div>
+                          <div className="text-sm font-black text-[hsl(var(--foreground))]">
+                            {formatDur(netMinutes, true)}
+                          </div>
+                        </div>
+                        <div className="p-3 bg-[hsl(var(--secondary)/0.03)] border border-[hsl(var(--border)/0.5)] rounded-lg">
+                          <div className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-[hsl(var(--muted-foreground))] mb-1.5">
+                            <Target size={12} /> Performance
+                          </div>
+                          <div
+                            className={`text-sm font-black ${perfScore === "—" ? "text-[hsl(var(--muted-foreground))]" : isPerfPositive ? "text-emerald-500" : "text-rose-500"}`}
+                          >
+                            {perfScore}
+                          </div>
+                        </div>
                       </div>
-                    ) : ticket.sla_status === "breached" ? (
-                      <div className="flex items-center gap-2 bg-red-500/10 text-red-500 border border-red-500/20 px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider">
-                        <ShieldX size={16} /> SLA Dépassé
+
+                      {/* Verdict */}
+                      <div
+                        className={`w-full py-3 rounded-xl flex items-center justify-center font-black uppercase tracking-widest text-[11px] border ${isSlaSuccess ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-rose-500/10 text-rose-500 border-rose-500/20"}`}
+                      >
+                        {verdictText}
                       </div>
-                    ) : (
-                      <div className="flex items-center gap-2 bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider">
-                        <ShieldAlert size={16} /> Non calculé
-                      </div>
-                    )}
-                  </div>
-                </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="p-4 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))]">
-                <h4 className="text-xs font-black uppercase tracking-widest text-[hsl(var(--muted-foreground))] flex items-center gap-2 mb-4">
-                  <CalendarDays size={13} /> Synthèse de l&apos;intervention
-                </h4>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-[hsl(var(--muted-foreground))] flex items-center gap-2">
+                    <CalendarDays size={13} /> Synthèse de l&apos;intervention
+                  </h4>
+                  <span className="text-[10px] text-[hsl(var(--muted-foreground))] italic">
+                    Cliquez pour les détails
+                  </span>
+                </div>
                 <VerticalTimeline
                   events={timelineData?.events ?? []}
                   loading={timelineLoading}

@@ -578,9 +578,8 @@ class TicketController(http.Controller):
                             else:
                                 message = f'A passé le statut à {new_label}'
 
-                            # Attribution contextuelle :
-                            # Les changements de statut métier sont toujours faits par le tech en charge
-                            tech_author = current_tech if evt_type in ('status_change', 'waiting', 'escalation', 'resolved') else base_author
+                            # Attribution : l'auteur réel du changement de statut
+                            tech_author = base_author
 
                             event_data = {
                                 'id': f'evt_state_{msg.id}_{tracking.id}',
@@ -612,7 +611,7 @@ class TicketController(http.Controller):
                                     'id': f'evt_field_{msg.id}_{tracking.id}',
                                     'type': evt_type,
                                     'date': msg_date,
-                                    'author': current_tech,
+                                    'author': base_author,
                                     'author_role': author_role,
                                     'message': message,
                                     'detail': {}
@@ -651,7 +650,7 @@ class TicketController(http.Controller):
                             if match:
                                 text_author = match.group(1).strip()
                         elif evt_type in ('status_change', 'waiting', 'resolved'):
-                            text_author = current_tech
+                            text_author = base_author
 
                         event_data = {
                             'id': f'evt_msg_{msg.id}',
@@ -680,6 +679,7 @@ class TicketController(http.Controller):
                 'sla_deadline_initial': sla_deadline_initial,
                 'sla_deadline_adjusted': ticket.sla_deadline.isoformat() + 'Z' if ticket.sla_deadline else None,
                 'total_paused_hours': ticket.x_total_paused_duration or 0.0,
+                'actual_paused_hours': ticket.x_actual_paused_duration or 0.0,
             })
 
         except Exception as e:

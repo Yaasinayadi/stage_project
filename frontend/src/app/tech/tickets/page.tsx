@@ -105,6 +105,8 @@ type Ticket = {
   assigned_to_id?: string | null;
   category?: string | null;
   x_total_paused_duration?: number;
+  x_actual_paused_duration?: number;
+
 };
 
 // ── Glow styles injected once ─────────────────────────────────────────────────

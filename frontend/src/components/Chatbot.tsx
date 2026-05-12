@@ -136,6 +136,7 @@ export default function Chatbot({
                 assigne_a: t.assigned_to || "Non assigné",
                 categorie: t.category,
                 priorite: t.priority,
+                escalated_by_name: t.escalated_by_name || null,
               })),
             );
           }
@@ -315,7 +316,8 @@ export default function Chatbot({
           >
             {matchedTickets.map((t) => {
               const tRef = `TK-${String(t.id).padStart(4, "0")}`;
-              let badgeBg = "bg-zinc-800 text-zinc-300 border-zinc-700";
+              let badgeBg =
+                "bg-[hsl(var(--secondary))] text-[hsl(var(--foreground)/0.8)] border-[hsl(var(--border))]";
               let translatedStatus = t.state;
 
               if (t.state === "new" || t.state === "nouveau") {
@@ -339,10 +341,10 @@ export default function Chatbot({
               return (
                 <div
                   key={t.id}
-                  className="min-w-[240px] snap-center bg-zinc-900/50 border border-zinc-800 rounded-xl p-3 flex flex-col gap-2"
+                  className="min-w-[240px] snap-center bg-[hsl(var(--card)/0.5)] border border-[hsl(var(--border))] rounded-xl p-3 flex flex-col gap-2"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-mono font-bold text-zinc-300">
+                    <span className="text-xs font-mono font-bold text-[hsl(var(--foreground)/0.8)]">
                       {tRef}
                     </span>
                     <span
@@ -351,12 +353,12 @@ export default function Chatbot({
                       {translatedStatus}
                     </span>
                   </div>
-                  <h4 className="font-bold text-sm text-zinc-100 line-clamp-1">
+                  <h4 className="font-bold text-sm text-[hsl(var(--foreground))] line-clamp-1">
                     {t.name}
                   </h4>
-                  <div className="flex items-center gap-2 mt-auto pt-2 border-t border-zinc-800/50">
+                  <div className="flex items-center gap-2 mt-auto pt-2 border-t border-[hsl(var(--border)/0.5)]">
                     {t.assigned_to ? (
-                      <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                      <div className="flex items-center gap-1.5 text-xs text-[hsl(var(--muted-foreground))]">
                         <div className="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-[10px]">
                           {t.assigned_to.charAt(0).toUpperCase()}
                         </div>
@@ -365,7 +367,7 @@ export default function Chatbot({
                         </span>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-1.5 text-xs text-zinc-500 italic">
+                      <div className="flex items-center gap-1.5 text-xs text-[hsl(var(--muted-foreground)/0.8)] italic">
                         <User size={12} /> Non assigné
                       </div>
                     )}
@@ -375,7 +377,7 @@ export default function Chatbot({
                       onClick={() =>
                         setSelectedTicket({ data: t, viewType: "live" })
                       }
-                      className="w-full py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold rounded-lg border border-zinc-700 transition-colors"
+                      className="w-full py-1.5 bg-[hsl(var(--secondary))] hover:bg-[hsl(var(--secondary)/0.8)] text-[hsl(var(--foreground)/0.9)] text-xs font-semibold rounded-lg border border-[hsl(var(--border))] transition-colors"
                     >
                       Voir les détails
                     </button>
@@ -416,7 +418,8 @@ export default function Chatbot({
     );
 
     let statusLabel = ticket.state;
-    let statusClass = "bg-zinc-800/60 text-zinc-300 border-zinc-700";
+    let statusClass =
+      "bg-[hsl(var(--secondary)/0.6)] text-[hsl(var(--foreground)/0.8)] border-[hsl(var(--border))]";
     let StatusIcon = Clock;
 
     if (ticket.state === "new") {
@@ -438,9 +441,9 @@ export default function Chatbot({
     }
 
     return (
-      <div className="mt-3 rounded-xl border border-zinc-700/60 bg-zinc-950/40 backdrop-blur-sm overflow-hidden">
-        <div className="flex items-center justify-between px-3 pt-3 pb-2 border-b border-zinc-800/60">
-          <span className="font-mono text-xs font-bold text-zinc-300 tracking-wider">
+      <div className="mt-3 rounded-xl border border-[hsl(var(--border)/0.6)] bg-[hsl(var(--background)/0.4)] backdrop-blur-sm overflow-hidden">
+        <div className="flex items-center justify-between px-3 pt-3 pb-2 border-b border-[hsl(var(--border)/0.6)]">
+          <span className="font-mono text-xs font-bold text-[hsl(var(--foreground)/0.8)] tracking-wider">
             {tRef}
           </span>
           <div className="flex items-center gap-1.5">
@@ -452,7 +455,7 @@ export default function Chatbot({
           </div>
         </div>
         <div className="px-3 py-2.5">
-          <p className="text-xs font-semibold text-zinc-100 line-clamp-2 leading-snug">
+          <p className="text-xs font-semibold text-[hsl(var(--foreground))] line-clamp-2 leading-snug">
             {ticket.name}
           </p>
         </div>
@@ -461,7 +464,7 @@ export default function Chatbot({
             onClick={() =>
               setSelectedTicket({ data: ticket, viewType: "live" })
             }
-            className="flex-1 py-1.5 text-[11px] font-semibold rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 transition-all flex items-center justify-center"
+            className="flex-1 py-1.5 text-[11px] font-semibold rounded-lg bg-[hsl(var(--secondary))] hover:bg-[hsl(var(--secondary)/0.8)] border border-[hsl(var(--border))] text-[hsl(var(--foreground)/0.9)] transition-all flex items-center justify-center"
           >
             Voir les détails
           </button>
@@ -485,9 +488,9 @@ export default function Chatbot({
   if (viewMode === "floating") {
     containerClasses = `fixed bottom-6 right-6 ${showHistory ? "w-[640px]" : "w-[380px]"} ${isMinimized ? "h-[60px]" : "h-[560px]"} rounded-2xl shadow-2xl transition-[width] duration-300`;
   } else if (viewMode === "sidebar") {
-    containerClasses = `fixed top-0 right-0 h-full ${showHistory ? "w-full md:w-[660px]" : "w-full sm:w-[400px]"} border-l border-zinc-800/60 shadow-2xl md:rounded-l-2xl transition-[width] duration-300`;
+    containerClasses = `fixed top-0 right-0 h-full ${showHistory ? "w-full md:w-[660px]" : "w-full sm:w-[400px]"} border-l border-[hsl(var(--border)/0.6)] shadow-2xl md:rounded-l-2xl transition-[width] duration-300`;
   } else if (viewMode === "fullscreen") {
-    containerClasses = `fixed inset-0 w-full h-full z-[9999] bg-zinc-950`;
+    containerClasses = `fixed inset-0 w-full h-full z-[9999] bg-[hsl(var(--background))]`;
   }
 
   return (
@@ -511,21 +514,21 @@ export default function Chatbot({
       {/* Chat Container */}
       {isOpen && (
         <div
-          className={`z-[9999] flex flex-col overflow-hidden backdrop-blur-xl bg-zinc-950/80 border border-zinc-800/60 transition-all duration-300 ease-in-out ${containerClasses}`}
+          className={`z-[9999] flex flex-col overflow-hidden backdrop-blur-xl bg-[hsl(var(--background)/0.8)] border border-[hsl(var(--border)/0.6)] transition-all duration-300 ease-in-out ${containerClasses}`}
         >
           {/* Header */}
-          <div className="flex justify-between items-center px-4 h-[60px] flex-shrink-0 border-b border-white/5 bg-white/5">
+          <div className="flex justify-between items-center px-4 h-[60px] flex-shrink-0 border-b border-[hsl(var(--border)/0.3)] bg-[hsl(var(--muted)/0.3)]">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-[hsl(var(--primary)/0.2)] border border-[hsl(var(--primary)/0.3)] flex items-center justify-center">
                 <Sparkles size={16} className="text-[hsl(var(--primary))]" />
               </div>
               <div className="flex flex-col">
-                <h3 className="font-semibold text-sm text-zinc-100 flex items-center">
+                <h3 className="font-semibold text-sm text-[hsl(var(--foreground))] flex items-center">
                   Assistant IA
                 </h3>
                 <div className="flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <p className="text-[10px] text-zinc-400 font-medium">
+                  <p className="text-[10px] text-[hsl(var(--muted-foreground))] font-medium">
                     En ligne
                   </p>
                 </div>
@@ -534,21 +537,21 @@ export default function Chatbot({
 
             {/* Window Controls */}
             <div className="flex items-center gap-1">
-              <div className="flex items-center gap-2 bg-zinc-800/50 p-1.5 rounded-lg">
+              <div className="flex items-center gap-2 bg-[hsl(var(--secondary)/0.5)] p-1.5 rounded-lg">
                 <button
                   onClick={() => setShowHistory(!showHistory)}
-                  className={`w-7 h-7 rounded-md flex items-center justify-center transition-colors ${showHistory ? "bg-white/10 text-white shadow-sm" : "text-zinc-400 hover:text-white hover:bg-zinc-700/50"}`}
+                  className={`w-7 h-7 rounded-md flex items-center justify-center transition-colors ${showHistory ? "bg-[hsl(var(--foreground))] text-[hsl(var(--background))] shadow-sm" : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted)/0.5)]"}`}
                   title="Historique"
                 >
                   <History size={14} />
                 </button>
-                <div className="w-[1px] h-4 bg-zinc-700 mx-1" />
+                <div className="w-[1px] h-4 bg-[hsl(var(--border))] mx-1" />
                 <button
                   onClick={() => {
                     setViewMode("floating");
                     setIsMinimized(false);
                   }}
-                  className={`w-7 h-7 rounded-md flex items-center justify-center transition-colors ${viewMode === "floating" && !isMinimized ? "bg-white/10 text-white shadow-sm" : "text-zinc-400 hover:text-white hover:bg-zinc-700/50"}`}
+                  className={`w-7 h-7 rounded-md flex items-center justify-center transition-colors ${viewMode === "floating" && !isMinimized ? "bg-[hsl(var(--foreground))] text-[hsl(var(--background))] shadow-sm" : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted)/0.5)]"}`}
                   title="Mode Compact"
                 >
                   <LayoutGrid size={14} />
@@ -558,7 +561,7 @@ export default function Chatbot({
                     setViewMode("sidebar");
                     setIsMinimized(false);
                   }}
-                  className={`w-7 h-7 rounded-md flex items-center justify-center transition-colors ${viewMode === "sidebar" && !isMinimized ? "bg-white/10 text-white shadow-sm" : "text-zinc-400 hover:text-white hover:bg-zinc-700/50"}`}
+                  className={`w-7 h-7 rounded-md flex items-center justify-center transition-colors ${viewMode === "sidebar" && !isMinimized ? "bg-[hsl(var(--foreground))] text-[hsl(var(--background))] shadow-sm" : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted)/0.5)]"}`}
                   title="Mode Panneau Latéral"
                 >
                   <Sidebar size={14} />
@@ -568,21 +571,21 @@ export default function Chatbot({
                     setViewMode("fullscreen");
                     setIsMinimized(false);
                   }}
-                  className={`w-7 h-7 rounded-md flex items-center justify-center transition-colors ${viewMode === "fullscreen" && !isMinimized ? "bg-white/10 text-white shadow-sm" : "text-zinc-400 hover:text-white hover:bg-zinc-700/50"}`}
+                  className={`w-7 h-7 rounded-md flex items-center justify-center transition-colors ${viewMode === "fullscreen" && !isMinimized ? "bg-[hsl(var(--foreground))] text-[hsl(var(--background))] shadow-sm" : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted)/0.5)]"}`}
                   title="Mode Plein Écran"
                 >
                   <Maximize2 size={14} />
                 </button>
               </div>
 
-              <div className="w-[1px] h-4 bg-zinc-700 mx-1" />
+              <div className="w-[1px] h-4 bg-[hsl(var(--border))] mx-1" />
 
               <button
                 onClick={() => {
                   setIsOpen(false);
                   onClose?.();
                 }}
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700/50 transition-colors"
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted)/0.5)] transition-colors"
                 title="Fermer"
               >
                 <X size={16} />
@@ -596,15 +599,15 @@ export default function Chatbot({
               {/* History Drawer */}
               <div
                 className={`
-                  h-full w-[260px] flex-shrink-0 bg-zinc-950/95 border-r border-zinc-800/50 flex flex-col transition-all duration-300 ease-in-out
+                  h-full w-[260px] flex-shrink-0 bg-[hsl(var(--background)/0.95)] border-r border-[hsl(var(--border)/0.5)] flex flex-col transition-all duration-300 ease-in-out
                   relative z-10
                   ${showHistory ? "translate-x-0 ml-0" : "-translate-x-full -ml-[260px]"}
                 `}
               >
-                <div className="p-4 border-b border-zinc-800/50 flex justify-center">
+                <div className="p-4 border-b border-[hsl(var(--border)/0.5)] flex justify-center">
                   <button
                     onClick={startNewSession}
-                    className="w-auto inline-flex items-center justify-center gap-2 py-1.5 px-4 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-medium text-xs transition-all border border-zinc-700 shadow-sm"
+                    className="w-auto inline-flex items-center justify-center gap-2 py-1.5 px-4 rounded-lg bg-[hsl(var(--secondary))] hover:bg-[hsl(var(--secondary)/0.8)] text-[hsl(var(--foreground))] font-medium text-xs transition-all border border-[hsl(var(--border))] shadow-sm"
                   >
                     <PlusCircle size={14} /> Nouvelle discussion
                   </button>
@@ -624,7 +627,7 @@ export default function Chatbot({
                       return (
                         <div key={session.id} className="relative group">
                           {isEditing ? (
-                            <div className="w-full px-2 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 flex items-center gap-2">
+                            <div className="w-full px-2 py-1.5 rounded-lg bg-[hsl(var(--card))] border border-[hsl(var(--border))] flex items-center gap-2">
                               <input
                                 autoFocus
                                 type="text"
@@ -642,7 +645,7 @@ export default function Chatbot({
                                   if (e.key === "Escape")
                                     setEditingSessionId(null);
                                 }}
-                                className="flex-1 bg-transparent text-xs text-white outline-none"
+                                className="flex-1 bg-transparent text-xs text-[hsl(var(--foreground))] outline-none"
                               />
                               <button
                                 onClick={() =>
@@ -660,7 +663,7 @@ export default function Chatbot({
                           ) : (
                             <button
                               onClick={() => loadSession(session)}
-                              className={`w-full text-left px-3 py-2.5 rounded-lg text-xs transition-all flex flex-col gap-1 pr-8 ${session.session_id === sessionId ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"}`}
+                              className={`w-full text-left px-3 py-2.5 rounded-lg text-xs transition-all flex flex-col gap-1 pr-8 ${session.session_id === sessionId ? "bg-[hsl(var(--secondary))] text-[hsl(var(--foreground))]" : "text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--secondary)/0.5)] hover:text-[hsl(var(--foreground))]"}`}
                             >
                               <div className="flex items-center justify-between">
                                 <span className="font-medium truncate flex-1">
@@ -686,13 +689,13 @@ export default function Chatbot({
                                       : session.session_id,
                                   );
                                 }}
-                                className={`p-0.5 rounded transition-colors ${session.session_id === sessionId ? "text-zinc-300 hover:text-white hover:bg-zinc-700" : "text-zinc-400 hover:text-white hover:bg-zinc-700"}`}
+                                className={`p-0.5 rounded transition-colors ${session.session_id === sessionId ? "text-[hsl(var(--foreground)/0.8)] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted)/0.5)]" : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted)/0.5)]"}`}
                               >
                                 <MoreHorizontal size={14} />
                               </button>
 
                               {activeMenu === session.session_id && (
-                                <div className="absolute right-0 top-full mt-1 w-32 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl overflow-hidden z-50">
+                                <div className="absolute right-0 top-full mt-1 w-32 bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-lg shadow-xl overflow-hidden z-50">
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
@@ -701,7 +704,7 @@ export default function Chatbot({
                                         "pin",
                                       );
                                     }}
-                                    className="w-full text-left px-3 py-2 text-[10px] font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center justify-between"
+                                    className="w-full text-left px-3 py-2 text-[10px] font-medium text-[hsl(var(--foreground)/0.8)] hover:bg-[hsl(var(--secondary))] hover:text-[hsl(var(--foreground))] flex items-center justify-between"
                                   >
                                     {session.is_pinned
                                       ? "Désépingler"
@@ -715,7 +718,7 @@ export default function Chatbot({
                                       setEditTitleValue(session.title);
                                       setActiveMenu(null);
                                     }}
-                                    className="w-full text-left px-3 py-2 text-[10px] font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white"
+                                    className="w-full text-left px-3 py-2 text-[10px] font-medium text-[hsl(var(--foreground)/0.8)] hover:bg-[hsl(var(--secondary))] hover:text-[hsl(var(--foreground))]"
                                   >
                                     Renommer
                                   </button>
@@ -727,7 +730,7 @@ export default function Chatbot({
                                         "delete",
                                       );
                                     }}
-                                    className="w-full text-left px-3 py-2 text-[10px] font-medium text-rose-500 hover:bg-zinc-800 flex items-center justify-between border-t border-zinc-800/50"
+                                    className="w-full text-left px-3 py-2 text-[10px] font-medium text-rose-500 hover:bg-[hsl(var(--secondary))] flex items-center justify-between border-t border-[hsl(var(--border)/0.5)]"
                                   >
                                     Supprimer <Trash2 size={12} />
                                   </button>
@@ -743,7 +746,7 @@ export default function Chatbot({
                       <>
                         {pinnedChats.length > 0 && (
                           <div className="mb-4">
-                            <h4 className="text-[10px] uppercase font-bold text-zinc-500 mb-2 px-2 tracking-wider flex items-center gap-1.5">
+                            <h4 className="text-[10px] uppercase font-bold text-[hsl(var(--muted-foreground)/0.8)] mb-2 px-2 tracking-wider flex items-center gap-1.5">
                               <Pin size={10} className="rotate-45" /> Épinglés
                             </h4>
                             <div className="flex flex-col gap-1">
@@ -753,13 +756,13 @@ export default function Chatbot({
                         )}
 
                         <div>
-                          <h4 className="text-[10px] uppercase font-bold text-zinc-500 mb-2 px-2 tracking-wider">
+                          <h4 className="text-[10px] uppercase font-bold text-[hsl(var(--muted-foreground)/0.8)] mb-2 px-2 tracking-wider">
                             Récentes
                           </h4>
                           <div className="flex flex-col gap-1">
                             {recentChats.map(renderSessionItem)}
                             {recentChats.length === 0 && (
-                              <div className="text-center text-zinc-500 text-xs py-6">
+                              <div className="text-center text-[hsl(var(--muted-foreground)/0.8)] text-xs py-6">
                                 Aucun historique
                               </div>
                             )}
@@ -772,7 +775,7 @@ export default function Chatbot({
               </div>
 
               {/* Chat Messages */}
-              <div className="flex-1 flex flex-col bg-zinc-950/40 overflow-hidden relative z-0">
+              <div className="flex-1 flex flex-col bg-[hsl(var(--background)/0.4)] overflow-hidden relative z-0">
                 <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-4 custom-scrollbar">
                   {messages.map((msg, idx) => (
                     <div
@@ -790,7 +793,7 @@ export default function Chatbot({
                         )}
                       </div>
                       <div
-                        className={`max-w-[85%] px-4 py-3 text-sm leading-relaxed ${msg.sender === "user" ? "bg-[hsl(var(--info))] text-white rounded-2xl rounded-tr-sm shadow-md" : "bg-zinc-900/80 border border-zinc-800 text-zinc-200 rounded-2xl rounded-tl-sm shadow-md"}`}
+                        className={`max-w-[85%] px-4 py-3 text-sm leading-relaxed ${msg.sender === "user" ? "bg-[hsl(var(--info))] text-white rounded-2xl rounded-tr-sm shadow-md" : "bg-[hsl(var(--card)/0.8)] border border-[hsl(var(--border))] text-[hsl(var(--foreground)/0.9)] rounded-2xl rounded-tl-sm shadow-md"}`}
                       >
                         {renderMessageWithCards(msg.text)}
                         {msg.sender === "bot" &&
@@ -805,18 +808,18 @@ export default function Chatbot({
                       <div className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs bg-[hsl(var(--primary)/0.8)] border border-[hsl(var(--primary))] backdrop-blur">
                         <Bot size={14} />
                       </div>
-                      <div className="px-5 py-4 rounded-2xl rounded-tl-sm bg-zinc-900/80 border border-zinc-800 flex items-center">
+                      <div className="px-5 py-4 rounded-2xl rounded-tl-sm bg-[hsl(var(--card)/0.8)] border border-[hsl(var(--border))] flex items-center">
                         <span className="flex gap-1.5">
                           <span
-                            className="w-1.5 h-1.5 rounded-full bg-zinc-500 animate-bounce"
+                            className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--muted-foreground)/0.8)] animate-bounce"
                             style={{ animationDelay: "0ms" }}
                           />
                           <span
-                            className="w-1.5 h-1.5 rounded-full bg-zinc-500 animate-bounce"
+                            className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--muted-foreground)/0.8)] animate-bounce"
                             style={{ animationDelay: "150ms" }}
                           />
                           <span
-                            className="w-1.5 h-1.5 rounded-full bg-zinc-500 animate-bounce"
+                            className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--muted-foreground)/0.8)] animate-bounce"
                             style={{ animationDelay: "300ms" }}
                           />
                         </span>
@@ -827,7 +830,7 @@ export default function Chatbot({
                 </div>
 
                 {/* Input Area */}
-                <div className="p-3 bg-zinc-950 border-t border-zinc-800/80 relative">
+                <div className="p-3 bg-[hsl(var(--background))] border-t border-[hsl(var(--border)/0.8)] relative">
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();
@@ -842,7 +845,7 @@ export default function Chatbot({
                         onChange={(e) => setInput(e.target.value)}
                         placeholder="Posez votre question à l'IA..."
                         disabled={isLoading}
-                        className="w-full h-11 pl-4 pr-12 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary)/0.5)] focus:border-transparent transition-all placeholder:text-zinc-600"
+                        className="w-full h-11 pl-4 pr-12 rounded-xl bg-[hsl(var(--card))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary)/0.5)] focus:border-transparent transition-all placeholder:text-[hsl(var(--muted-foreground)/0.6)]"
                         autoFocus
                       />
                     </div>
