@@ -14,10 +14,26 @@ import {
   Tag,
   History,
   Inbox,
+  LayoutGrid,
+  List,
+  Globe,
+  Key,
+  Laptop,
+  HardDrive,
+  Mail,
+  Server,
+  AlertCircle,
+  User,
+  ArrowUpCircle,
+  Users,
+  Calendar,
+  ArrowRight,
+  Target,
 } from "lucide-react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAuth } from "@/lib/auth";
 import Link from "next/link";
+import LinearSlaBar from "@/components/LinearSlaBar";
 import DualSlaGauge from "@/components/DualSlaGauge";
 import CompactTimeline from "@/components/CompactTimeline";
 
@@ -30,43 +46,82 @@ const PRIORITY_MAP: Record<
   "3": {
     label: "Critique",
     dot: "bg-rose-500",
-    badge: "bg-rose-500/10 text-rose-500 border-rose-500/20",
+    badge: "bg-rose-500/10 text-rose-400 border-rose-500/20",
     border: "border-l-rose-500",
     order: 0,
   },
   "2": {
     label: "Haute",
     dot: "bg-amber-500",
-    badge: "bg-amber-500/10 text-amber-500 border-amber-500/20",
+    badge: "bg-amber-500/10 text-amber-400 border-amber-500/20",
     border: "border-l-amber-500",
     order: 1,
   },
   "1": {
     label: "Moyenne",
     dot: "bg-blue-500",
-    badge: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+    badge: "bg-blue-500/10 text-blue-400 border-blue-500/20",
     border: "border-l-blue-500",
     order: 2,
   },
   "0": {
     label: "Basse",
     dot: "bg-slate-400",
-    badge: "bg-slate-500/10 text-slate-500 border-slate-500/20",
+    badge: "bg-slate-500/10 text-slate-400 border-slate-500/20",
     border: "border-l-slate-400",
     order: 3,
   },
 };
 
-const STATE_MAP: Record<string, { label: string; color: string }> = {
-  new: { label: "Nouveau", color: "text-gray-500" },
-  assigned: { label: "Assigné", color: "text-blue-500" },
-  in_progress: { label: "En cours", color: "text-indigo-500" },
-  waiting: { label: "En attente client", color: "text-amber-500" },
-  waiting_material: { label: "En attente matériel", color: "text-sky-500" },
-  blocked: { label: "Bloqué", color: "text-red-500" },
-  escalated: { label: "Escaladé", color: "text-purple-500" },
-  resolved: { label: "Résolu", color: "text-emerald-500" },
-  closed: { label: "Fermé", color: "text-gray-400" },
+const STATE_MAP: Record<
+  string,
+  { label: string; color: string; badge: string }
+> = {
+  new: {
+    label: "Nouveau",
+    color: "text-sky-400",
+    badge: "bg-sky-500/10 text-sky-400 border-sky-500/20",
+  },
+  assigned: {
+    label: "Assigné",
+    color: "text-blue-400",
+    badge: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+  },
+  in_progress: {
+    label: "En cours",
+    color: "text-indigo-400",
+    badge: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
+  },
+  waiting: {
+    label: "En attente client",
+    color: "text-amber-400",
+    badge: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  },
+  waiting_material: {
+    label: "En attente matériel",
+    color: "text-purple-400",
+    badge: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+  },
+  blocked: {
+    label: "Bloqué",
+    color: "text-red-400",
+    badge: "bg-red-500/10 text-red-400 border-red-500/20",
+  },
+  escalated: {
+    label: "Escaladé",
+    color: "text-pink-400",
+    badge: "bg-pink-500/10 text-pink-400 border-pink-500/20",
+  },
+  resolved: {
+    label: "Résolu",
+    color: "text-emerald-400",
+    badge: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  },
+  closed: {
+    label: "Fermé",
+    color: "text-gray-400",
+    badge: "bg-gray-500/10 text-gray-400 border-gray-500/20",
+  },
 };
 
 const ACTIVE_STATES = [
@@ -91,7 +146,7 @@ type Ticket = {
   // ── SLA Résolution ─────────────────────────────────────────────────
   sla_deadline: string | null;
   sla_status: string | null;
-  date_resolved?: string | null;          // horodatage figé de résolution
+  date_resolved?: string | null; // horodatage figé de résolution
   // ── SLA Réponse (v2) ────────────────────────────────────────────
   sla_response_deadline?: string | null;
   sla_response_status?: string | null;
@@ -106,7 +161,6 @@ type Ticket = {
   category?: string | null;
   x_total_paused_duration?: number;
   x_actual_paused_duration?: number;
-
 };
 
 // ── Glow styles injected once ─────────────────────────────────────────────────
@@ -125,12 +179,78 @@ const GLOW_STYLE = `
 .tab-content { animation: tabSlideIn 0.25s ease-out; }
 `;
 
+// ── Category icon/color helpers ─────────────────────────────────────────────
+function getCategoryIcon(cat: string) {
+  if (!cat) return <AlertCircle size={16} />;
+  const lcat = cat.toLowerCase();
+  if (lcat.includes("réseau")) return <Globe size={16} />;
+  if (lcat.includes("accès")) return <Key size={16} />;
+  if (lcat.includes("logiciel")) return <Laptop size={16} />;
+  if (lcat.includes("matériel")) return <HardDrive size={16} />;
+  if (lcat.includes("messagerie")) return <Mail size={16} />;
+  if (lcat.includes("infrastructure")) return <Server size={16} />;
+  return <AlertCircle size={16} />;
+}
+function getCategoryColor(cat: string): string {
+  if (!cat) return "#71717a";
+  const lcat = cat.toLowerCase();
+  if (lcat.includes("réseau")) return "#6366f1";
+  if (lcat.includes("accès")) return "#f59e0b";
+  if (lcat.includes("logiciel")) return "#8b5cf6";
+  if (lcat.includes("matériel")) return "#10b981";
+  if (lcat.includes("messagerie")) return "#ec4899";
+  if (lcat.includes("infrastructure")) return "#06b6d4";
+  return "#71717a";
+}
+function getAgentInitials(name: string): string {
+  const parts = name.trim().split(" ").filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+}
+function getAgentColor(name: string): string {
+  const colors = [
+    "#6366f1",
+    "#8b5cf6",
+    "#ec4899",
+    "#10b981",
+    "#f59e0b",
+    "#06b6d4",
+    "#3b82f6",
+    "#ef4444",
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++)
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return colors[Math.abs(hash) % colors.length];
+}
+
+const MORE_PERIODS = [
+  { id: "yesterday", label: "Hier" },
+  { id: "30days", label: "30 Jours" },
+];
+
+function formatDateCompact(d: string | null) {
+  if (!d) return "--";
+  const date = new Date(d);
+  if (isNaN(date.getTime())) return "--";
+  return date
+    .toLocaleString("fr-FR", {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+    .replace(",", "");
+}
+
 function MyTicketsPage() {
   const { user } = useAuth();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"active" | "resolved">("active");
   const [resolvedId, setResolvedId] = useState<number | null>(null);
+  const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
 
   const [priorityFilter, setPriorityFilter] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
@@ -291,7 +411,8 @@ function MyTicketsPage() {
   const slaMetCount = tickets.filter(
     (t) => RESOLVED_STATES.includes(t.state) && t.sla_status === "met",
   ).length;
-  const slaCompliance = resolved > 0 ? Math.round((slaMetCount / resolved) * 100) : 0;
+  const slaCompliance =
+    resolved > 0 ? Math.round((slaMetCount / resolved) * 100) : 0;
 
   // ── Row renderer ──────────────────────────────────────────────────────────
   const renderRow = (ticket: Ticket) => {
@@ -375,7 +496,7 @@ function MyTicketsPage() {
                 <span className="font-medium">{ticket.user_id}</span>
               </div>
             )}
-            
+
             {/* Timeline Compacte Contextuelle */}
             {ticket.create_date && (
               <CompactTimeline
@@ -386,7 +507,7 @@ function MyTicketsPage() {
                 state={ticket.state}
               />
             )}
-            
+
             {ticket.category && (
               <span className="inline-flex items-center bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
                 <Tag size={10} className="mr-1" />
@@ -475,7 +596,12 @@ function MyTicketsPage() {
             label: "Score SLA",
             count: `${slaCompliance}%`,
             icon: <History size={16} />,
-            color: slaCompliance >= 80 ? "text-emerald-500" : slaCompliance >= 50 ? "text-amber-500" : "text-red-500",
+            color:
+              slaCompliance >= 80
+                ? "text-emerald-500"
+                : slaCompliance >= 50
+                  ? "text-amber-500"
+                  : "text-red-500",
           },
         ].map((kpi) => (
           <div
@@ -605,51 +731,77 @@ function MyTicketsPage() {
         </span>
 
         {/* ── Segmented control tabs (right-aligned) ── */}
-        <div className="ml-auto flex items-center gap-0.5 p-0.5 bg-[hsl(var(--muted)/0.5)] rounded-lg border border-[hsl(var(--border)/0.4)]">
-          <button
-            onClick={() => setActiveTab("active")}
-            title="En attente de traitement"
-            className={`flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-semibold transition-all duration-150
-              ${
-                activeTab === "active"
-                  ? "bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm"
-                  : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
-              }`}
-          >
-            <ClipboardList size={13} />
-            <span className="hidden sm:inline">En attente</span>
-            <span
-              className={`text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full transition-colors
-              ${activeTab === "active" ? "bg-[hsl(var(--primary))] text-white" : "bg-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]"}`}
+        <div className="ml-auto flex items-center gap-2">
+          <div className="flex items-center gap-0.5 p-0.5 bg-[hsl(var(--muted)/0.5)] rounded-lg border border-[hsl(var(--border)/0.4)]">
+            <button
+              onClick={() => setActiveTab("active")}
+              title="En attente de traitement"
+              className={`flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-semibold transition-all duration-150
+                ${
+                  activeTab === "active"
+                    ? "bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm"
+                    : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+                }`}
             >
-              {activeTickets.length}
-            </span>
-          </button>
-          <button
-            onClick={() => setActiveTab("resolved")}
-            title="Terminés / Résolus"
-            className={`flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-semibold transition-all duration-150
-              ${
-                activeTab === "resolved"
-                  ? "bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm"
-                  : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
-              }`}
-          >
-            <History size={13} />
-            <span className="hidden sm:inline">Terminés</span>
-            <span
-              className={`text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full transition-colors
-              ${activeTab === "resolved" ? "bg-emerald-500 text-white" : "bg-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]"}`}
+              <ClipboardList size={13} />
+              <span className="hidden sm:inline">En attente</span>
+              <span
+                className={`text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full transition-colors
+                ${activeTab === "active" ? "bg-[hsl(var(--primary))] text-white" : "bg-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]"}`}
+              >
+                {activeTickets.length}
+              </span>
+            </button>
+            <button
+              onClick={() => setActiveTab("resolved")}
+              title="Terminés / Résolus"
+              className={`flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-semibold transition-all duration-150
+                ${
+                  activeTab === "resolved"
+                    ? "bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm"
+                    : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+                }`}
             >
-              {resolvedTickets.length}
-            </span>
-          </button>
+              <History size={13} />
+              <span className="hidden sm:inline">Terminés</span>
+              <span
+                className={`text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full transition-colors
+                ${activeTab === "resolved" ? "bg-emerald-500 text-white" : "bg-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]"}`}
+              >
+                {resolvedTickets.length}
+              </span>
+            </button>
+          </div>
+
+          {/* ── View toggle ── */}
+          <div className="view-toggle bg-[hsl(var(--background)/0.5)] border border-[hsl(var(--border)/0.5)]">
+            <button
+              onClick={() => setViewMode("cards")}
+              className={viewMode === "cards" ? "active" : ""}
+              title="Vue cartes"
+            >
+              <LayoutGrid size={15} />
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={viewMode === "list" ? "active" : ""}
+              title="Vue liste"
+            >
+              <List size={15} />
+            </button>
+          </div>
         </div>
       </div>
 
       {/* ── Ticket List ── */}
       {loading ? (
-        <div className="space-y-3">
+        <div
+          className={
+            viewMode === "cards"
+              ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
+              : "space-y-3"
+          }
+        >
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="glass-card h-24 animate-pulse opacity-50" />
           ))}
@@ -687,8 +839,176 @@ function MyTicketsPage() {
             </>
           )}
         </div>
+      ) : viewMode === "cards" ? (
+        <div
+          key={`cards-${activeTab}-${viewMode}`}
+          className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 animate-fade-in"
+        >
+          {currentList.map((ticket, idx) => {
+            const pCfg = PRIORITY_MAP[ticket.priority] ?? PRIORITY_MAP["1"];
+            const sCfg = STATE_MAP[ticket.state] ?? {
+              label: ticket.state,
+              color: "text-gray-400",
+            };
+            const catColor = getCategoryColor(ticket.category ?? "");
+            const isResolved = RESOLVED_STATES.includes(ticket.state);
+            const isGlow = ticket.id === resolvedId;
+            return (
+              <Link
+                key={ticket.id}
+                href={`/tech/tickets/${ticket.id}`}
+                style={{ animationDelay: `${idx * 60}ms` }}
+                className={`glass-card bg-zinc-900/40 backdrop-blur-md p-5 cursor-pointer group animate-fade-in hover:-translate-y-1 transition-all duration-300 flex flex-col h-full border-l-4 ${pCfg.border} ${isGlow ? "ticket-glow" : ""}`}
+              >
+                {/* Top row: icon + ID + Badges */}
+                <div className="flex items-center justify-between w-full mb-6">
+                  {/* Left: Icon + ID */}
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                      style={{ background: `${catColor}14`, color: catColor }}
+                    >
+                      {getCategoryIcon(ticket.category ?? "")}
+                    </div>
+                    <span className="text-[10px] font-mono font-medium text-[hsl(var(--muted-foreground)/0.6)]">
+                      TK-{String(ticket.id).padStart(4, "0")}
+                    </span>
+                  </div>
+                  {/* Right: Status + Priority */}
+                  <div className="flex items-center gap-2">
+                    {/* Status Pill */}
+                    {isResolved ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md border border-emerald-500/30 text-[9px] font-black uppercase tracking-tighter text-emerald-400 bg-transparent">
+                        RÉSOLU
+                      </span>
+                    ) : (
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-md border text-[9px] font-black uppercase tracking-tighter bg-transparent ${sCfg.badge.replace("bg-", "bg-transparent border-").replace("text-", "text-").replace("/10", "/30")}`}
+                      >
+                        {sCfg.label}
+                      </span>
+                    )}
+                    {ticket.state === "escalated" && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md border border-purple-500/30 text-[9px] font-black uppercase tracking-tighter text-purple-400 bg-transparent">
+                        ESCALADÉ
+                      </span>
+                    )}
+                    {/* Priority Dot */}
+                    {!isResolved && (
+                      <div className="flex items-center gap-1.5 ml-1">
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${pCfg.dot}`}
+                        />
+                        <span className="text-[9px] font-black uppercase tracking-tighter text-[hsl(var(--muted-foreground)/0.8)]">
+                          {pCfg.label}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Title */}
+                <h3 className="text-sm font-bold leading-tight line-clamp-2 mb-1 group-hover:text-[hsl(var(--primary))] transition-colors">
+                  {ticket.name}
+                </h3>
+
+                {/* Description */}
+                <p className="text-[11px] text-[hsl(var(--muted-foreground)/0.8)] line-clamp-3 mb-3 leading-relaxed flex-grow">
+                  {ticket.description}
+                </p>
+
+                {/* Timeline Tracking */}
+                <div className="flex items-center justify-center gap-3 py-1.5 px-3 bg-zinc-900/30 rounded-lg border border-white/5 mb-3 mt-auto">
+                  <div className="flex items-center gap-1.5">
+                    <Calendar
+                      size={12}
+                      className="text-[hsl(var(--muted-foreground))]"
+                    />
+                    <span className="text-[10px] font-medium font-mono text-[hsl(var(--muted-foreground)/0.9)]">
+                      {formatDateCompact(ticket.create_date ?? null)}
+                    </span>
+                  </div>
+                  <ArrowRight
+                    size={10}
+                    className="text-[hsl(var(--muted-foreground)/0.5)]"
+                  />
+                  <div className="flex items-center gap-1.5">
+                    <Target
+                      size={12}
+                      className="text-[hsl(var(--muted-foreground))]"
+                    />
+                    <span
+                      className={`text-[10px] font-medium font-mono ${ticket.sla_status === "breached" ? "text-rose-500/80" : "text-[hsl(var(--muted-foreground)/0.9)]"}`}
+                    >
+                      {formatDateCompact(ticket.sla_deadline ?? null)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* SLA Linear Bar */}
+                <LinearSlaBar
+                  slaDeadline={ticket.sla_deadline ?? null}
+                  slaStatus={ticket.sla_status ?? null}
+                  priority={ticket.priority}
+                  state={ticket.state}
+                  dateResolved={ticket.date_resolved ?? null}
+                  xLastPauseDate={ticket.x_last_pause_date ?? null}
+                />
+
+                {/* Footer: Avatar + Category */}
+                <div className="flex items-center justify-between border-t border-[hsl(var(--border)/0.3)] pt-3 mt-3">
+                  {/* Assigned to */}
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0 ring-1 ring-white/20"
+                      style={{
+                        background: user?.name
+                          ? getAgentColor(user.name)
+                          : "#6366f1",
+                      }}
+                    >
+                      {user?.name ? (
+                        getAgentInitials(user.name)
+                      ) : (
+                        <User size={10} />
+                      )}
+                    </div>
+                    <span
+                      className="text-[11px] font-medium truncate max-w-[120px]"
+                      style={{
+                        color: user?.name
+                          ? getAgentColor(user.name)
+                          : "#6366f1",
+                      }}
+                    >
+                      {user?.name || "Moi"}
+                    </span>
+                  </div>
+
+                  {/* Category */}
+                  <span
+                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-[9px] font-bold uppercase tracking-wider"
+                    style={{
+                      backgroundColor: `${catColor}14`,
+                      borderColor: `${catColor}33`,
+                      color: catColor,
+                    }}
+                  >
+                    <div className="scale-75 origin-center -ml-1">
+                      {getCategoryIcon(ticket.category ?? "")}
+                    </div>
+                    {ticket.category || "Non classé"}
+                  </span>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
       ) : (
-        <div key={activeTab} className="space-y-2.5 animate-fade-in">
+        <div
+          key={`list-${activeTab}-${viewMode}`}
+          className="space-y-2.5 animate-fade-in"
+        >
           {currentList.map((ticket, idx) => (
             <div
               key={ticket.id}

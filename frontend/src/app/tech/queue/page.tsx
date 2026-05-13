@@ -21,8 +21,21 @@ import {
   Globe,
   ClipboardCheck,
   UserCog,
+  LayoutGrid,
+  List,
+  Key,
+  Laptop,
+  MessageSquare,
+  HardDrive,
+  Mail,
+  Server,
+  AlertCircle,
+  Calendar,
+  ArrowRight,
+  Target,
 } from "lucide-react";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import LinearSlaBar from "@/components/LinearSlaBar";
 import DualSlaGauge from "@/components/DualSlaGauge";
 import CompactTimeline from "@/components/CompactTimeline";
 import { useAuth } from "@/lib/auth";
@@ -36,25 +49,25 @@ const PRIORITY_MAP: Record<
   "3": {
     label: "Critique",
     dot: "bg-rose-500",
-    badge: "bg-rose-500/10 text-rose-500 border-rose-500/20",
+    badge: "bg-rose-500/10 text-rose-400 border-rose-500/20",
     border: "border-l-rose-500",
   },
   "2": {
     label: "Haute",
     dot: "bg-amber-500",
-    badge: "bg-amber-500/10 text-amber-500 border-amber-500/20",
+    badge: "bg-amber-500/10 text-amber-400 border-amber-500/20",
     border: "border-l-amber-500",
   },
   "1": {
     label: "Moyenne",
     dot: "bg-blue-500",
-    badge: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+    badge: "bg-blue-500/10 text-blue-400 border-blue-500/20",
     border: "border-l-blue-500",
   },
   "0": {
     label: "Basse",
     dot: "bg-slate-400",
-    badge: "bg-slate-500/10 text-slate-500 border-slate-500/20",
+    badge: "bg-slate-500/10 text-slate-400 border-slate-500/20",
     border: "border-l-slate-400",
   },
 };
@@ -96,6 +109,55 @@ type Agent = {
   is_expert: boolean;
 };
 
+// ── Category helpers ─────────────────────────────────────────────────────
+function getCategoryIcon(cat: string) {
+  if (!cat) return <AlertCircle size={16} />;
+  const lcat = cat.toLowerCase();
+  if (lcat.includes("réseau")) return <Globe size={16} />;
+  if (lcat.includes("accès")) return <Key size={16} />;
+  if (lcat.includes("logiciel")) return <Laptop size={16} />;
+  if (lcat.includes("matériel")) return <HardDrive size={16} />;
+  if (lcat.includes("messagerie")) return <Mail size={16} />;
+  if (lcat.includes("infrastructure")) return <Server size={16} />;
+  return <AlertCircle size={16} />;
+}
+function getCategoryColor(cat: string): string {
+  if (!cat) return "#71717a";
+  const lcat = cat.toLowerCase();
+  if (lcat.includes("réseau")) return "#6366f1";
+  if (lcat.includes("accès")) return "#f59e0b";
+  if (lcat.includes("logiciel")) return "#8b5cf6";
+  if (lcat.includes("matériel")) return "#10b981";
+  if (lcat.includes("messagerie")) return "#ec4899";
+  if (lcat.includes("infrastructure")) return "#06b6d4";
+  return "#71717a";
+}
+
+function getAgentInitials(name: string) {
+  return name
+    .trim()
+    .split(" ")
+    .filter(Boolean)
+    .map((p) => p[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
+
+function formatDateCompact(d: string | null) {
+  if (!d) return "--";
+  const date = new Date(d);
+  if (isNaN(date.getTime())) return "--";
+  return date
+    .toLocaleString("fr-FR", {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+    .replace(",", "");
+}
+
 function QueuePage() {
   const { user } = useAuth();
   const isAdmin = user?.x_support_role === "admin";
@@ -105,6 +167,7 @@ function QueuePage() {
   );
   const [loading, setLoading] = useState(true);
   const [selectedPriority, setSelectedPriority] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
 
   // Dispatch modal state
   const [dispatchTicket, setDispatchTicket] = useState<QueueTicket | null>(
@@ -350,7 +413,7 @@ function QueuePage() {
           </div>
           <div className="flex items-center gap-4">
             {selectedPriority && (
-              <span className="text-sm font-medium text-[hsl(var(--primary))] animate-fade-in">
+              <span className="text-sm font-medium text-[hsl(var(--primary))] animate-fade-in hidden sm:inline">
                 {filteredTickets.length} ticket
                 {filteredTickets.length > 1 ? "s" : ""}{" "}
                 {PRIORITY_MAP[selectedPriority]?.label.toLowerCase()}
@@ -358,6 +421,7 @@ function QueuePage() {
                 {filteredTickets.length > 1 ? "s" : ""}
               </span>
             )}
+
             <button
               onClick={async () => {
                 setLoading(true);
@@ -408,38 +472,66 @@ function QueuePage() {
           </div>
         )}
 
-        {/* Stats rapides */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {tabPriorities.map((p) => {
-            const cfg = PRIORITY_MAP[p.id] || {
-              badge: "bg-gray-500/10 text-gray-500 border-gray-500/20",
-              dot: "bg-gray-500",
-            };
-            return (
-              <div
-                key={p.id}
-                onClick={() =>
-                  setSelectedPriority(selectedPriority === p.id ? null : p.id)
-                }
-                className={`glass-card px-4 py-3 flex items-center gap-3 border cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95
-                  ${selectedPriority === p.id ? "ring-2 ring-[hsl(var(--primary))] border-transparent shadow-lg" : selectedPriority ? "opacity-40 grayscale-[0.5]" : "hover:border-[hsl(var(--primary)/0.5)]"}
-                  ${cfg.badge}`}
-              >
-                <span
-                  className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${cfg.dot}`}
-                />
-                <div>
-                  <p className="text-xs font-medium opacity-70">{p.label}</p>
-                  <p className="text-xl font-bold">{p.count}</p>
+        {/* Stats rapides + View Toggle */}
+        <div className="flex items-center gap-3">
+          <div className="w-full grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {tabPriorities.map((p) => {
+              const cfg = PRIORITY_MAP[p.id] || {
+                badge: "bg-gray-500/10 text-gray-500 border-gray-500/20",
+                dot: "bg-gray-500",
+              };
+              return (
+                <div
+                  key={p.id}
+                  onClick={() =>
+                    setSelectedPriority(selectedPriority === p.id ? null : p.id)
+                  }
+                  className={`glass-card px-4 py-3 flex items-center gap-3 border cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95
+                    ${selectedPriority === p.id ? "ring-2 ring-[hsl(var(--primary))] border-transparent shadow-lg" : selectedPriority ? "opacity-40 grayscale-[0.5]" : "hover:border-[hsl(var(--primary)/0.5)]"}
+                    ${cfg.badge}`}
+                >
+                  <span
+                    className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${cfg.dot}`}
+                  />
+                  <div>
+                    <p className="text-xs font-medium opacity-70">{p.label}</p>
+                    <p className="text-xl font-bold">{p.count}</p>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
+        </div>
+
+        {/* View Toggle */}
+        <div className="flex justify-end mt-6 mb-4">
+          <div className="view-toggle bg-[hsl(var(--background)/0.5)] border border-[hsl(var(--border)/0.5)]">
+            <button
+              onClick={() => setViewMode("cards")}
+              className={viewMode === "cards" ? "active" : ""}
+              title="Vue cartes"
+            >
+              <LayoutGrid size={15} />
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={viewMode === "list" ? "active" : ""}
+              title="Vue liste"
+            >
+              <List size={15} />
+            </button>
+          </div>
         </div>
 
         {/* Liste */}
         {loading ? (
-          <div className="space-y-3">
+          <div
+            className={
+              viewMode === "cards"
+                ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
+                : "space-y-3"
+            }
+          >
             {[1, 2, 3].map((i) => (
               <div
                 key={i}
@@ -460,8 +552,226 @@ function QueuePage() {
               Tous les tickets ont été pris en charge.
             </p>
           </div>
+        ) : viewMode === "cards" ? (
+          <div
+            key={`cards-view-${viewMode}`}
+            className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 animate-fade-in"
+          >
+            {sorted.map((ticket, idx) => {
+              const pCfg = PRIORITY_MAP[ticket.priority] || {
+                border: "border-l-gray-500",
+                badge: "bg-gray-500/10 text-gray-500 border-gray-500/20",
+                dot: "bg-gray-500",
+                label: "",
+              };
+              const catColor = getCategoryColor(ticket.category ?? "");
+              return (
+                <div
+                  key={ticket.id}
+                  style={{ animationDelay: `${idx * 60}ms` }}
+                  className={`animate-fade-in glass-card bg-zinc-900/40 backdrop-blur-md p-5 flex flex-col h-full border-l-4 ${pCfg.border} cursor-pointer group hover:-translate-y-1 transition-all duration-300`}
+                  onClick={
+                    isAdmin
+                      ? () => openDispatch(ticket)
+                      : () => openTechModal(ticket)
+                  }
+                >
+                  {/* Top: icon + ID + badges */}
+                  <div className="flex items-center justify-between w-full mb-6">
+                    {/* Left: Icon + ID */}
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                        style={{ background: `${catColor}14`, color: catColor }}
+                      >
+                        {getCategoryIcon(ticket.category ?? "")}
+                      </div>
+                      <span className="text-[10px] font-mono font-medium text-[hsl(var(--muted-foreground)/0.6)]">
+                        TK-{String(ticket.id).padStart(4, "0")}
+                      </span>
+                    </div>
+                    {/* Right: Badges */}
+                    <div className="flex items-center gap-2">
+                      {/* Status Pills */}
+                      {!ticket.assigned_to_id && (
+                        <span className="flex items-center px-2 py-0.5 rounded-md border text-[9px] font-black uppercase tracking-tighter bg-transparent border-sky-500/30 text-sky-400">
+                          OUVERT
+                        </span>
+                      )}
+                      {ticket.assigned_to_id === user?.id &&
+                        !ticket.x_accepted && (
+                          <span className="flex items-center px-2 py-0.5 rounded-md border text-[9px] font-black uppercase tracking-tighter bg-transparent border-emerald-500/30 text-emerald-400 animate-pulse">
+                            MISSION ASSIGNÉE
+                          </span>
+                        )}
+                      {ticket.state === "escalated" && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md border text-[9px] font-black uppercase tracking-tighter bg-transparent border-purple-500/30 text-purple-400">
+                          ESCALADÉ
+                        </span>
+                      )}
+                      {/* Priority Dot */}
+                      <div className="flex items-center gap-1.5 ml-1">
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${pCfg.dot}`}
+                        />
+                        <span className="text-[9px] font-black uppercase tracking-tighter text-[hsl(var(--muted-foreground)/0.8)]">
+                          {ticket.priority_label ||
+                            pCfg.label ||
+                            ticket.priority}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Title */}
+                  <h3 className="text-sm font-bold leading-tight line-clamp-2 mb-1 group-hover:text-[hsl(var(--primary))] transition-colors">
+                    {ticket.name}
+                  </h3>
+                  <p className="text-[11px] text-[hsl(var(--muted-foreground)/0.8)] line-clamp-3 mb-3 leading-relaxed flex-grow">
+                    {ticket.description}
+                  </p>
+
+                  {/* Timeline Tracking */}
+                  <div className="flex items-center justify-center gap-3 py-1.5 px-3 bg-zinc-900/30 rounded-lg border border-white/5 mb-3 mt-auto">
+                    <div className="flex items-center gap-1.5">
+                      <Calendar
+                        size={12}
+                        className="text-[hsl(var(--muted-foreground))]"
+                      />
+                      <span className="text-[10px] font-medium font-mono text-[hsl(var(--muted-foreground)/0.9)]">
+                        {formatDateCompact(ticket.create_date ?? null)}
+                      </span>
+                    </div>
+                    <ArrowRight
+                      size={10}
+                      className="text-[hsl(var(--muted-foreground)/0.5)]"
+                    />
+                    <div className="flex items-center gap-1.5">
+                      <Target
+                        size={12}
+                        className="text-[hsl(var(--muted-foreground))]"
+                      />
+                      <span
+                        className={`text-[10px] font-medium font-mono ${ticket.sla_response_status === "breached" || ticket.sla_status === "breached" ? "text-rose-500/80" : "text-[hsl(var(--muted-foreground)/0.9)]"}`}
+                      >
+                        {formatDateCompact(
+                          ticket.sla_response_deadline ??
+                            ticket.sla_deadline ??
+                            null,
+                        )}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* SLA Linear Bar */}
+                  <LinearSlaBar
+                    type={
+                      ticket.sla_response_deadline ? "response" : "resolution"
+                    }
+                    slaDeadline={
+                      ticket.sla_response_deadline ??
+                      ticket.sla_deadline ??
+                      null
+                    }
+                    slaStatus={
+                      ticket.sla_response_status ?? ticket.sla_status ?? null
+                    }
+                    priority={ticket.priority}
+                    state={ticket.state}
+                    dateResolved={ticket.date_resolved ?? null}
+                    xLastPauseDate={ticket.x_last_pause_date ?? null}
+                  />
+
+                  {/* Footer: metadata */}
+                  <div className="flex items-center justify-between pt-3 mt-auto border-t border-[hsl(var(--border)/0.3)]">
+                    <div className="flex items-center gap-2 text-[hsl(var(--muted-foreground))]">
+                      {ticket.user_name ? (
+                        <>
+                          <div className="w-5 h-5 rounded-full bg-[hsl(var(--muted))] flex items-center justify-center flex-shrink-0">
+                            <User2
+                              size={10}
+                              className="text-[hsl(var(--foreground))]"
+                            />
+                          </div>
+                          <span className="text-[11px] font-medium truncate max-w-[120px] text-[hsl(var(--foreground))]">
+                            {ticket.user_name}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-[11px] italic opacity-40">
+                          Client inconnu
+                        </span>
+                      )}
+                    </div>
+                    {ticket.category && (
+                      <span
+                        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-[9px] font-bold uppercase tracking-wider"
+                        style={{
+                          backgroundColor: `${catColor}14`,
+                          borderColor: `${catColor}33`,
+                          color: catColor,
+                        }}
+                      >
+                        <div className="scale-75 origin-center -ml-1">
+                          {getCategoryIcon(ticket.category ?? "")}
+                        </div>
+                        {ticket.category}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Action button */}
+                  <div className="mt-3 pt-3 border-t border-[hsl(var(--border)/0.3)]">
+                    {isAdmin ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openDispatch(ticket);
+                        }}
+                        className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all"
+                      >
+                        <Users size={14} /> Assigner à
+                      </button>
+                    ) : ticket.assigned_to_id === user?.id &&
+                      !ticket.x_accepted ? (
+                      <button
+                        disabled={assigning === ticket.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAccept(ticket.id);
+                        }}
+                        className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all disabled:opacity-50"
+                      >
+                        <ShieldCheck size={14} />
+                        {assigning === ticket.id
+                          ? "Acceptation..."
+                          : "Accepter la mission"}
+                      </button>
+                    ) : (
+                      <button
+                        disabled={assigning === ticket.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAssign(ticket.id);
+                        }}
+                        className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition-all disabled:opacity-50"
+                      >
+                        <Inbox size={14} />
+                        {assigning === ticket.id
+                          ? "Assignation..."
+                          : "Prendre en charge"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         ) : (
-          <div className="space-y-3 animate-fade-in">
+          <div
+            key={`list-view-${viewMode}`}
+            className="space-y-3 animate-fade-in"
+          >
             {sorted.map((ticket, idx) => {
               const pCfg = PRIORITY_MAP[ticket.priority] || {
                 border: "border-l-gray-500",
@@ -493,14 +803,19 @@ function QueuePage() {
                         <span className="inline-block text-[10px] font-mono text-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted))] px-1.5 py-0.5 rounded uppercase">
                           #{ticket.id}
                         </span>
-                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full border text-[10px] uppercase tracking-wider font-semibold ${pCfg.badge}`}>
-                          {ticket.priority_label || pCfg.label || ticket.priority}
+                        <span
+                          className={`inline-flex items-center px-1.5 py-0.5 rounded-full border text-[10px] uppercase tracking-wider font-semibold ${pCfg.badge}`}
+                        >
+                          {ticket.priority_label ||
+                            pCfg.label ||
+                            ticket.priority}
                         </span>
                         {!ticket.assigned_to_id ? (
                           <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[10px] font-black uppercase tracking-widest bg-sky-500/10 text-sky-500 border-sky-500/20">
                             <Globe size={10} /> OUVERT
                           </span>
-                        ) : ticket.assigned_to_id === user?.id && !ticket.x_accepted ? (
+                        ) : ticket.assigned_to_id === user?.id &&
+                          !ticket.x_accepted ? (
                           <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[10px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-500 border-emerald-500/20 animate-pulse">
                             <ArrowUpCircle size={10} /> MISSION ASSIGNÉE
                           </span>
@@ -551,7 +866,7 @@ function QueuePage() {
                           </span>
                         </div>
                       )}
-                      
+
                       {/* Timeline Compacte Contextuelle */}
                       {ticket.create_date && (
                         <CompactTimeline
@@ -744,7 +1059,9 @@ function QueuePage() {
                 {(() => {
                   const availableTechs = agents.filter((tech) => {
                     if (dispatchTicket?.state === "escalated") {
-                      return !dispatchTicket.escalated_by_tech_ids?.includes(tech.id);
+                      return !dispatchTicket.escalated_by_tech_ids?.includes(
+                        tech.id,
+                      );
                     }
                     return true;
                   });
