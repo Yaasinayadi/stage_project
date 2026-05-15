@@ -2,24 +2,36 @@
 <odoo>
     <data>
         <!--
-            Inherit the standard res.users form view to expose:
-            - x_support_role : read-only computed badge showing IT support role
-            - it_domain_ids  : IT expertise domains (Many2many, visible only for Technicians)
+            Inherit the standard res.users form view to add:
+            - x_support_role : IT support role (computed, read-only)
+            - x_hourly_rate  : tarif horaire du technicien
+            - it_domain_ids  : domaines d'expertise IT
+            Targeted at Odoo 19 — uses the real page names from the base form.
         -->
         <record id="view_users_form_it_support" model="ir.ui.view">
             <field name="name">res.users.form.it_support</field>
             <field name="model">res.users</field>
             <field name="inherit_id" ref="base.view_users_form"/>
             <field name="arch" type="xml">
-                <!-- Insert IT Support fields right after the native "role" field -->
-                <xpath expr="//field[@name='role']" position="after">
-                    <field name="x_support_role"
-                           string="IT Support Role (computed)"
-                           readonly="1"/>
-                    <field name="it_domain_ids"
-                           string="Domaines d'expertise IT"
-                           widget="many2many_tags"
-                           invisible="x_support_role != 'tech'"/>
+                <!-- Ajouter un onglet "Support IT" après l'onglet "Access Rights" -->
+                <xpath expr="//page[@name='access_rights']" position="after">
+                    <page string="Support IT" name="support_it" invisible="x_support_role != 'tech'">
+                        <group string="Facturation">
+                            <field name="x_support_role"
+                                   string="Rôle IT Support"
+                                   readonly="1"/>
+                            <field name="x_is_admin" invisible="1"/>
+                            <field name="x_hourly_rate"
+                                   string="Tarif Horaire (DH)"
+                                   readonly="not x_is_admin"/>
+                        </group>
+                        <group string="Domaines d'Expertise">
+                            <field name="it_domain_ids"
+                                   string="Domaines d'expertise IT"
+                                   widget="many2many_tags"
+                                   nolabel="1"/>
+                        </group>
+                    </page>
                 </xpath>
             </field>
         </record>
@@ -27,14 +39,15 @@
         <record id="action_res_users_support" model="ir.actions.act_window">
             <field name="name">Gestion des Utilisateurs</field>
             <field name="res_model">res.users</field>
-            <field name="view_mode">list,form</field>
-            <field name="domain">[('id', '>', 2)]</field> <!-- Skip OdooBot and superuser -->
+            <field name="view_mode">list,kanban,form</field>
+            <field name="domain">[('id', '>', 2)]</field>
+            <field name="search_view_id" ref="base.view_users_search"/>
         </record>
 
-        <menuitem id="menu_support_users" 
-                  name="Utilisateurs" 
-                  parent="menu_root" 
-                  action="action_res_users_support" 
+        <menuitem id="menu_support_users"
+                  name="Utilisateurs"
+                  parent="menu_root"
+                  action="action_res_users_support"
                   sequence="40"/>
     </data>
 </odoo>

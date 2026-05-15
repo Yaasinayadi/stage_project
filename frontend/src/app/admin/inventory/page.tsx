@@ -4,9 +4,29 @@ import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { ODOO_URL } from "@/lib/config";
 import {
-  PackageCheck, PackageSearch, ArrowLeft, Inbox, History,
-  Check, ChevronDown, ChevronUp, PackageX, Wallet, ClipboardList,
-  Warehouse, RefreshCw, Plus, Minus, X, Loader2, ShoppingCart, Truck, Search, Save
+  PackageCheck,
+  PackageSearch,
+  ArrowLeft,
+  Inbox,
+  History,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  PackageX,
+  Wallet,
+  ClipboardList,
+  Warehouse,
+  RefreshCw,
+  Plus,
+  Minus,
+  X,
+  Loader2,
+  ShoppingCart,
+  Truck,
+  Search,
+  Save,
+  Database,
+  Tag,
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -22,6 +42,7 @@ type InventoryLine = {
   material_id: number;
   material_name: string;
   material_reference: string;
+  quantity: number;
   qty_available: number;
   unit_cost: number;
   status: "requested" | "ready" | "ordered";
@@ -48,11 +69,32 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const getPriorityBadge = (priority?: string) => {
   switch (priority) {
-    case "3": return <span className="inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-bold rounded bg-red-500/10 text-red-500 border border-red-500/20">Critique</span>;
-    case "2": return <span className="inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-bold rounded bg-orange-500/10 text-orange-500 border border-orange-500/20">Haute</span>;
-    case "1": return <span className="inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-bold rounded bg-blue-500/10 text-blue-500 border border-blue-500/20">Moyenne</span>;
-    case "0": return <span className="inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-bold rounded bg-slate-500/10 text-slate-500 border border-slate-500/20">Basse</span>;
-    default: return null;
+    case "3":
+      return (
+        <span className="inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-bold rounded bg-red-500/10 text-red-500 border border-red-500/20">
+          Critique
+        </span>
+      );
+    case "2":
+      return (
+        <span className="inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-bold rounded bg-orange-500/10 text-orange-500 border border-orange-500/20">
+          Haute
+        </span>
+      );
+    case "1":
+      return (
+        <span className="inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-bold rounded bg-blue-500/10 text-blue-500 border border-blue-500/20">
+          Moyenne
+        </span>
+      );
+    case "0":
+      return (
+        <span className="inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-bold rounded bg-slate-500/10 text-slate-500 border border-slate-500/20">
+          Basse
+        </span>
+      );
+    default:
+      return null;
   }
 };
 
@@ -64,7 +106,10 @@ const getInitials = (name: string) => {
 };
 
 const fmt = (n: number | undefined | null) =>
-  (n ?? 0).toLocaleString("fr-MA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  (n ?? 0).toLocaleString("fr-MA", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -73,6 +118,7 @@ export default function AdminInventoryPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [totalLaborCost, setTotalLaborCost] = useState(0);
 
   // Catalog state
   const [showCatalog, setShowCatalog] = useState(false);
@@ -84,14 +130,19 @@ export default function AdminInventoryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategories, setActiveCategories] = useState<string[]>([]);
   const [draftStock, setDraftStock] = useState<Record<number, number>>({});
+  const [draftPrices, setDraftPrices] = useState<Record<number, number>>({});
 
-  const catalogCategories = Array.from(new Set(catalog.map(c => CATEGORY_LABELS[c.category] || c.category))).sort();
+  const catalogCategories = Array.from(
+    new Set(catalog.map((c) => CATEGORY_LABELS[c.category] || c.category)),
+  ).sort();
 
   const filteredCatalog = catalog.filter((item) => {
     const catLabel = CATEGORY_LABELS[item.category] || item.category;
-    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          (item.reference || "").toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCat = activeCategories.length === 0 || activeCategories.includes(catLabel);
+    const matchesSearch =
+      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (item.reference || "").toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCat =
+      activeCategories.length === 0 || activeCategories.includes(catLabel);
     return matchesSearch && matchesCat;
   });
 
@@ -99,7 +150,10 @@ export default function AdminInventoryPage() {
   const fetchInventory = useCallback(async () => {
     try {
       const res = await axios.get(`${ODOO_URL}/api/admin/inventory`);
-      if (res.data.status === 200) setLines(res.data.data);
+      if (res.data.status === 200) {
+        setLines(res.data.data);
+        setTotalLaborCost(res.data.total_labor_cost || 0);
+      }
     } catch {
       toast.error("Erreur de chargement de l'inventaire.");
     } finally {
@@ -107,7 +161,9 @@ export default function AdminInventoryPage() {
     }
   }, []);
 
-  useEffect(() => { fetchInventory(); }, [fetchInventory]);
+  useEffect(() => {
+    fetchInventory();
+  }, [fetchInventory]);
 
   // ── Fetch catalog ────────────────────────────────────────────────────────────
   const openCatalog = async () => {
@@ -127,7 +183,9 @@ export default function AdminInventoryPage() {
   const handleMarkReady = async (lineId: number) => {
     setActionLoading(lineId);
     try {
-      const res = await axios.post(`${ODOO_URL}/api/admin/inventory/${lineId}/ready`);
+      const res = await axios.post(
+        `${ODOO_URL}/api/admin/inventory/${lineId}/ready`,
+      );
       if (res.data.status === 200) {
         toast.success("Ressource allouée et stock mis à jour.");
         fetchInventory(); // Rafraîchir tout l'inventaire
@@ -145,11 +203,16 @@ export default function AdminInventoryPage() {
   const handleOrderMaterial = async (line: InventoryLine) => {
     setActionLoading(line.id);
     try {
-      const res = await axios.post(`${ODOO_URL}/api/ticket/${line.ticket_id}/order_material`, {
-        material_id: line.material_id
-      });
+      const res = await axios.post(
+        `${ODOO_URL}/api/ticket/${line.ticket_id}/order_material`,
+        {
+          material_id: line.material_id,
+        },
+      );
       if (res.data.status === 200) {
-        toast.success("La commande de la ressource a été enregistrée dans le système.");
+        toast.success(
+          "La commande de la ressource a été enregistrée dans le système.",
+        );
         fetchInventory(); // Rafraîchir tout l'inventaire
       } else {
         toast.error(res.data.message || "Erreur.");
@@ -163,9 +226,14 @@ export default function AdminInventoryPage() {
   };
 
   // ── Update stock (Draft & Save) ─────────────────────────────────────────────
-  const handleDraftStockDelta = (materialId: number, originalQty: number, delta: number) => {
-    setDraftStock(prev => {
-      const currentDraft = prev[materialId] !== undefined ? prev[materialId] : originalQty;
+  const handleDraftStockDelta = (
+    materialId: number,
+    originalQty: number,
+    delta: number,
+  ) => {
+    setDraftStock((prev) => {
+      const currentDraft =
+        prev[materialId] !== undefined ? prev[materialId] : originalQty;
       const newDraft = Math.max(0, currentDraft + delta);
       return { ...prev, [materialId]: newDraft };
     });
@@ -174,21 +242,28 @@ export default function AdminInventoryPage() {
   const handleSaveStock = async (materialId: number, originalQty: number) => {
     const draftQty = draftStock[materialId];
     if (draftQty === undefined || draftQty === originalQty) return;
-    
+
     setStockLoading(materialId);
     const delta = draftQty - originalQty;
     try {
-      const res = await axios.patch(`${ODOO_URL}/api/admin/catalog/${materialId}/stock`, { delta });
+      const res = await axios.patch(
+        `${ODOO_URL}/api/admin/catalog/${materialId}/stock`,
+        { delta },
+      );
       if (res.data.status === 200) {
         toast.success("Stock mis à jour.", { icon: <Save size={16} /> });
         const newQty = res.data.qty_available;
         setCatalog((prev) =>
-          prev.map((m) => (m.id === materialId ? { ...m, qty_available: newQty } : m))
+          prev.map((m) =>
+            m.id === materialId ? { ...m, qty_available: newQty } : m,
+          ),
         );
         setLines((prev) =>
-          prev.map((l) => (l.material_id === materialId ? { ...l, qty_available: newQty } : l))
+          prev.map((l) =>
+            l.material_id === materialId ? { ...l, qty_available: newQty } : l,
+          ),
         );
-        setDraftStock(prev => {
+        setDraftStock((prev) => {
           const next = { ...prev };
           delete next[materialId];
           return next;
@@ -203,22 +278,67 @@ export default function AdminInventoryPage() {
     }
   };
 
+  const handleDraftPriceChange = (materialId: number, value: string) => {
+    const val = parseFloat(value);
+    setDraftPrices((prev) => ({ ...prev, [materialId]: isNaN(val) ? 0 : val }));
+  };
+
+  const hasAnyChanges = Object.keys(draftStock).length > 0 || Object.keys(draftPrices).length > 0;
+
+  const handleSaveBatch = async () => {
+    if (!hasAnyChanges) return;
+    
+    setCatalogLoading(true);
+    const updates = catalog.map(item => {
+      const updatedQty = draftStock[item.id] !== undefined ? draftStock[item.id] : item.qty_available;
+      const updatedPrice = draftPrices[item.id] !== undefined ? draftPrices[item.id] : item.unit_cost;
+      
+      if (updatedQty !== item.qty_available || updatedPrice !== item.unit_cost) {
+        return { id: item.id, qty_available: updatedQty, unit_cost: updatedPrice };
+      }
+      return null;
+    }).filter(Boolean);
+
+    try {
+      const res = await axios.patch(`${ODOO_URL}/api/admin/catalog/batch`, { updates });
+      if (res.data.status === 200) {
+        toast.success("Inventaire et tarifs mis à jour avec succès.", { icon: <PackageCheck size={18} /> });
+        setDraftStock({});
+        setDraftPrices({});
+        openCatalog();
+        fetchInventory();
+      } else {
+        toast.error(res.data.message || "Erreur de mise à jour du catalogue.");
+      }
+    } catch {
+      toast.error("Impossible de modifier le catalogue.");
+    } finally {
+      setCatalogLoading(false);
+    }
+  };
+
   // ── Derived stats ────────────────────────────────────────────────────────────
-  const requestedLines = lines.filter((l) => l.status === "requested" || l.status === "ordered");
+  const requestedLines = lines.filter(
+    (l) => l.status === "requested" || l.status === "ordered",
+  );
   const readyLines = lines.filter((l) => l.status === "ready");
-  const ruptures = requestedLines.filter((l) => l.qty_available === 0).length;
-  const valeurEngagee = requestedLines.reduce((s, l) => s + (l.unit_cost || 0), 0);
+  const ruptures = requestedLines.filter((l) => l.qty_available === 0 || l.qty_available < (l.quantity || 1)).length;
+  // Valeur engagée = coût matériel actif + coût main d'œuvre des tickets actifs
+  const materialCost = requestedLines.reduce((s, l) => s + ((l.unit_cost || 0) * (l.quantity || 1)), 0);
+  const valeurEngagee = materialCost + totalLaborCost;
 
   // ─────────────────────────────────────────────────────────────────────────────
   return (
     <ProtectedRoute roles={["admin"]}>
       <div className="flex-1 overflow-y-auto custom-scrollbar bg-[hsl(var(--background))] p-6 space-y-6">
         <div className="max-w-6xl mx-auto space-y-6 animate-fade-in-up">
-
           {/* ── Header ────────────────────────────────────────────────────────── */}
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
             <div>
-              <Link href="/tickets" className="text-xs font-semibold text-[hsl(var(--muted-foreground))] flex items-center gap-1 hover:text-[hsl(var(--foreground))] transition-colors mb-2 w-fit">
+              <Link
+                href="/tickets"
+                className="text-xs font-semibold text-[hsl(var(--muted-foreground))] flex items-center gap-1 hover:text-[hsl(var(--foreground))] transition-colors mb-2 w-fit"
+              >
                 <ArrowLeft size={14} /> Retour
               </Link>
               <h1 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-3">
@@ -226,14 +346,23 @@ export default function AdminInventoryPage() {
                 Gestion des Ressources
               </h1>
               <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">
-                Gérez les demandes de matériel des techniciens et validez leur disponibilité.
+                Gérez les demandes de matériel des techniciens et validez leur
+                disponibilité.
               </p>
             </div>
             <button
               onClick={showCatalog ? () => setShowCatalog(false) : openCatalog}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--secondary)/0.3)] hover:bg-[hsl(var(--secondary)/0.6)] text-sm font-semibold transition-all shrink-0"
             >
-              {showCatalog ? <><X size={15} /> Fermer l&apos;inventaire</> : <><Warehouse size={15} /> Voir l&apos;Inventaire Complet</>}
+              {showCatalog ? (
+                <>
+                  <X size={15} /> Fermer l&apos;inventaire
+                </>
+              ) : (
+                <>
+                  <Warehouse size={15} /> Voir l&apos;Inventaire Complet
+                </>
+              )}
             </button>
           </div>
 
@@ -241,10 +370,17 @@ export default function AdminInventoryPage() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {/* Demandes actives */}
             <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-[hsl(var(--border)/0.6)] bg-[hsl(var(--secondary)/0.08)]">
-              <ClipboardList size={16} className="text-[hsl(var(--primary))] shrink-0" />
+              <ClipboardList
+                size={16}
+                className="text-[hsl(var(--primary))] shrink-0"
+              />
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--muted-foreground))]">Demandes actives</p>
-                <p className="text-xl font-black text-[hsl(var(--foreground))]">{requestedLines.length}</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--muted-foreground))]">
+                  Demandes actives
+                </p>
+                <p className="text-xl font-black text-[hsl(var(--foreground))]">
+                  {requestedLines.length}
+                </p>
               </div>
             </div>
 
@@ -252,8 +388,14 @@ export default function AdminInventoryPage() {
             <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-[hsl(var(--border)/0.6)] bg-[hsl(var(--secondary)/0.08)]">
               <PackageX size={16} className="text-rose-500 shrink-0" />
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--muted-foreground))]">Ruptures</p>
-                <p className={`text-xl font-black ${ruptures > 0 ? "text-rose-500" : "text-[hsl(var(--foreground))]"}`}>{ruptures}</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--muted-foreground))]">
+                  Ruptures
+                </p>
+                <p
+                  className={`text-xl font-black ${ruptures > 0 ? "text-rose-500" : "text-[hsl(var(--foreground))]"}`}
+                >
+                  {ruptures}
+                </p>
               </div>
             </div>
 
@@ -261,8 +403,15 @@ export default function AdminInventoryPage() {
             <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-[hsl(var(--border)/0.6)] bg-[hsl(var(--secondary)/0.08)]">
               <Wallet size={16} className="text-emerald-500 shrink-0" />
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--muted-foreground))]">Valeur engagée</p>
-                <p className="text-xl font-black text-[hsl(var(--foreground))]">{fmt(valeurEngagee)} DH</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--muted-foreground))]">
+                  Valeur engagée
+                </p>
+                <p className="text-xl font-black text-[hsl(var(--foreground))]">
+                  {fmt(valeurEngagee)} DH
+                </p>
+                <p className="text-[9px] text-[hsl(var(--muted-foreground))] mt-0.5">
+                  Matériel {fmt(materialCost)} + MO {fmt(totalLaborCost)}
+                </p>
               </div>
             </div>
           </div>
@@ -270,28 +419,46 @@ export default function AdminInventoryPage() {
           {/* ── Catalog View ─────────────────────────────────────────────────── */}
           {showCatalog && (
             <div className="rounded-xl border border-[hsl(var(--border)/0.6)] bg-[hsl(var(--secondary)/0.06)] overflow-hidden">
-              <div className="px-5 py-4 border-b border-[hsl(var(--border)/0.4)]">
+              <div className="px-5 py-4 border-b border-[hsl(var(--border)/0.4)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <h2 className="text-xs font-black uppercase tracking-[0.2em] text-[hsl(var(--muted-foreground))] flex items-center gap-2">
                   <Warehouse size={14} />
                   Inventaire Complet
                 </h2>
+                {hasAnyChanges && (
+                  <button
+                    onClick={handleSaveBatch}
+                    disabled={catalogLoading}
+                    className="flex items-center gap-2 px-4 py-2 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.9)] text-primary-foreground text-xs font-bold rounded-lg transition-all shadow-sm disabled:opacity-50"
+                  >
+                    {catalogLoading ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                    Enregistrer les modifications
+                  </button>
+                )}
               </div>
 
               {catalogLoading ? (
                 <div className="flex justify-center p-10">
-                  <Loader2 className="animate-spin text-[hsl(var(--muted-foreground))]" size={28} />
+                  <Loader2
+                    className="animate-spin text-[hsl(var(--muted-foreground))]"
+                    size={28}
+                  />
                 </div>
               ) : catalog.length === 0 ? (
                 <div className="flex flex-col items-center justify-center p-10">
                   <Inbox size={28} className="opacity-20 mb-2" />
-                  <p className="text-sm text-[hsl(var(--muted-foreground))]">Aucun article dans le catalogue.</p>
+                  <p className="text-sm text-[hsl(var(--muted-foreground))]">
+                    Aucun article dans le catalogue.
+                  </p>
                 </div>
               ) : (
                 <div className="flex flex-col">
                   {/* Filters Bar */}
                   <div className="px-5 py-4 border-b border-[hsl(var(--border)/0.4)] bg-[hsl(var(--background)/0.5)] space-y-4">
                     <div className="relative w-full md:max-w-md">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" size={16} />
+                      <Search
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]"
+                        size={16}
+                      />
                       <input
                         type="text"
                         placeholder="Rechercher par nom ou référence..."
@@ -300,14 +467,20 @@ export default function AdminInventoryPage() {
                         className="w-full bg-[hsl(var(--secondary)/0.5)] border border-[hsl(var(--border)/0.8)] focus:border-[hsl(var(--primary)/0.5)] rounded-lg pl-9 pr-4 py-2 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary)/0.2)] text-[hsl(var(--foreground))]"
                       />
                     </div>
-                    
+
                     <div className="flex flex-wrap gap-2">
-                      {catalogCategories.map(cat => {
+                      {catalogCategories.map((cat) => {
                         const isActive = activeCategories.includes(cat);
                         return (
                           <button
                             key={cat}
-                            onClick={() => setActiveCategories(prev => isActive ? prev.filter(c => c !== cat) : [...prev, cat])}
+                            onClick={() =>
+                              setActiveCategories((prev) =>
+                                isActive
+                                  ? prev.filter((c) => c !== cat)
+                                  : [...prev, cat],
+                              )
+                            }
                             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 border ${
                               isActive
                                 ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
@@ -331,25 +504,68 @@ export default function AdminInventoryPage() {
 
                   {filteredCatalog.length === 0 ? (
                     <div className="flex flex-col items-center justify-center p-10">
-                      <Search size={28} className="opacity-20 mb-2 text-[hsl(var(--muted-foreground))]" />
-                      <p className="text-sm text-[hsl(var(--muted-foreground))]">Aucun résultat trouvé pour votre recherche.</p>
+                      <Search
+                        size={28}
+                        className="opacity-20 mb-2 text-[hsl(var(--muted-foreground))]"
+                      />
+                      <p className="text-sm text-[hsl(var(--muted-foreground))]">
+                        Aucun résultat trouvé pour votre recherche.
+                      </p>
                     </div>
                   ) : (
                     <div className="divide-y divide-[hsl(var(--border)/0.3)] max-h-[500px] overflow-y-auto custom-scrollbar">
                       {filteredCatalog.map((item) => {
-                        const displayQty = draftStock[item.id] !== undefined ? draftStock[item.id] : item.qty_available;
-                        const hasChanges = draftStock[item.id] !== undefined && draftStock[item.id] !== item.qty_available;
+                        const displayQty =
+                          draftStock[item.id] !== undefined
+                            ? draftStock[item.id]
+                            : item.qty_available;
+                        const hasChanges =
+                          draftStock[item.id] !== undefined &&
+                          draftStock[item.id] !== item.qty_available;
+
+                        const displayPrice = draftPrices[item.id] !== undefined ? draftPrices[item.id] : item.unit_cost;
 
                         return (
-                          <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-5 py-3 hover:bg-[hsl(var(--secondary)/0.12)] transition-colors">
+                          <div
+                            key={item.id}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-5 py-3 hover:bg-[hsl(var(--secondary)/0.12)] transition-colors"
+                          >
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold text-[hsl(var(--foreground))] truncate">{item.name}</p>
-                              <p className="text-[11px] text-[hsl(var(--muted-foreground))] mt-0.5">
-                                {item.reference || "—"} &middot; {CATEGORY_LABELS[item.category] || item.category} &middot; {fmt(item.unit_cost)} DH
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-semibold text-[hsl(var(--foreground))] truncate">
+                                  {item.name}
+                                </p>
+                                {displayQty === 0 && (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20">
+                                    <PackageX size={10} /> RUPTURE
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-[hsl(var(--muted-foreground))] mt-0.5 flex items-center gap-2 flex-wrap">
+                                <span>{item.reference || "—"}</span>
+                                <span>&middot;</span>
+                                <span>{CATEGORY_LABELS[item.category] || item.category}</span>
                               </p>
                             </div>
                             <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0 w-full sm:w-auto mt-2 sm:mt-0">
-                              <div className="flex items-center gap-3 bg-[hsl(var(--background))] border border-[hsl(var(--border)/0.6)] rounded-lg p-1">
+                              {/* Price Block */}
+                              <div className="flex items-center gap-2 bg-[hsl(var(--background))] border border-[hsl(var(--border)/0.6)] rounded-lg p-1 h-10">
+                                <div className="flex items-center justify-center w-8 text-[hsl(var(--muted-foreground))]">
+                                  <Tag size={14} />
+                                </div>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={displayPrice}
+                                  onChange={(e) => handleDraftPriceChange(item.id, e.target.value)}
+                                  className="w-16 h-8 text-sm font-bold text-right bg-transparent border border-transparent hover:border-[hsl(var(--border))] focus:border-[hsl(var(--primary))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary)/0.3)] rounded transition-all text-[hsl(var(--foreground))] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                />
+                                <span className="text-[10px] font-bold text-[hsl(var(--muted-foreground))] pr-2">DH</span>
+                              </div>
+
+                              {/* Stock Block */}
+                              <div className="flex items-center gap-2 bg-[hsl(var(--background))] border border-[hsl(var(--border)/0.6)] rounded-lg p-1 h-10">
                                 <button
                                   disabled={displayQty === 0 || stockLoading === item.id}
                                   onClick={() => handleDraftStockDelta(item.id, item.qty_available, -1)}
@@ -357,9 +573,18 @@ export default function AdminInventoryPage() {
                                 >
                                   <Minus size={14} />
                                 </button>
-                                <span className={`text-sm font-bold tabular-nums min-w-[1.5rem] text-center ${displayQty === 0 ? "text-rose-500" : "text-[hsl(var(--foreground))]"}`}>
-                                  {displayQty}
-                                </span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={displayQty}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value);
+                                    if (!isNaN(val)) {
+                                      setDraftStock(prev => ({ ...prev, [item.id]: val }));
+                                    }
+                                  }}
+                                  className={`w-12 h-8 text-sm font-bold text-center bg-transparent border border-transparent hover:border-[hsl(var(--border))] focus:border-[hsl(var(--primary))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary)/0.3)] rounded transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${displayQty === 0 ? "text-rose-500" : "text-[hsl(var(--foreground))]"}`}
+                                />
                                 <button
                                   disabled={stockLoading === item.id}
                                   onClick={() => handleDraftStockDelta(item.id, item.qty_available, 1)}
@@ -367,19 +592,6 @@ export default function AdminInventoryPage() {
                                 >
                                   <Plus size={14} />
                                 </button>
-                              </div>
-                              
-                              <div className="w-[100px] flex justify-end">
-                                {hasChanges && (
-                                  <button
-                                    disabled={stockLoading === item.id}
-                                    onClick={() => handleSaveStock(item.id, item.qty_available)}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.9)] text-primary-foreground text-xs font-bold rounded-lg transition-all shadow-sm disabled:opacity-50"
-                                  >
-                                    {stockLoading === item.id ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                                    <span className="hidden sm:inline">Enregistrer</span>
-                                  </button>
-                                )}
                               </div>
                             </div>
                           </div>
@@ -395,7 +607,10 @@ export default function AdminInventoryPage() {
           {/* ── Main Inventory ───────────────────────────────────────────────── */}
           {loading ? (
             <div className="flex justify-center p-12">
-              <Loader2 className="animate-spin text-[hsl(var(--muted-foreground))]" size={32} />
+              <Loader2
+                className="animate-spin text-[hsl(var(--muted-foreground))]"
+                size={32}
+              />
             </div>
           ) : (
             <div className="space-y-10">
@@ -411,20 +626,38 @@ export default function AdminInventoryPage() {
 
                 {requestedLines.length === 0 ? (
                   <div className="flex flex-col items-center justify-center p-12 border border-[hsl(var(--border)/0.5)] rounded-lg bg-[hsl(var(--secondary)/0.05)] border-dashed">
-                    <Inbox size={32} className="opacity-20 mb-2 text-[hsl(var(--foreground))]" />
-                    <p className="text-sm font-medium text-[hsl(var(--muted-foreground))]">Toutes les ressources sont prêtes.</p>
+                    <Inbox
+                      size={32}
+                      className="opacity-20 mb-2 text-[hsl(var(--foreground))]"
+                    />
+                    <p className="text-sm font-medium text-[hsl(var(--muted-foreground))]">
+                      Toutes les ressources sont prêtes.
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-3">
                     {requestedLines.map((line) => (
-                      <div key={line.id} className="flex flex-col md:flex-row md:items-center justify-between bg-[hsl(var(--secondary)/0.1)] hover:bg-[hsl(var(--secondary)/0.2)] border border-[hsl(var(--border)/0.5)] rounded-lg p-4 transition-all gap-4">
-
+                      <div
+                        key={line.id}
+                        className="flex flex-col md:flex-row md:items-center justify-between bg-[hsl(var(--secondary)/0.1)] hover:bg-[hsl(var(--secondary)/0.2)] border border-[hsl(var(--border)/0.5)] rounded-lg p-4 transition-all gap-4"
+                      >
                         {/* Gauche: Matériel + stock + prix */}
                         <div className="flex-1">
-                          <div className="text-sm font-bold text-[hsl(var(--foreground))]">{line.material_name}</div>
-                          <div className="text-[11px] text-[hsl(var(--muted-foreground))] mt-0.5">{line.material_reference || "N/A"}</div>
+                          <div className="flex items-center gap-2">
+                            <div className="text-sm font-bold text-[hsl(var(--foreground))]">
+                              {line.material_name}
+                            </div>
+                            <span className="text-sm font-black text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded">
+                              x{line.quantity || 1}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-[hsl(var(--muted-foreground))] mt-0.5">
+                            {line.material_reference || "N/A"}
+                          </div>
                           <div className="flex items-center gap-3 mt-1.5">
-                            <span className={`text-[11px] font-semibold ${line.qty_available === 0 ? "text-rose-500" : "text-[hsl(var(--muted-foreground))]"}`}>
+                            <span
+                              className={`text-[11px] font-semibold ${line.qty_available === 0 ? "text-rose-500" : "text-[hsl(var(--muted-foreground))]"}`}
+                            >
                               Stock&nbsp;: {line.qty_available}
                             </span>
                             <span className="text-[11px] text-[hsl(var(--muted-foreground))]">
@@ -439,7 +672,9 @@ export default function AdminInventoryPage() {
                             <div className="h-8 w-8 rounded-full bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))] flex items-center justify-center text-xs font-bold shrink-0">
                               {getInitials(line.user_name)}
                             </div>
-                            <span className="text-sm font-medium text-[hsl(var(--muted-foreground))]">{line.user_name}</span>
+                            <span className="text-sm font-medium text-[hsl(var(--muted-foreground))]">
+                              {line.user_name}
+                            </span>
                           </div>
 
                           <div className="w-px h-6 bg-[hsl(var(--border)/0.5)] hidden md:block"></div>
@@ -461,7 +696,10 @@ export default function AdminInventoryPage() {
                               className="inline-flex items-center bg-emerald-600/20 text-emerald-500 border border-emerald-500/30 hover:bg-emerald-600 hover:text-white text-xs font-bold px-4 py-2 rounded-md transition-all disabled:opacity-50"
                             >
                               {actionLoading === line.id ? (
-                                <RefreshCw size={14} className="animate-spin mr-2" />
+                                <RefreshCw
+                                  size={14}
+                                  className="animate-spin mr-2"
+                                />
                               ) : (
                                 <PackageCheck size={16} className="mr-2" />
                               )}
@@ -479,7 +717,10 @@ export default function AdminInventoryPage() {
                               className="inline-flex items-center bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-600 hover:text-white text-xs font-bold px-4 py-2 rounded-md transition-all disabled:opacity-50"
                             >
                               {actionLoading === line.id ? (
-                                <RefreshCw size={14} className="animate-spin mr-2" />
+                                <RefreshCw
+                                  size={14}
+                                  className="animate-spin mr-2"
+                                />
                               ) : (
                                 <ShoppingCart size={16} className="mr-2" />
                               )}
@@ -501,28 +742,52 @@ export default function AdminInventoryPage() {
                     className="flex items-center gap-2 text-xs font-semibold text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] border border-[hsl(var(--border)/0.5)] hover:border-[hsl(var(--border))] rounded-lg px-4 py-2 transition-all duration-200"
                   >
                     <History size={16} className="mr-1" />
-                    {showHistory ? "Masquer l'historique" : "Afficher l'historique"}
-                    <span className="ml-1 inline-flex items-center justify-center h-4 w-4 rounded-full bg-[hsl(var(--muted)/0.4)] text-[10px] font-bold">{readyLines.length}</span>
-                    {showHistory ? <ChevronUp size={14} className="ml-1" /> : <ChevronDown size={14} className="ml-1" />}
+                    {showHistory
+                      ? "Masquer l'historique"
+                      : "Afficher l'historique"}
+                    <span className="ml-1 inline-flex items-center justify-center h-4 w-4 rounded-full bg-[hsl(var(--muted)/0.4)] text-[10px] font-bold">
+                      {readyLines.length}
+                    </span>
+                    {showHistory ? (
+                      <ChevronUp size={14} className="ml-1" />
+                    ) : (
+                      <ChevronDown size={14} className="ml-1" />
+                    )}
                   </button>
 
-                  <div className={`overflow-hidden transition-all duration-300 ${showHistory ? "max-h-[2000px] opacity-100 mt-4" : "max-h-0 opacity-0"}`}>
+                  <div
+                    className={`overflow-hidden transition-all duration-300 ${showHistory ? "max-h-[2000px] opacity-100 mt-4" : "max-h-0 opacity-0"}`}
+                  >
                     <h2 className="text-xs font-black uppercase tracking-[0.2em] text-[hsl(var(--muted-foreground))] mb-4">
                       HISTORIQUE — Ressources Remises
                     </h2>
                     <div className="space-y-3">
                       {readyLines.map((line) => (
-                        <div key={line.id} className="opacity-60 flex flex-col md:flex-row md:items-center justify-between bg-[hsl(var(--secondary)/0.05)] border border-[hsl(var(--border)/0.3)] rounded-lg p-4 gap-4">
+                        <div
+                          key={line.id}
+                          className="opacity-60 flex flex-col md:flex-row md:items-center justify-between bg-[hsl(var(--secondary)/0.05)] border border-[hsl(var(--border)/0.3)] rounded-lg p-4 gap-4"
+                        >
                           <div className="flex-1">
-                            <div className="text-sm font-bold text-[hsl(var(--foreground))]">{line.material_name}</div>
-                            <div className="text-[11px] text-[hsl(var(--muted-foreground))] mt-0.5">{line.material_reference || "N/A"}</div>
+                            <div className="flex items-center gap-2">
+                              <div className="text-sm font-bold text-[hsl(var(--foreground))]">
+                                {line.material_name}
+                              </div>
+                              <span className="text-[10px] font-black text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                                x{line.quantity || 1}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-[hsl(var(--muted-foreground))] mt-0.5">
+                              {line.material_reference || "N/A"}
+                            </div>
                           </div>
                           <div className="flex-1 flex items-center gap-4">
                             <div className="flex items-center gap-2">
                               <div className="h-8 w-8 rounded-full bg-[hsl(var(--muted)/0.3)] text-[hsl(var(--muted-foreground))] flex items-center justify-center text-xs font-bold shrink-0">
                                 {getInitials(line.user_name)}
                               </div>
-                              <span className="text-sm font-medium text-[hsl(var(--muted-foreground))]">{line.user_name}</span>
+                              <span className="text-sm font-medium text-[hsl(var(--muted-foreground))]">
+                                {line.user_name}
+                              </span>
                             </div>
                             <div className="w-px h-6 bg-[hsl(var(--border)/0.5)] hidden md:block"></div>
                             <div className="flex items-center gap-2">

@@ -1,4 +1,4 @@
-from odoo import models, fields, api
+from odoo import models, fields, api # type: ignore
 
 
 class ResUsers(models.Model):
@@ -10,6 +10,21 @@ class ResUsers(models.Model):
         'user_id', 'domain_id',
         string="Domaines d'expertise IT",
     )
+
+    x_hourly_rate = fields.Float(
+        string="Tarif horaire (DH)",
+        default=0.0,
+        help="Coût horaire du technicien pour la facturation interne"
+    )
+
+    x_is_admin = fields.Boolean(
+        string="Is Admin",
+        compute='_compute_x_is_admin'
+    )
+
+    def _compute_x_is_admin(self):
+        for user in self:
+            user.x_is_admin = self.env.user.has_group('base.group_system')
 
     # ─── Extend native Odoo 19 role field to add Technician ───────────────────
     # We add 'group_technician' to the native Selection without calling super()

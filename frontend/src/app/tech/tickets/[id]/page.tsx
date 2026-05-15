@@ -50,7 +50,15 @@ import {
   PackageCheck,
   PackageX,
   Truck,
+  MinusCircle,
+  PlusCircle,
+  Minus,
+  CheckCircle,
+  PenTool,
+  Keyboard,
+  PenLine,
 } from "lucide-react";
+import SignatureCanvas from "react-signature-canvas";
 import SlaBadge from "@/components/SlaBadge";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAuth } from "@/lib/auth";
@@ -303,8 +311,9 @@ type Ticket = {
   x_escalation_note?: string | null;
   x_last_pause_date?: string | null;
   date_resolved?: string | null;
-  materials?: { id: number; name: string; category: string; status?: "requested" | "ready" | "ordered"; line_id?: number; unit_cost?: number }[];
+  materials?: { id: number; name: string; category: string; status?: "requested" | "ready" | "ordered"; line_id?: number; unit_cost?: number; quantity?: number }[];
   total_material_cost?: number;
+  labor_cost?: number;
 };
 
 type ItMaterial = {
@@ -383,8 +392,13 @@ function TicketDetailPage() {
   // Resolution modal state
   const [showResolveModal, setShowResolveModal] = useState(false);
   const [resolution, setResolution] = useState("");
+  const [resolutionType, setResolutionType] = useState("success");
   const [addToKb, setAddToKb] = useState(false);
   const [resolving, setResolving] = useState(false);
+  const [hasSignature, setHasSignature] = useState(false);
+  const [sigMode, setSigMode] = useState<"draw" | "type">("draw");
+  const [typedSignature, setTypedSignature] = useState("");
+  const signatureRef = useRef<SignatureCanvas>(null);
 
   // Escalation modal state
   const [showEscalateModal, setShowEscalateModal] = useState(false);
@@ -407,7 +421,7 @@ function TicketDetailPage() {
 
   // Material selection state (wait-material modal)
   const [allMaterials, setAllMaterials] = useState<ItMaterial[]>([]);
-  const [selectedMaterialIds, setSelectedMaterialIds] = useState<number[]>([]);
+  const [selectedMaterialIds, setSelectedMaterialIds] = useState<{id: number, quantity: number}[]>([]);
   const [matSearch, setMatSearch] = useState("");
   const [matDropdownOpen, setMatDropdownOpen] = useState(false);
   const matDropdownRef = useRef<HTMLDivElement>(null);
@@ -416,16 +430,23 @@ function TicketDetailPage() {
 
   // Material edit section state
   const [isEditingMaterials, setIsEditingMaterials] = useState(false);
-  const [editSelectedMatIds, setEditSelectedMatIds] = useState<number[]>([]);
+
   const [editMatSearch, setEditMatSearch] = useState("");
   const [editMatDropdownOpen, setEditMatDropdownOpen] = useState(false);
   const [savingMaterials, setSavingMaterials] = useState(false);
+  const [showSaveMaterialAlert, setShowSaveMaterialAlert] = useState(false);
   const editMatDropdownRef = useRef<HTMLDivElement>(null);
   const matTriggerRef = useRef<HTMLButtonElement>(null);
   const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
 
   // Drag & drop state
   const [isDragging, setIsDragging] = useState(false);
+
+  // Live total cost computation
+  const liveTotalCost = selectedMaterialIds.reduce((acc, item) => {
+    const mat = allMaterials.find((m) => m.id === item.id);
+    return acc + (item.quantity * (mat?.unit_cost || 0));
+  }, 0);
 
   // Action states
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -449,6 +470,7 @@ function TicketDetailPage() {
             });
             setAiAsked(true);
           }
+          setSelectedMaterialIds(found.materials?.map((m: any) => ({id: m.id, quantity: m.quantity || 1})) ?? []);
         }
       }
     } catch {
@@ -722,7 +744,7 @@ function TicketDetailPage() {
     try {
       const res = await axios.post(
         `${ODOO_URL}/api/ticket/${id}/materials`,
-        { material_ids: editSelectedMatIds },
+        { materials: selectedMaterialIds },
         { withCredentials: true },
       );
       if (res.data.status === 200) {
@@ -765,12 +787,12 @@ function TicketDetailPage() {
         {
           justification: waitJustification,
           user_id: user?.id,
-          material_ids: selectedMaterialIds,
+          materials: selectedMaterialIds,
         },
         { withCredentials: true },
       );
       const matNames = allMaterials
-        .filter((m) => selectedMaterialIds.includes(m.id))
+        .filter((m) => selectedMaterialIds.some((x) => x.id === m.id))
         .map((m) => m.name);
       toast.success(
         <div className="flex flex-col gap-1">
@@ -787,6 +809,7 @@ function TicketDetailPage() {
       setWaitJustification("");
       setSelectedMaterialIds([]);
       setMatSearch("");
+      setIsEditingMaterials(false);
       fetchTicket();
       fetchComments();
     } catch (err) {
@@ -827,14 +850,43 @@ function TicketDetailPage() {
   };
 
   const handleResolve = async () => {
-    if (!resolution.trim()) return;
+    const drawOk = sigMode === "draw" && hasSignature && signatureRef.current && !signatureRef.current.isEmpty();
+    const typeOk = sigMode === "type" && typedSignature.trim().length > 0;
+    if (!resolution.trim() || (!drawOk && !typeOk)) return;
     setResolving(true);
     try {
+      let digitalSignature: string;
+      if (sigMode === "draw" && signatureRef.current) {
+        digitalSignature = signatureRef.current.toDataURL("image/png");
+      } else {
+        // Render typed signature to canvas
+        const canvas = document.createElement("canvas");
+        canvas.width = 480; canvas.height = 120;
+        const ctx = canvas.getContext("2d")!;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // baseline guide
+        ctx.strokeStyle = "#d1d5db";
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(20, 90); ctx.lineTo(460, 90); ctx.stroke();
+        ctx.fillStyle = "#1e293b";
+        ctx.font = `64px 'Dancing Script', cursive`;
+        ctx.textBaseline = "alphabetic";
+        ctx.fillText(typedSignature, 24, 86);
+        digitalSignature = canvas.toDataURL("image/png");
+      }
+
       // ── Étape A : Persister la résolution du ticket (toujours) ──
       await axios.post(
         `${ODOO_URL}/api/ticket/${id}/resolve`,
         // When addToKb is ON, we do NOT auto-create the KB here; modal handles it
-        { resolution, add_to_kb: false, user_id: user?.id },
+        { 
+          resolution, 
+          resolution_type: resolutionType,
+          digital_signature: digitalSignature,
+          add_to_kb: false, 
+          user_id: user?.id 
+        },
         { withCredentials: true },
       );
 
@@ -1145,13 +1197,30 @@ function TicketDetailPage() {
                         setIsEditingMaterials(false);
                         setEditMatSearch("");
                         setEditMatDropdownOpen(false);
+                        setSelectedMaterialIds(ticket.materials?.map((m) => ({id: m.id, quantity: m.quantity || 1})) ?? []);
                       }}
                       className="flex items-center text-xs font-semibold px-3 py-1.5 rounded-md border border-[hsl(var(--border)/0.5)] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors"
                     >
                       <X size={13} className="mr-1" /> Annuler
                     </button>
                     <button
-                      onClick={handleSaveMaterials}
+                      onClick={() => {
+                        if (ticket?.state === "waiting_material") {
+                          handleSaveMaterials();
+                          return;
+                        }
+                        
+                        const hasNewMaterials = selectedMaterialIds.some((item) => {
+                          const existing = ticket?.materials?.find((m) => m.id === item.id);
+                          return !existing || item.quantity > (existing.quantity || 1);
+                        });
+
+                        if (hasNewMaterials) {
+                          setShowSaveMaterialAlert(true);
+                        } else {
+                          handleSaveMaterials();
+                        }
+                      }}
                       disabled={savingMaterials}
                       className="flex items-center text-xs font-bold px-3 py-1.5 rounded-md bg-emerald-600/20 text-emerald-500 border border-emerald-500/30 hover:bg-emerald-600 hover:text-white transition-all disabled:opacity-50"
                     >
@@ -1162,7 +1231,7 @@ function TicketDetailPage() {
                 ) : (
                   <button
                     onClick={() => {
-                      setEditSelectedMatIds(ticket.materials?.map((m) => m.id) ?? []);
+                      setSelectedMaterialIds(ticket.materials?.map((m) => ({id: m.id, quantity: m.quantity || 1})) ?? []);
                       setIsEditingMaterials(true);
                     }}
                     className="flex items-center text-xs font-semibold px-3 py-1.5 rounded-md border border-[hsl(var(--border)/0.5)] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:border-[hsl(var(--border))] transition-colors"
@@ -1199,6 +1268,9 @@ function TicketDetailPage() {
                             <Clock size={12} className="animate-pulse mr-1.5" />
                           )}
                           {m.status === "ordered" ? `${m.name} - EN COMMANDE` : m.name}
+                          {(m.quantity ?? 1) > 1 && (
+                            <span className="ml-1.5 font-mono text-[10px] opacity-80">x {m.quantity}</span>
+                          )}
                         </span>
                       );
                     })}
@@ -1224,30 +1296,73 @@ function TicketDetailPage() {
             {isEditingMaterials && (
               <div className="space-y-3">
                 {/* Badges des matériels sélectionnés */}
-                <div className="flex flex-wrap gap-2">
-                  {editSelectedMatIds.length === 0 && (
-                    <p className="text-xs text-[hsl(var(--muted-foreground))] italic">Aucun matériel sélectionné.</p>
+                <div className="flex flex-col">
+                  {selectedMaterialIds.length === 0 && (
+                    <p className="text-xs text-[hsl(var(--muted-foreground))] italic mb-2">Aucun matériel sélectionné.</p>
                   )}
-                  {editSelectedMatIds.map((mid) => {
-                    const mat = allMaterials.find((m) => m.id === mid);
+                  {selectedMaterialIds.map((item) => {
+                    const mat = allMaterials.find((m) => m.id === item.id);
                     if (!mat) return null;
+                    const isAtMax = item.quantity >= (mat.qty_available ?? 999);
                     return (
-                      <span
-                        key={mid}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-[hsl(var(--secondary)/0.4)] text-[hsl(var(--foreground))] border border-[hsl(var(--border)/0.5)]"
-                      >
-                        <Cpu size={11} />
-                        {mat.name}
-                        <button
-                          onClick={() => setEditSelectedMatIds((prev) => prev.filter((id) => id !== mid))}
-                          className="ml-0.5 hover:text-red-400 transition-colors"
-                        >
-                          <X size={11} />
-                        </button>
-                      </span>
+                      <div key={item.id} className="flex items-center justify-between p-2 bg-zinc-900/50 border border-border/50 rounded-lg mb-2">
+                        <div className="flex items-center gap-2">
+                          <Cpu size={14} className="text-[hsl(var(--muted-foreground))]" />
+                          <span className="text-xs font-medium text-[hsl(var(--foreground))]">{mat.name}</span>
+                        </div>
+                        
+                        <div className="flex items-center gap-4">
+                          {/* Financials */}
+                          {(mat.unit_cost ?? 0) > 0 && (
+                            <span className="text-[10px] text-[hsl(var(--muted-foreground))]">
+                              {item.quantity} x {mat.unit_cost?.toFixed(2)} MAD
+                            </span>
+                          )}
+                          
+                          {/* Stepper */}
+                          <div className="flex items-center gap-3 bg-zinc-800/50 rounded-md px-2 py-1">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setSelectedMaterialIds(prev => prev.map(x => x.id === item.id ? {...x, quantity: Math.max(1, x.quantity - 1)} : x)); }}
+                              className="text-[hsl(var(--muted-foreground))] hover:text-emerald-500 transition-colors"
+                            >
+                              <Minus size={14} />
+                            </button>
+                            <span className="font-mono text-xs font-bold w-4 text-center text-[hsl(var(--foreground))]">{item.quantity}</span>
+                            <button
+                              disabled={isAtMax}
+                              onClick={(e) => { e.stopPropagation(); setSelectedMaterialIds(prev => prev.map(x => x.id === item.id ? {...x, quantity: Math.min(mat.qty_available ?? 999, x.quantity + 1)} : x)); }}
+                              className={`transition-colors ${isAtMax ? "text-[hsl(var(--muted-foreground))/30] cursor-not-allowed" : "text-[hsl(var(--muted-foreground))] hover:text-emerald-500"}`}
+                            >
+                              <Plus size={14} />
+                            </button>
+                          </div>
+                          
+                          {/* Remove button */}
+                          <button
+                            onClick={() => setSelectedMaterialIds((prev) => prev.filter((x) => x.id !== item.id))}
+                            className="text-[hsl(var(--muted-foreground))] hover:text-red-500 transition-colors ml-2"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
+
+                
+                {/* Live total cost */}
+                {liveTotalCost > 0 && (
+                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-[hsl(var(--border)/0.4)] px-1">
+                    <div className="flex items-center">
+                      <Wallet size={14} className="text-emerald-500 mr-2" />
+                      <span className="text-sm font-bold text-emerald-500/90">
+                        {liveTotalCost.toFixed(2)} MAD
+                      </span>
+                      <span className="text-xs text-[hsl(var(--muted-foreground))] ml-1.5">coût total estimé</span>
+                    </div>
+                  </div>
+                )}
 
                 {/* Selecteur Popover — Portal pour échapper au stacking context de glass-card */}
                 <div className="relative">
@@ -1303,14 +1418,14 @@ function TicketDetailPage() {
                             m.name.toLowerCase().includes(editMatSearch.toLowerCase())
                           )
                           .map((m) => {
-                            const isSelected = editSelectedMatIds.includes(m.id);
+                            const isSelected = selectedMaterialIds.some((x) => x.id === m.id);
                             const outOfStock = (m.qty_available ?? 1) === 0;
                             return (
                               <button
                                 key={m.id}
                                 onClick={() => {
-                                  setEditSelectedMatIds((prev) =>
-                                    isSelected ? prev.filter((id) => id !== m.id) : [...prev, m.id]
+                                  setSelectedMaterialIds((prev) =>
+                                    isSelected ? prev.filter((x) => x.id !== m.id) : [...prev, { id: m.id, quantity: 1 }]
                                   );
                                 }}
                                 className={`w-full flex flex-col items-start px-2.5 py-2 rounded-lg text-left text-xs transition-colors ${
@@ -1466,7 +1581,19 @@ function TicketDetailPage() {
 
                 {/* Résoudre */}
                 <button
-                  onClick={() => setShowResolveModal(true)}
+                  onClick={() => {
+                    const pendingMaterials = ticket.materials?.some(
+                      (m) => m.status === "requested" || m.status === "ordered"
+                    );
+                    if (pendingMaterials) {
+                      toast.error(
+                        "Impossible de résoudre : un ou plusieurs matériels sont encore en attente ou en commande.",
+                        { duration: 5000 }
+                      );
+                      return;
+                    }
+                    setShowResolveModal(true);
+                  }}
                   className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg border border-emerald-500/30
                     bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 transition-colors"
                 >
@@ -1872,25 +1999,73 @@ function TicketDetailPage() {
                 
                 <div ref={matDropdownRef} className="relative">
                   {/* Badges row + add button */}
-                  <div className="flex flex-wrap gap-2 items-center min-h-[38px] p-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background)/0.5)]">
-                    {selectedMaterialIds.map((id) => {
-                      const m = allMaterials.find((mat) => mat.id === id);
+                  <div className="flex flex-col mb-3">
+                    {selectedMaterialIds.length === 0 && (
+                      <p className="text-xs text-[hsl(var(--muted-foreground))] italic mb-2">Aucun matériel sélectionné.</p>
+                    )}
+                    {selectedMaterialIds.map((item) => {
+                      const m = allMaterials.find((mat) => mat.id === item.id);
                       if (!m) return null;
+                      const isAtMax = item.quantity >= (m.qty_available ?? 999);
                       return (
-                        <span
-                          key={m.id}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20"
-                        >
-                          {m.name}
-                          <button
-                            onClick={() => setSelectedMaterialIds(prev => prev.filter(x => x !== m.id))}
-                            className="hover:text-red-400 transition-colors"
-                          >
-                            <X size={12} />
-                          </button>
-                      </span>
-                    );
-                  })}
+                        <div key={m.id} className="flex items-center justify-between p-2 bg-zinc-900/50 border border-border/50 rounded-lg mb-2">
+                          <div className="flex items-center gap-2">
+                            <Cpu size={14} className="text-sky-500/80" />
+                            <span className="text-xs font-medium text-[hsl(var(--foreground))]">{m.name}</span>
+                          </div>
+                          
+                          <div className="flex items-center gap-4">
+                            {/* Financials */}
+                            {(m.unit_cost ?? 0) > 0 && (
+                              <span className="text-[10px] text-[hsl(var(--muted-foreground))]">
+                                {item.quantity} x {m.unit_cost?.toFixed(2)} MAD
+                              </span>
+                            )}
+                            
+                            {/* Stepper */}
+                            <div className="flex items-center gap-3 bg-zinc-800/50 rounded-md px-2 py-1">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setSelectedMaterialIds(prev => prev.map(x => x.id === item.id ? {...x, quantity: Math.max(1, x.quantity - 1)} : x)); }}
+                                className="text-[hsl(var(--muted-foreground))] hover:text-emerald-500 transition-colors"
+                              >
+                                <Minus size={14} />
+                              </button>
+                              <span className="font-mono text-xs font-bold w-4 text-center text-[hsl(var(--foreground))]">{item.quantity}</span>
+                              <button
+                                disabled={isAtMax}
+                                onClick={(e) => { e.stopPropagation(); setSelectedMaterialIds(prev => prev.map(x => x.id === item.id ? {...x, quantity: Math.min(m.qty_available ?? 999, x.quantity + 1)} : x)); }}
+                                className={`transition-colors ${isAtMax ? "text-[hsl(var(--muted-foreground))/30] cursor-not-allowed" : "text-[hsl(var(--muted-foreground))] hover:text-emerald-500"}`}
+                              >
+                                <Plus size={14} />
+                              </button>
+                            </div>
+                            
+                            {/* Remove button */}
+                            <button
+                              onClick={() => setSelectedMaterialIds(prev => prev.filter(x => x.id !== m.id))}
+                              className="text-[hsl(var(--muted-foreground))] hover:text-red-500 transition-colors ml-2"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  
+                  {/* Live total cost */}
+                  {liveTotalCost > 0 && (
+                    <div className="flex items-center justify-between mb-4 pt-2 border-t border-white/10 px-1">
+                      <div className="flex items-center">
+                        <Wallet size={14} className="text-emerald-500 mr-2" />
+                        <span className="text-sm font-bold text-emerald-500/90">
+                          {liveTotalCost.toFixed(2)} MAD
+                        </span>
+                        <span className="text-xs text-[hsl(var(--muted-foreground))] ml-1.5">coût total estimé</span>
+                      </div>
+                    </div>
+                  )}
+                  
                   <button
                     ref={waitMatTriggerRef}
                     onClick={(e) => {
@@ -1905,12 +2080,10 @@ function TicketDetailPage() {
                       }
                       setMatDropdownOpen((p) => !p);
                     }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold border border-dashed border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-sky-500/40 hover:text-sky-400 hover:bg-sky-500/5 transition-all outline-none ml-1"
+                    className="flex w-full items-center justify-center gap-2 px-3 py-2 rounded-lg border border-dashed border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-sky-500/40 hover:text-sky-400 transition-colors text-xs font-semibold"
                   >
-                    <PackageSearch size={14} />
-                    Ajouter...
+                    <Plus size={14} /> Ajouter un composant
                   </button>
-                </div>
 
                 {/* Dropdown panel avec Portal */}
                 {matDropdownOpen &&
@@ -1958,7 +2131,7 @@ function TicketDetailPage() {
                                 .includes(matSearch.toLowerCase()),
                           )
                           .map((m) => {
-                            const isSelected = selectedMaterialIds.includes(m.id);
+                            const isSelected = selectedMaterialIds.some((x) => x.id === m.id);
                             const outOfStock = (m.qty_available || 0) <= 0;
 
                             return (
@@ -1967,8 +2140,8 @@ function TicketDetailPage() {
                                 onClick={() => {
                                   setSelectedMaterialIds((prev) =>
                                     isSelected
-                                      ? prev.filter((x) => x !== m.id)
-                                      : [...prev, m.id],
+                                      ? prev.filter((x) => x.id !== m.id)
+                                      : [...prev, { id: m.id, quantity: 1 }],
                                   );
                                 }}
                                 className={`w-full flex flex-col p-3 cursor-pointer border-b border-white/5 last:border-0 transition-colors text-left
@@ -2123,10 +2296,120 @@ function TicketDetailPage() {
                 autoFocus
                 value={resolution}
                 onChange={(e) => setResolution(e.target.value)}
-                rows={5}
+                rows={3}
                 placeholder="Décrivez précisément comment vous avez résolu le problème..."
                 className="input-field w-full resize-none text-sm p-4"
               />
+            </div>
+
+            {/* ── Type de Résolution ── */}
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-[hsl(var(--muted-foreground))] mb-2 block">
+                Type de Résolution <span className="text-red-400">*</span>
+              </label>
+              <select
+                value={resolutionType}
+                onChange={(e) => setResolutionType(e.target.value)}
+                className="input-field w-full text-sm p-3 appearance-none"
+              >
+                <option value="success">Succès Total</option>
+                <option value="partial">Succès Partiel (Contournement)</option>
+                <option value="failed">Échec (Non résolu)</option>
+              </select>
+            </div>
+
+            {/* ── Signature Digitale ── */}
+            <div>
+              {/* Onglets Dessiner / Saisir */}
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+                  Signature Technicien <span className="text-red-400">*</span>
+                </label>
+                <div className="flex items-center gap-1 bg-[hsl(var(--muted)/0.3)] p-0.5 rounded-lg">
+                  <button
+                    onClick={() => { setSigMode("draw"); setHasSignature(false); }}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold transition-all ${
+                      sigMode === "draw"
+                        ? "bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm"
+                        : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+                    }`}
+                  >
+                    <PenLine size={10} /> Dessiner
+                  </button>
+                  <button
+                    onClick={() => { setSigMode("type"); setHasSignature(false); }}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold transition-all ${
+                      sigMode === "type"
+                        ? "bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm"
+                        : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+                    }`}
+                  >
+                    <Keyboard size={10} /> Saisir
+                  </button>
+                </div>
+              </div>
+
+              {sigMode === "draw" ? (
+                <div className="relative">
+                  <div className="border border-[hsl(var(--border))] rounded-xl bg-white overflow-hidden shadow-inner">
+                    {/* Baseline guide */}
+                    <div className="absolute inset-x-0 bottom-8 mx-4 h-px bg-gray-200 pointer-events-none" />
+                    <SignatureCanvas
+                      ref={signatureRef}
+                      penColor="#1e293b"
+                      velocityFilterWeight={0.7}
+                      minWidth={1}
+                      maxWidth={2.5}
+                      canvasProps={{
+                        className: "w-full h-32 cursor-crosshair",
+                        style: { background: "transparent" },
+                      }}
+                      onEnd={() => {
+                        if (signatureRef.current && !signatureRef.current.isEmpty()) {
+                          setHasSignature(true);
+                        }
+                      }}
+                    />
+                  </div>
+                  <button
+                    onClick={() => { signatureRef.current?.clear(); setHasSignature(false); }}
+                    className="absolute top-2 right-2 text-[10px] font-semibold text-gray-400 hover:text-gray-700 transition-colors flex items-center gap-1 bg-white/80 px-1.5 py-0.5 rounded"
+                  >
+                    <PenTool size={10} /> Effacer
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  {/* Load Dancing Script font inline */}
+                  <style>{`@import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap');`}</style>
+                  <input
+                    type="text"
+                    value={typedSignature}
+                    onChange={(e) => {
+                      setTypedSignature(e.target.value);
+                      setHasSignature(e.target.value.trim().length > 0);
+                    }}
+                    placeholder="Tapez votre nom..."
+                    className="input-field w-full text-sm p-3 mb-2"
+                  />
+                  {typedSignature.trim() && (
+                    <div className="border border-[hsl(var(--border))] rounded-xl bg-white p-4 flex items-end min-h-[80px] relative">
+                      <div className="absolute inset-x-4 bottom-6 h-px bg-gray-200" />
+                      <span
+                        style={{
+                          fontFamily: "'Dancing Script', cursive",
+                          fontSize: "3rem",
+                          lineHeight: 1,
+                          color: "#1e293b",
+                          position: "relative",
+                        }}
+                      >
+                        {typedSignature}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* ── Toggle KB ── */}
@@ -2192,7 +2475,7 @@ function TicketDetailPage() {
                 Annuler
               </button>
               <button
-                disabled={!resolution.trim() || resolving}
+                disabled={!resolution.trim() || !hasSignature || resolving}
                 onClick={handleResolve}
                 className={`flex-1 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-all py-2 ${
                   addToKb
@@ -2299,6 +2582,50 @@ function TicketDetailPage() {
                   <ArrowUpCircle size={15} />
                 )}
                 Confirmer l&apos;escalade
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* ── Modal Confirmation Attente Matériel ── */}
+      {showSaveMaterialAlert && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4"
+        >
+          <div
+            className="glass-card w-full max-w-sm animate-scale-in shadow-2xl border-[hsl(var(--border))] flex flex-col"
+          >
+            <div className="p-5 pb-4">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="p-2 rounded-lg bg-amber-500/10 text-amber-500">
+                  <PackageSearch size={20} />
+                </div>
+                <h2 className="text-base font-bold">Nouveau Matériel</h2>
+              </div>
+              <p className="text-sm text-[hsl(var(--muted-foreground))] leading-relaxed">
+                Souhaitez-vous suspendre le SLA et passer le ticket <span className="font-semibold text-amber-500">&quot;En attente matériel&quot;</span> ?
+              </p>
+            </div>
+            <div className="flex gap-3 p-5 pt-0 mt-4">
+              <button
+                onClick={() => {
+                  setShowSaveMaterialAlert(false);
+                  handleSaveMaterials();
+                }}
+                className="flex-1 px-3 py-2 text-xs font-semibold rounded-lg bg-[hsl(var(--secondary)/0.5)] border border-[hsl(var(--border))] hover:bg-[hsl(var(--secondary))] transition-colors"
+              >
+                Non, juste sauvegarder
+              </button>
+              <button
+                onClick={() => {
+                  setShowSaveMaterialAlert(false);
+                  setWaitJustification("Attente d'approvisionnement matériel suite à un ajout.");
+                  handleWaitMaterial();
+                }}
+                className="flex-1 px-3 py-2 text-xs font-semibold rounded-lg bg-amber-500 border border-amber-600 hover:bg-amber-600 text-white transition-colors flex items-center justify-center gap-2"
+              >
+                <Clock size={14} /> Oui, suspendre
               </button>
             </div>
           </div>

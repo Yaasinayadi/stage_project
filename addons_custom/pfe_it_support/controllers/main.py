@@ -342,10 +342,16 @@ class SupportTicketController(http.Controller):
                 'status':    line.status,
                 'line_id':   line.id,
                 'unit_cost': line.material_id.unit_cost,
+                'quantity':  line.quantity,
             } for line in t.material_line_ids],
             'total_material_cost': t.total_material_cost,
+            'labor_cost': t.labor_cost,
+            'resolution_type': t.resolution_type or None,
+            'digital_signature': t.digital_signature.decode('utf-8') if t.digital_signature else None,
             # ── Pause SLA (Smart Timer) ───────────────────────────────────────────
             'x_total_paused_duration': t.x_total_paused_duration or 0.0,
+            'x_actual_paused_duration': t.x_actual_paused_duration or 0.0,
+            'hourly_rate': t.assigned_to_id.x_hourly_rate if t.assigned_to_id else 0.0,
         } for t in tickets]
 
         headers.append(('Content-Type', 'application/json'))
@@ -498,21 +504,29 @@ class SupportTicketController(http.Controller):
                 return self._json_response({'status': 404, 'message': 'Ticket introuvable.'}, 404)
 
             resolution_note = post.get('resolution', '').strip()
+            resolution_type = post.get('resolution_type', 'success')
+            digital_signature = post.get('digital_signature', False)
             add_to_kb = post.get('add_to_kb', False)
             user_id = post.get('user_id')
 
             if not resolution_note:
                 return self._json_response({'status': 400, 'message': 'La note de résolution est requise.'}, 400)
 
+            # Nettoyer l'en-tête base64 si présent
+            if digital_signature and digital_signature.startswith('data:image'):
+                digital_signature = digital_signature.split(',')[1]
+
             # Mettre à jour le ticket (date_done est auto-rempli via le write() override)
             ticket.write({
                 'state': 'resolved',
                 'resolution': resolution_note,
+                'resolution_type': resolution_type,
+                'digital_signature': digital_signature,
             })
 
             # Message public dans le chatter
             ticket.message_post(
-                body=f"✅ **TICKET RÉSOLU** : {resolution_note}",
+                body=f"<b>TICKET RÉSOLU</b> : {resolution_note}",
                 message_type='comment',
                 subtype_xmlid='mail.mt_comment',
                 author_id=int(user_id) if user_id else False
@@ -704,8 +718,9 @@ class SupportTicketController(http.Controller):
             post = json.loads(request.httprequest.data.decode('utf-8'))
             justification = post.get('justification', '').strip()
             user_id = post.get('user_id')
-            material_ids = post.get('material_ids', [])  # Liste d'IDs Odoo
-
+            # 'materials' must be a list of dicts: [{'id': 1, 'quantity': 2}]
+            materials_payload = post.get('materials', [])
+            
             ticket = request.env['support.ticket'].sudo().browse(ticket_id)
             if not ticket.exists():
                 return self._json_response({'status': 404, 'message': 'Ticket introuvable.'}, 404)
@@ -717,14 +732,23 @@ class SupportTicketController(http.Controller):
             existing_mat_ids = existing_lines.mapped('material_id.id')
             lines_cmd = []
             
-            if material_ids:
-                requested_mids = [int(mid) for mid in material_ids]
+            if materials_payload:
+                requested_mids = [int(m['id']) for m in materials_payload]
+                
                 for line in existing_lines:
                     if line.material_id.id not in requested_mids:
                         lines_cmd.append((2, line.id, False))
-                for mid in requested_mids:
+                    else:
+                        # Update quantity if it changed
+                        qty = next((m['quantity'] for m in materials_payload if int(m['id']) == line.material_id.id), 1)
+                        if line.quantity != qty:
+                            lines_cmd.append((1, line.id, {'quantity': qty}))
+                            
+                for m in materials_payload:
+                    mid = int(m['id'])
+                    qty = m.get('quantity', 1)
                     if mid not in existing_mat_ids:
-                        lines_cmd.append((0, 0, {'material_id': mid, 'status': 'requested'}))
+                        lines_cmd.append((0, 0, {'material_id': mid, 'quantity': qty, 'status': 'requested'}))
             else:
                 lines_cmd.append((5, 0, 0))
                 
@@ -734,8 +758,8 @@ class SupportTicketController(http.Controller):
 
             # Construire le message avec les matériels
             mat_names = []
-            if material_ids:
-                mats = request.env['pfe.it.material'].sudo().browse([int(mid) for mid in material_ids])
+            if materials_payload:
+                mats = request.env['pfe.it.material'].sudo().browse([int(m['id']) for m in materials_payload])
                 mat_names = [m.name for m in mats if m.exists()]
 
             mat_str = ', '.join(mat_names) if mat_names else 'Non spécifié'
@@ -765,6 +789,65 @@ class SupportTicketController(http.Controller):
             })
         except Exception as e:
             return self._json_response({'status': 500, 'message': str(e)}, 500)
+
+    @http.route('/api/ticket/<int:ticket_id>/materials', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
+    def save_ticket_materials(self, ticket_id, **kw):
+        """Met à jour le matériel requis d'un ticket (sans changer son état)."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+        try:
+            post = json.loads(request.httprequest.data.decode('utf-8'))
+            materials_payload = post.get('materials', [])
+            
+            ticket = request.env['support.ticket'].sudo().browse(ticket_id)
+            if not ticket.exists():
+                return self._json_response({'status': 404, 'message': 'Ticket introuvable.'}, 404)
+                
+            existing_lines = ticket.material_line_ids
+            existing_mat_ids = existing_lines.mapped('material_id.id')
+            lines_cmd = []
+            
+            if materials_payload:
+                requested_mids = [int(m['id']) for m in materials_payload]
+                
+                for line in existing_lines:
+                    if line.material_id.id not in requested_mids:
+                        lines_cmd.append((2, line.id, False))
+                    else:
+                        qty = next((m['quantity'] for m in materials_payload if int(m['id']) == line.material_id.id), 1)
+                        if line.quantity != qty:
+                            lines_cmd.append((1, line.id, {'quantity': qty}))
+                            
+                for m in materials_payload:
+                    mid = int(m['id'])
+                    qty = m.get('quantity', 1)
+                    if mid not in existing_mat_ids:
+                        lines_cmd.append((0, 0, {'material_id': mid, 'quantity': qty, 'status': 'requested'}))
+            else:
+                lines_cmd.append((5, 0, 0))
+                
+            ticket.write({'material_line_ids': lines_cmd})
+            
+            materials = [{
+                'id':        line.material_id.id,
+                'name':      line.material_id.name,
+                'category':  line.material_id.category,
+                'status':    line.status,
+                'line_id':   line.id,
+                'unit_cost': line.material_id.unit_cost,
+                'quantity':  line.quantity,
+            } for line in ticket.material_line_ids]
+            
+            return self._json_response({
+                'status': 200, 
+                'message': 'Matériels mis à jour', 
+                'data': materials, 
+                'total_material_cost': ticket.total_material_cost,
+                'state': ticket.state
+            })
+        except Exception as e:
+            import traceback
+            return self._json_response({'status': 500, 'message': str(e), 'trace': traceback.format_exc()}, 500)
 
 
 
@@ -1644,6 +1727,7 @@ class SupportTicketController(http.Controller):
                     'email': u.email or u.login,
                     'role': role,
                     'it_domains': [d.name for d in u.it_domain_ids],
+                    'x_hourly_rate': u.x_hourly_rate,
                     'active': u.active
                 })
 
@@ -1677,10 +1761,12 @@ class SupportTicketController(http.Controller):
 
             cr = request.env.cr
 
-            # active / it_domain_ids
+            # active / x_hourly_rate
             vals = {}
             if 'active' in post:
                 vals['active'] = post['active']
+            if 'x_hourly_rate' in post:
+                vals['x_hourly_rate'] = float(post['x_hourly_rate'])
             if vals:
                 user.write(vals)
 
@@ -1782,15 +1868,31 @@ class SupportTicketController(http.Controller):
                     'material_id': mat.id,
                     'material_name': mat.name,
                     'material_reference': mat.reference or '',
+                    'quantity': line.quantity,
                     'qty_available': mat.qty_available,
                     'unit_cost': mat.unit_cost,
                     'status': line.status,
                     'ticket_priority': line.ticket_id.priority,
                 })
                 
-            return self._json_response({'status': 200, 'data': data})
+            all_materials = request.env['pfe.it.material'].sudo().search([('active', '=', True)])
+            total_inventory_value = sum(m.qty_available * m.unit_cost for m in all_materials)
+
+            # Coût main d'œuvre de tous les tickets actifs (non résolus/fermés)
+            active_tickets = request.env['support.ticket'].sudo().search([
+                ('state', 'not in', ['resolved', 'closed'])
+            ])
+            total_labor_cost = sum(t.labor_cost for t in active_tickets)
+                
+            return self._json_response({
+                'status': 200,
+                'data': data,
+                'total_inventory_value': total_inventory_value,
+                'total_labor_cost': total_labor_cost,
+            })
         except Exception as e:
             return self._json_response({'status': 500, 'message': str(e)}, 500)
+
 
     @http.route('/api/admin/catalog', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
     def get_admin_catalog(self, **kwargs):
@@ -1810,7 +1912,9 @@ class SupportTicketController(http.Controller):
                     'qty_available': mat.qty_available,
                     'unit_cost': mat.unit_cost,
                 })
-            return self._json_response({'status': 200, 'data': data})
+                
+            total_inventory_value = sum(m.qty_available * m.unit_cost for m in materials)
+            return self._json_response({'status': 200, 'data': data, 'total_inventory_value': total_inventory_value})
         except Exception as e:
             return self._json_response({'status': 500, 'message': str(e)}, 500)
 
@@ -1843,6 +1947,44 @@ class SupportTicketController(http.Controller):
         except Exception as e:
             return self._json_response({'status': 500, 'message': str(e)}, 500)
 
+    @http.route('/api/admin/catalog/batch', type='http', auth='public', methods=['PATCH', 'OPTIONS'], csrf=False)
+    def update_catalog_batch(self, **kwargs):
+        """Met à jour les quantités et/ou coûts de plusieurs matériels en une seule fois."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+
+        try:
+            raw = request.httprequest.data.decode('utf-8')
+            payload = json.loads(raw) if raw else {}
+            updates = payload.get('updates', [])
+
+            if not updates or not isinstance(updates, list):
+                return self._json_response({'status': 400, 'message': 'Format invalide ou aucune mise à jour.'}, 400)
+
+            updated_count = 0
+            for item in updates:
+                mat_id = item.get('id')
+                if not mat_id:
+                    continue
+                mat = request.env['pfe.it.material'].sudo().browse(mat_id)
+                if mat.exists():
+                    vals = {}
+                    if 'qty_available' in item:
+                        vals['qty_available'] = int(item['qty_available'])
+                    if 'unit_cost' in item:
+                        vals['unit_cost'] = float(item['unit_cost'])
+                    
+                    if vals:
+                        mat.write(vals)
+                        updated_count += 1
+
+            return self._json_response({
+                'status': 200,
+                'message': f'{updated_count} articles mis à jour avec succès.',
+            })
+        except Exception as e:
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
+
     @http.route('/api/admin/inventory/<int:line_id>/ready', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
     def mark_inventory_ready(self, line_id, **kwargs):
         """Marque une ligne de matériel comme 'ready'."""
@@ -1853,9 +1995,10 @@ class SupportTicketController(http.Controller):
             line = request.env['support.ticket.material.line'].sudo().browse(line_id)
             if not line.exists():
                 return self._json_response({'status': 404, 'message': 'Ligne introuvable.'}, 404)
-                
-            if line.material_id.qty_available <= 0:
-                return self._json_response({'status': 400, 'message': f'Stock insuffisant pour la ressource : {line.material_id.name}'}, 400)
+            
+            qty_needed = line.quantity or 1
+            if line.material_id.qty_available < qty_needed:
+                return self._json_response({'status': 400, 'message': f'Stock insuffisant pour la ressource \'{line.material_id.name}\' (disponible : {line.material_id.qty_available}, demandé : {qty_needed})'}, 400)
                 
             line.write({'status': 'ready'})
             

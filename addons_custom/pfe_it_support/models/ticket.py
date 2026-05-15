@@ -57,6 +57,14 @@ class SupportTicket(models.Model):
         digits=(10, 2),
         help='Somme des coûts unitaires de tous les matériels liés au ticket',
     )
+    
+    labor_cost = fields.Float(
+        string="Coût Main d'œuvre (DH)",
+        compute='_compute_labor_cost',
+        store=True,
+        digits=(10, 2),
+        help="Coût calculé basé sur le temps net passé et le tarif horaire du technicien",
+    )
     # ─── SLA ─────────────────────────────────────────────────────────────────
     sla_id = fields.Many2one('support.sla', string='Règle SLA', compute='_compute_sla', store=True)
     sla_deadline = fields.Datetime(string='Date Limite SLA', compute='_compute_sla_deadline', store=True)
@@ -134,6 +142,12 @@ class SupportTicket(models.Model):
     
     # Résolution apportée par le technicien
     resolution = fields.Text(string='Résolution Appliquée')
+    resolution_type = fields.Selection([
+        ('success', 'Succès'),
+        ('partial', 'Succès partiel'),
+        ('failed', 'Échec')
+    ], string='Type de résolution', tracking=True)
+    digital_signature = fields.Binary(string='Signature Digitale', attachment=True)
     
     # Flag to prevent AI from overwriting manual classification
     x_is_manual_classification = fields.Boolean(string='Classification Manuelle', default=False)
@@ -175,14 +189,32 @@ class SupportTicket(models.Model):
 
     # ─── Computes SLA ─────────────────────────────────────────────────────────
 
-    @api.depends('material_line_ids', 'material_line_ids.material_id', 'material_line_ids.material_id.unit_cost')
+    @api.depends('material_line_ids', 'material_line_ids.material_id', 'material_line_ids.quantity', 'material_line_ids.material_id.unit_cost')
     def _compute_total_material_cost(self):
         for ticket in self:
             ticket.total_material_cost = sum(
-                line.material_id.unit_cost
+                (line.material_id.unit_cost * line.quantity)
                 for line in ticket.material_line_ids
                 if line.material_id
             )
+
+    @api.depends('create_date', 'date_done', 'x_actual_paused_duration', 'assigned_to_id.x_hourly_rate', 'state')
+    def _compute_labor_cost(self):
+        for ticket in self:
+            if not ticket.create_date or not ticket.assigned_to_id:
+                ticket.labor_cost = 0.0
+                continue
+            
+            end_date = ticket.date_done if ticket.date_done else fields.Datetime.now()
+            delta = end_date - ticket.create_date
+            total_hours = delta.total_seconds() / 3600.0
+            net_hours = max(0, total_hours - (ticket.x_actual_paused_duration or 0.0))
+            
+            # Minimum cost: 1 minute if the ticket is active
+            if net_hours < (1.0 / 60.0):
+                net_hours = 1.0 / 60.0
+
+            ticket.labor_cost = net_hours * ticket.assigned_to_id.x_hourly_rate
 
     @api.depends('priority')
     def _compute_sla(self):
@@ -496,6 +528,8 @@ class SupportTicketMaterialLine(models.Model):
         ('ordered', 'Commandé')
     ], string='État', default='requested', required=True)
 
+    quantity = fields.Integer(string='Quantité', default=1, required=True)
+
     _sql_constraints = [
         ('ticket_material_uniq', 'unique (ticket_id, material_id)', "Un matériel ne peut être demandé qu'une seule fois par ticket.")
     ]
@@ -505,9 +539,10 @@ class SupportTicketMaterialLine(models.Model):
         records = super().create(vals_list)
         for record in records:
             if record.status == 'ready' and record.material_id:
-                if record.material_id.qty_available <= 0:
-                    raise UserError(f"Stock insuffisant pour cette ressource : {record.material_id.name}")
-                record.material_id.qty_available -= 1
+                qty = record.quantity or 1
+                if record.material_id.qty_available < qty:
+                    raise UserError(f"Stock insuffisant pour cette ressource : {record.material_id.name} (disponible : {record.material_id.qty_available}, demandé : {qty})")
+                record.material_id.qty_available -= qty
         return records
 
     def write(self, vals):
@@ -516,19 +551,21 @@ class SupportTicketMaterialLine(models.Model):
             if 'status' in vals:
                 new_status = vals['status']
                 old_status = record.status
+                # Resolve the final quantity (may be updated in the same write call)
+                qty = int(vals.get('quantity', record.quantity) or 1)
                 if old_status in ('requested', 'ordered') and new_status == 'ready':
-                    # Décrémentation
-                    if record.material_id.qty_available <= 0:
-                        raise UserError(f"Stock insuffisant pour cette ressource : {record.material_id.name}")
-                    record.material_id.qty_available -= 1
+                    # Décrémentation : soustraire la quantité réelle demandée
+                    if record.material_id.qty_available < qty:
+                        raise UserError(f"Stock insuffisant pour la ressource '{record.material_id.name}' (disponible : {record.material_id.qty_available}, demandé : {qty})")
+                    record.material_id.qty_available -= qty
                 elif old_status == 'ready' and new_status in ('requested', 'ordered'):
-                    # Incrémentation (annulation)
-                    record.material_id.qty_available += 1
+                    # Incrémentation (annulation) : rendre la quantité exacte prélevée
+                    record.material_id.qty_available += (record.quantity or 1)
         return super().write(vals)
 
     def unlink(self):
         for record in self:
-            # Si on supprime une ligne qui était validée, on rend le stock
+            # Si on supprime une ligne qui était validée, on rend la quantité exacte au stock
             if record.status == 'ready' and record.material_id:
-                record.material_id.qty_available += 1
+                record.material_id.qty_available += (record.quantity or 1)
         return super().unlink()

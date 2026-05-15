@@ -19,6 +19,7 @@ import {
   X,
   UserCheck,
   UserX,
+  Banknote,
 } from "lucide-react";
 import { ODOO_URL as ODOO } from "@/lib/config";
 import { toast } from "sonner";
@@ -30,6 +31,7 @@ type UserData = {
   email: string;
   role: string;
   it_domains: string[];
+  x_hourly_rate: number;
   active: boolean;
 };
 
@@ -301,6 +303,102 @@ function InlineDomainSelect({
             })}
           </div>
           <div className="px-2 pb-2 pt-1 bg-[hsl(var(--card))]">
+            <button
+              onClick={handleSave}
+              disabled={!hasChanges}
+              className="w-full flex items-center justify-center py-2 px-4 rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] text-xs font-bold transition-all duration-200 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-[hsl(var(--primary)/0.2)]"
+            >
+              Enregistrer
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─────────── InlineRateSelect ─────────── */
+function InlineRateSelect({
+  userId,
+  currentRate,
+  role,
+  updating,
+  onUpdate,
+}: {
+  userId: number;
+  currentRate: number;
+  role: string;
+  updating: number | null;
+  onUpdate: (id: number, updates: Partial<UserData>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draftRate, setDraftRate] = useState<string>(currentRate.toString());
+  const ref = useRef<HTMLDivElement>(null);
+  const isTech = role === "agent" || role === "tech";
+  const isBusy = updating === userId;
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const handleOpen = () => {
+    setDraftRate(currentRate.toString());
+    setOpen((p) => !p);
+  };
+
+  const handleSave = () => {
+    setOpen(false);
+    const parsed = parseFloat(draftRate);
+    if (!isNaN(parsed) && parsed !== currentRate) {
+      onUpdate(userId, { x_hourly_rate: parsed });
+    }
+  };
+
+  if (!isTech) {
+    return (
+      <span className="text-[0.65rem] text-[hsl(var(--muted-foreground))] font-semibold">
+        N/A
+      </span>
+    );
+  }
+
+  const hasChanges = parseFloat(draftRate) !== currentRate;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        disabled={isBusy}
+        onClick={handleOpen}
+        className="inline-flex items-center px-2.5 py-1 rounded-md text-[0.65rem] font-bold border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:border-[hsl(var(--primary)/0.4)] hover:text-[hsl(var(--primary))] bg-[hsl(var(--card))] transition-all outline-none"
+      >
+        {isBusy ? (
+          <Loader2 size={11} className="animate-spin mr-1.5" />
+        ) : (
+          <Banknote size={14} className="mr-1.5" />
+        )}
+        {currentRate} DH/h
+      </button>
+
+      {open && (
+        <div className="absolute top-[calc(100%+6px)] left-0 z-30 w-48 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-2xl backdrop-blur-lg overflow-hidden animate-fade-in flex flex-col">
+          <div className="p-3 border-b border-[hsl(var(--border)/0.5)]">
+            <p className="text-[0.65rem] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide mb-2">
+              Tarif Horaire (DH)
+            </p>
+            <input
+              type="number"
+              value={draftRate}
+              onChange={(e) => setDraftRate(e.target.value)}
+              className="w-full bg-[hsl(var(--background)/0.5)] border border-[hsl(var(--border))] focus:border-[hsl(var(--primary)/0.5)] rounded-lg text-sm px-3 py-1.5 outline-none transition-all"
+              autoFocus
+            />
+          </div>
+          <div className="p-2 bg-[hsl(var(--card))]">
             <button
               onClick={handleSave}
               disabled={!hasChanges}
@@ -632,6 +730,7 @@ function UsersManagement() {
                   <tr>
                     <th className="p-4 pl-5 rounded-tl-xl">Utilisateur</th>
                     <th className="p-4">Rôle</th>
+                    <th className="p-4">Tarification</th>
                     <th className="p-4">Domaines d&apos;Expertise</th>
                     <th className="p-4">Statut</th>
                     <th className="p-4 rounded-tr-xl text-center">Action</th>
@@ -666,6 +765,17 @@ function UsersManagement() {
                           userId={u.id}
                           currentRole={u.role}
                           selfId={user?.id}
+                          updating={updating}
+                          onUpdate={updateUser}
+                        />
+                      </td>
+
+                      {/* Rate – Custom Popover Input */}
+                      <td className="p-4">
+                        <InlineRateSelect
+                          userId={u.id}
+                          currentRate={u.x_hourly_rate || 0}
+                          role={u.role}
                           updating={updating}
                           onUpdate={updateUser}
                         />

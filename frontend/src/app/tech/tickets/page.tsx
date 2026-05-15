@@ -36,6 +36,8 @@ import Link from "next/link";
 import LinearSlaBar from "@/components/LinearSlaBar";
 import DualSlaGauge from "@/components/DualSlaGauge";
 import CompactTimeline from "@/components/CompactTimeline";
+import TicketCard from "@/components/TicketCard";
+import { useRouter } from "next/navigation";
 
 import { ODOO_URL } from "@/lib/config";
 
@@ -259,6 +261,7 @@ function MyTicketsPage() {
     "priority" | "category" | null
   >(null);
 
+  const router = useRouter();
   const glowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Inject glow keyframes once ────────────────────────────────────────────
@@ -845,162 +848,40 @@ function MyTicketsPage() {
           className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 animate-fade-in"
         >
           {currentList.map((ticket, idx) => {
-            const pCfg = PRIORITY_MAP[ticket.priority] ?? PRIORITY_MAP["1"];
-            const sCfg = STATE_MAP[ticket.state] ?? {
-              label: ticket.state,
-              color: "text-gray-400",
-            };
-            const catColor = getCategoryColor(ticket.category ?? "");
-            const isResolved = RESOLVED_STATES.includes(ticket.state);
             const isGlow = ticket.id === resolvedId;
             return (
-              <Link
+              <div
                 key={ticket.id}
-                href={`/tech/tickets/${ticket.id}`}
-                style={{ animationDelay: `${idx * 60}ms` }}
-                className={`glass-card bg-zinc-900/40 backdrop-blur-md p-5 cursor-pointer group animate-fade-in hover:-translate-y-1 transition-all duration-300 flex flex-col h-full border-l-4 ${pCfg.border} ${isGlow ? "ticket-glow" : ""}`}
+                className={`h-full ${isGlow ? "ticket-glow rounded-2xl" : ""}`}
               >
-                {/* Top row: icon + ID + Badges */}
-                <div className="flex items-center justify-between w-full mb-6">
-                  {/* Left: Icon + ID */}
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                      style={{ background: `${catColor}14`, color: catColor }}
-                    >
-                      {getCategoryIcon(ticket.category ?? "")}
-                    </div>
-                    <span className="text-[10px] font-mono font-medium text-[hsl(var(--muted-foreground)/0.6)]">
-                      TK-{String(ticket.id).padStart(4, "0")}
-                    </span>
-                  </div>
-                  {/* Right: Status + Priority */}
-                  <div className="flex items-center gap-2">
-                    {/* Status Pill */}
-                    {isResolved ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-md border border-emerald-500/30 text-[9px] font-black uppercase tracking-tighter text-emerald-400 bg-transparent">
-                        RÉSOLU
-                      </span>
-                    ) : (
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-md border text-[9px] font-black uppercase tracking-tighter bg-transparent ${sCfg.badge.replace("bg-", "bg-transparent border-").replace("text-", "text-").replace("/10", "/30")}`}
-                      >
-                        {sCfg.label}
-                      </span>
-                    )}
-                    {ticket.state === "escalated" && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-md border border-purple-500/30 text-[9px] font-black uppercase tracking-tighter text-purple-400 bg-transparent">
-                        ESCALADÉ
-                      </span>
-                    )}
-                    {/* Priority Dot */}
-                    {!isResolved && (
-                      <div className="flex items-center gap-1.5 ml-1">
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full ${pCfg.dot}`}
-                        />
-                        <span className="text-[9px] font-black uppercase tracking-tighter text-[hsl(var(--muted-foreground)/0.8)]">
-                          {pCfg.label}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Title */}
-                <h3 className="text-sm font-bold leading-tight line-clamp-2 mb-1 group-hover:text-[hsl(var(--primary))] transition-colors">
-                  {ticket.name}
-                </h3>
-
-                {/* Description */}
-                <p className="text-[11px] text-[hsl(var(--muted-foreground)/0.8)] line-clamp-3 mb-3 leading-relaxed flex-grow">
-                  {ticket.description}
-                </p>
-
-                {/* Timeline Tracking */}
-                <div className="flex items-center justify-center gap-3 py-1.5 px-3 bg-zinc-900/30 rounded-lg border border-white/5 mb-3 mt-auto">
-                  <div className="flex items-center gap-1.5">
-                    <Calendar
-                      size={12}
-                      className="text-[hsl(var(--muted-foreground))]"
-                    />
-                    <span className="text-[10px] font-medium font-mono text-[hsl(var(--muted-foreground)/0.9)]">
-                      {formatDateCompact(ticket.create_date ?? null)}
-                    </span>
-                  </div>
-                  <ArrowRight
-                    size={10}
-                    className="text-[hsl(var(--muted-foreground)/0.5)]"
-                  />
-                  <div className="flex items-center gap-1.5">
-                    <Target
-                      size={12}
-                      className="text-[hsl(var(--muted-foreground))]"
-                    />
-                    <span
-                      className={`text-[10px] font-medium font-mono ${ticket.sla_status === "breached" ? "text-rose-500/80" : "text-[hsl(var(--muted-foreground)/0.9)]"}`}
-                    >
-                      {formatDateCompact(ticket.sla_deadline ?? null)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* SLA Linear Bar */}
-                <LinearSlaBar
-                  slaDeadline={ticket.sla_deadline ?? null}
-                  slaStatus={ticket.sla_status ?? null}
-                  priority={ticket.priority}
-                  state={ticket.state}
-                  dateResolved={ticket.date_resolved ?? null}
-                  xLastPauseDate={ticket.x_last_pause_date ?? null}
+                <TicketCard
+                  index={idx}
+                  ticket={{
+                    id: ticket.id,
+                    name: ticket.name,
+                    description: ticket.description,
+                    state: ticket.state,
+                    priority: ticket.priority,
+                    category: ticket.category || "",
+                    assigned_to: user?.name || "Moi",
+                    create_date: ticket.create_date,
+                    write_date: ticket.write_date,
+                    sla_deadline: ticket.sla_deadline,
+                    sla_status: ticket.sla_status,
+                    date_resolved: ticket.date_resolved,
+                    sla_response_deadline: ticket.sla_response_deadline,
+                    sla_response_status: ticket.sla_response_status,
+                    x_last_pause_date: ticket.x_last_pause_date,
+                    user_name: ticket.user_id,
+                    assigned_to_id: ticket.assigned_to_id,
+                  }}
+                  onRefresh={fetchMyTickets}
+                  onClickOverride={(e) => {
+                    e.preventDefault();
+                    router.push(`/tech/tickets/${ticket.id}`);
+                  }}
                 />
-
-                {/* Footer: Avatar + Category */}
-                <div className="flex items-center justify-between border-t border-[hsl(var(--border)/0.3)] pt-3 mt-3">
-                  {/* Assigned to */}
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0 ring-1 ring-white/20"
-                      style={{
-                        background: user?.name
-                          ? getAgentColor(user.name)
-                          : "#6366f1",
-                      }}
-                    >
-                      {user?.name ? (
-                        getAgentInitials(user.name)
-                      ) : (
-                        <User size={10} />
-                      )}
-                    </div>
-                    <span
-                      className="text-[11px] font-medium truncate max-w-[120px]"
-                      style={{
-                        color: user?.name
-                          ? getAgentColor(user.name)
-                          : "#6366f1",
-                      }}
-                    >
-                      {user?.name || "Moi"}
-                    </span>
-                  </div>
-
-                  {/* Category */}
-                  <span
-                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-[9px] font-bold uppercase tracking-wider"
-                    style={{
-                      backgroundColor: `${catColor}14`,
-                      borderColor: `${catColor}33`,
-                      color: catColor,
-                    }}
-                  >
-                    <div className="scale-75 origin-center -ml-1">
-                      {getCategoryIcon(ticket.category ?? "")}
-                    </div>
-                    {ticket.category || "Non classé"}
-                  </span>
-                </div>
-              </Link>
+              </div>
             );
           })}
         </div>

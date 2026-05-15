@@ -101,6 +101,8 @@ class TicketController(http.Controller):
                     'category': t.ai_classification.name if t.ai_classification else None,
                     'x_is_manual_classification': t.x_is_manual_classification,
                     'x_total_paused_duration': t.x_total_paused_duration or 0.0,
+                    'x_actual_paused_duration': t.x_actual_paused_duration or 0.0,
+                    'hourly_rate': t.assigned_to_id.x_hourly_rate if t.assigned_to_id else 0.0,
                 })
             
             priorities_list = sorted(list(priority_counts.values()), key=lambda x: str(x['id']), reverse=True)

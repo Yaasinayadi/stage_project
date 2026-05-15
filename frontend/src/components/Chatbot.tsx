@@ -148,6 +148,31 @@ export default function Chatbot({
     }
   }, [user]);
 
+  // ── Refresh tickets whenever the chat is opened ──
+  useEffect(() => {
+    if (isOpen && user) {
+      axios
+        .get(`${ODOO_URL}/api/tickets?user_id=${user.id}`)
+        .then((res) => {
+          if (res.data.status === 200) {
+            setRawUserTickets(res.data.data);
+            setUserTickets(
+              res.data.data.map((t: any) => ({
+                reference: `TK-${String(t.id).padStart(4, "0")}`,
+                sujet: t.name,
+                statut: t.state,
+                assigne_a: t.assigned_to || "Non assign\u00e9",
+                categorie: t.category,
+                priorite: t.priority,
+                escalated_by_name: t.escalated_by_name || null,
+              }))
+            );
+          }
+        })
+        .catch(console.error);
+    }
+  }, [isOpen, user]);
+
   const fetchHistory = async () => {
     if (!user) return;
     try {

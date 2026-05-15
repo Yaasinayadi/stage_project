@@ -50,7 +50,6 @@ import {
   PlayCircle,
   MessageSquare,
 } from "lucide-react";
-// @ts-expect-error - framer-motion types missing
 import { motion, AnimatePresence } from "framer-motion";
 import {
   getCategoryColor,
@@ -62,6 +61,7 @@ import {
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { ODOO_URL as ODOO_BASE } from "@/lib/config";
+import { calculateTicketFinancials } from "@/lib/financials";
 
 // ─── Types ───
 
@@ -85,6 +85,7 @@ type Ticket = {
   resolution?: string | null;
   materials?: { id: number; name: string; status: string; unit_cost: number }[];
   total_material_cost?: number;
+  labor_cost?: number;
   x_total_paused_duration?: number;
   x_actual_paused_duration?: number;
 
@@ -95,6 +96,7 @@ type Ticket = {
   date_escalated?: string | null;
   escalation_sla_bonus_hours?: number;
   x_accepted?: boolean;
+  hourly_rate?: number;
 };
 
 type TimelineEvent = {
@@ -541,26 +543,26 @@ function getEventConfig(evt: TimelineEvent): {
 
   if (evt.type === "creation") {
     return {
-      bgClass: "bg-blue-500/15",
-      icon: <Flag size={14} className="text-blue-500" />,
+      bgClass: "bg-zinc-500/10 border border-zinc-500/20",
+      icon: <Flag size={14} className="text-zinc-400" />,
     };
   }
   if (evt.type === "assignment") {
     return {
-      bgClass: "bg-indigo-500/15",
-      icon: <UserPlus size={14} className="text-indigo-500" />,
+      bgClass: "bg-indigo-500/10 border border-indigo-500/20",
+      icon: <UserPlus size={14} className="text-indigo-400" />,
     };
   }
   if (evt.type === "escalation" || msg.includes("escaladé")) {
     return {
-      bgClass: "bg-purple-500/15",
-      icon: <ArrowUpCircle size={14} className="text-purple-500" />,
+      bgClass: "bg-purple-600/10 border border-purple-600/20",
+      icon: <ArrowUpCircle size={14} className="text-purple-400" />,
     };
   }
   if (evt.type === "resolved" || msg.includes("résolu")) {
     return {
-      bgClass: "bg-emerald-500/15",
-      icon: <CheckCircle2 size={14} className="text-emerald-500" />,
+      bgClass: "bg-emerald-500/10 border border-emerald-500/20",
+      icon: <CheckCircle2 size={14} className="text-emerald-400" />,
     };
   }
   if (
@@ -568,8 +570,14 @@ function getEventConfig(evt: TimelineEvent): {
     msg.includes("pause") ||
     msg.includes("attente")
   ) {
+    if (msg.includes("matériel") || msg.includes("pièces")) {
+      return {
+        bgClass: "bg-orange-600/10 border border-orange-600/20",
+        icon: <PauseCircle size={14} className="text-orange-500" />,
+      };
+    }
     return {
-      bgClass: "bg-amber-500/15",
+      bgClass: "bg-amber-500/10 border border-amber-500/20",
       icon: <PauseCircle size={14} className="text-amber-500" />,
     };
   }
@@ -579,20 +587,20 @@ function getEventConfig(evt: TimelineEvent): {
     msg.includes("accepté")
   ) {
     return {
-      bgClass: "bg-indigo-500/15",
-      icon: <UserCheck size={14} className="text-indigo-500" />,
+      bgClass: "bg-sky-500/10 border border-sky-500/20",
+      icon: <UserCheck size={14} className="text-sky-400" />,
     };
   }
   if (msg.includes("reprise") || msg.includes("cours")) {
     return {
-      bgClass: "bg-sky-500/15",
-      icon: <PlayCircle size={14} className="text-sky-500" />,
+      bgClass: "bg-sky-500/10 border border-sky-500/20",
+      icon: <PlayCircle size={14} className="text-sky-400" />,
     };
   }
 
   // Default Message / Discussion / Fallback
   return {
-    bgClass: "bg-zinc-500/15",
+    bgClass: "bg-zinc-500/10 border border-zinc-500/20",
     icon: <MessageSquare size={14} className="text-zinc-400" />,
   };
 }
@@ -1376,8 +1384,8 @@ function VerticalTimeline({
         evtAssign.id,
         evtAssign.date,
         <MRow
-          bgClass="bg-indigo-500/15"
-          icon={<UserPlus size={14} className="text-indigo-500" />}
+          bgClass="bg-indigo-500/10 border border-indigo-500/20"
+          icon={<UserPlus size={14} className="text-indigo-400" />}
           label={`Attribution du ticket à ${targetTech}`}
           author={adminAuthor}
           date={evtAssign.date}
@@ -1394,7 +1402,7 @@ function VerticalTimeline({
         evtComment.id,
         evtComment.date,
         <MRow
-          bgClass="bg-zinc-500/15"
+          bgClass="bg-zinc-500/10 border border-zinc-500/20"
           icon={<MessageSquare size={14} className="text-zinc-400" />}
           label={`Commentaire / Réponse`}
           author={evtComment.author}
@@ -1441,8 +1449,8 @@ function VerticalTimeline({
         interval.pause.id,
         interval.pause.date,
         <MRow
-          bgClass="bg-amber-500/15"
-          icon={<PauseCircle size={14} className="text-amber-500" />}
+          bgClass={motif.toLowerCase().includes("matériel") || motif.toLowerCase().includes("pièces") ? "bg-orange-600/10 border border-orange-600/20" : "bg-amber-500/10 border border-amber-500/20"}
+          icon={<PauseCircle size={14} className={motif.toLowerCase().includes("matériel") || motif.toLowerCase().includes("pièces") ? "text-orange-500" : "text-amber-500"} />}
           label={`Mise en pause — Raison : ${motif}`}
           author={interval.pause.author}
           date={interval.pause.date}
@@ -1463,8 +1471,8 @@ function VerticalTimeline({
         evtEscalation.id,
         evtEscalation.date,
         <MRow
-          bgClass="bg-purple-500/15"
-          icon={<ArrowUpCircle size={14} className="text-purple-500" />}
+          bgClass="bg-purple-600/10 border border-purple-600/20"
+          icon={<ArrowUpCircle size={14} className="text-purple-400" />}
           label={`Ticket escaladé${newTech ? ` \u2192 ${newTech}` : ""}`}
           author={evtEscalation.author}
           date={evtEscalation.date}
@@ -1514,8 +1522,8 @@ function VerticalTimeline({
           <div className="space-y-4">
             {/* ── Always visible: Ouverture ── */}
             <MRow
-              bgClass="bg-blue-500/15"
-              icon={<Flag size={14} className="text-blue-500" />}
+              bgClass="bg-zinc-500/10 border border-zinc-500/20"
+              icon={<Flag size={14} className="text-zinc-400" />}
               label="Ouverture du ticket"
               author={evtCreation?.author}
               date={evtCreation?.date ?? null}
@@ -1551,8 +1559,8 @@ function VerticalTimeline({
 
             {/* ── Always visible: Résolution ── */}
             <MRow
-              bgClass="bg-emerald-500/15"
-              icon={<CheckCircle2 size={14} className="text-emerald-500" />}
+              bgClass="bg-emerald-500/10 border border-emerald-500/20"
+              icon={<CheckCircle2 size={14} className="text-emerald-400" />}
               label="Ticket résolu"
               author={resolvedAuthor}
               date={resolvedDate}
@@ -1907,12 +1915,25 @@ function InlineCategorySelect({
         onClick={() => canEdit && !isUpdating && setOpen(!open)}
         className={`flex items-center gap-1.5 w-fit rounded-md ${canEdit && !isUpdating ? "cursor-pointer hover:opacity-80 transition-opacity" : ""}`}
       >
-        <span
-          className="text-sm font-semibold truncate block"
-          style={{ color: catColor }}
-        >
-          {category || "Non classé"}
-        </span>
+        {category ? (
+          <span
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest"
+            style={{
+              backgroundColor: `${catColor}14`,
+              borderColor: `${catColor}33`,
+              color: catColor,
+            }}
+          >
+            <div className="scale-75 origin-center -ml-1">
+              {getCategoryIcon(category)}
+            </div>
+            {category}
+          </span>
+        ) : (
+          <span className="inline-flex items-center px-2.5 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest bg-zinc-500/10 text-zinc-400 border-zinc-500/20">
+            Non classé
+          </span>
+        )}
         {canEdit && !isUpdating && (
           <ChevronDown
             size={12}
@@ -2864,19 +2885,20 @@ export default function TicketDetailsModal({
 
                 {/* ── Statut + Priorité + Catégorie ── */}
                 <div className="grid grid-cols-3 gap-3">
-                  <div className="p-3 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))]">
-                    <span className="block text-xs font-semibold mb-1.5 opacity-60">
+                  <div className="bg-zinc-900/40 border border-white/5 p-4 rounded-xl">
+                    <span className="block text-[12px] text-zinc-500 leading-relaxed mb-2">
                       Statut
                     </span>
-                    <div className="flex items-center gap-1.5">
-                      <span className={`status-dot ${status.dotClass}`} />
-                      <span className="text-sm font-semibold">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${status.colors}`}
+                      >
                         {status.label}
                       </span>
                     </div>
                   </div>
-                  <div className="p-3 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))] overflow-visible">
-                    <span className="block text-xs font-semibold mb-1.5 opacity-60">
+                  <div className="bg-zinc-900/40 border border-white/5 p-4 rounded-xl overflow-visible">
+                    <span className="block text-[12px] text-zinc-500 leading-relaxed mb-2">
                       Priorité
                     </span>
                     <InlinePrioritySelect
@@ -2888,8 +2910,8 @@ export default function TicketDetailsModal({
                       }
                     />
                   </div>
-                  <div className="p-3 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))] overflow-visible">
-                    <span className="block text-xs font-semibold mb-1.5 opacity-60">
+                  <div className="bg-zinc-900/40 border border-white/5 p-4 rounded-xl overflow-visible">
+                    <span className="block text-[12px] text-zinc-500 leading-relaxed mb-2">
                       Catégorie
                     </span>
                     <InlineCategorySelect
@@ -3749,21 +3771,20 @@ export default function TicketDetailsModal({
                     const prioLabel = ticket.priority
                       ? prioMap[ticket.priority] || ticket.priority
                       : "—";
+                      
+                    const resolutionTypeLabels: Record<string, string> = {
+                      success: "Succès Total",
+                      partial: "Succès Partiel (Contournement)",
+                      failed: "Échec (Non résolu)",
+                    };
+                    const rawResType = (ticket as any).resolution_type as string | null | undefined;
+                    const resType = rawResType
+                      ? resolutionTypeLabels[rawResType] || rawResType
+                      : "—";
 
-                    const mats = ticket.materials || [];
-                    const matsRows =
-                      mats.length > 0
-                        ? mats
-                            .map(
-                              (m) =>
-                                `<tr><td>${m.name}</td><td class="center">${m.status === "ready" ? "Disponible" : m.status || "—"}</td><td class="right mono">${(m.unit_cost || 0).toFixed(2)} MAD</td></tr>`,
-                            )
-                            .join("")
-                        : `<tr><td colspan="3" class="center muted">Aucun matériel utilisé</td></tr>`;
-                    const totalCost = (ticket.total_material_cost || 0).toFixed(
-                      2,
-                    );
-
+                    // Signature: prefer fresh field from API, fallback to any pre-existing source
+                    const sigB64 = (ticket as any).digital_signature as string | null | undefined;
+                    // Declare now/ref early — used in signatureHtml template
                     const ref = formatTicketRef(ticket.id);
                     const now = new Date().toLocaleString("fr-FR", {
                       day: "2-digit",
@@ -3772,6 +3793,42 @@ export default function TicketDetailsModal({
                       hour: "2-digit",
                       minute: "2-digit",
                     });
+                    // Generate verification hash (SHA-256 fingerprint simulation)
+                    const verifyId = `${ticket.id}-${ticket.create_date || ""}-${ticket.assigned_to || ""}`
+                      .split("").reduce((acc, c) => ((acc << 5) - acc + c.charCodeAt(0)) | 0, 0)
+                      .toString(16).replace("-", "").toUpperCase().padStart(8, "0");
+                    const signatureHtml = sigB64
+                      ? `<div style="margin-top:24px;padding-top:18px;border-top:2px solid #e5e7eb;">
+                           <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#9ca3af;margin-bottom:12px;">Signature Électronique</div>
+                           <div style="display:inline-block;background:#ffffff;border:1px solid #e5e7eb;border-radius:6px;padding:12px 16px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                             <img src="data:image/png;base64,${sigB64}" style="max-height:70px;max-width:280px;display:block;" />
+                             <div style="margin-top:8px;height:1px;background:#d1d5db;"></div>
+                           </div>
+                           <div style="margin-top:10px;font-size:8.5px;color:#9ca3af;line-height:1.8;font-family:monospace;">
+                             Document signé électroniquement — ${now}<br/>
+                             ID de vérification : SIG-${verifyId}<br/>
+                             Technicien : ${ticket.assigned_to || "—"}
+                           </div>
+                         </div>`
+                      : `<div style="margin-top:20px;padding:10px 14px;background:#f9fafb;border-radius:4px;font-style:italic;color:#9ca3af;font-size:11px;">Aucune signature électronique fournie.</div>`;
+
+                    const mats = ticket.materials || [];
+                    const matsRows =
+                      mats.length > 0
+                        ? mats
+                            .map(
+                              (m) =>
+                                `<tr><td>${m.name}${(m as any).quantity > 1 ? ` <span style="color:#6366f1;font-weight:700">(x${(m as any).quantity})</span>` : ""}</td><td class="center">${m.status === "ready" ? "Disponible" : m.status || "—"}</td><td class="right mono">${((m.unit_cost || 0) * ((m as any).quantity || 1)).toFixed(2)} MAD</td></tr>`,
+                            )
+                            .join("")
+                        : `<tr><td colspan="3" class="center muted">Aucun matériel utilisé</td></tr>`;
+
+                    const financials = calculateTicketFinancials(ticket, timelineData);
+                    const totalCost = financials.resourcesCost.toFixed(2);
+                    const laborCostStr = financials.laborCost.toFixed(2);
+                    const grandTotalStr = financials.grandTotal.toFixed(2);
+                    const tvaStr = financials.tva.toFixed(2);
+                    const totalTtcStr = financials.totalTtc.toFixed(2);
 
                     const resText =
                       ticket.resolution || "Aucune note de résolution fournie.";
@@ -3917,9 +3974,25 @@ export default function TicketDetailsModal({
     </table>
     <table>
       <tbody>
+        <tr style="border-top:1px solid #eee">
+          <td colspan="2" style="color:#666;font-size:10px">Ressources (matériel)</td>
+          <td class="right mono" style="font-size:11px">${totalCost} MAD</td>
+        </tr>
+        <tr>
+          <td colspan="2" style="color:#666;font-size:10px">Main d&apos;œuvre</td>
+          <td class="right mono" style="font-size:11px">${laborCostStr} MAD</td>
+        </tr>
+        <tr style="border-top:1.5px solid #ddd">
+          <td colspan="2" style="font-weight:700">Total HT</td>
+          <td class="right mono" style="font-weight:700">${grandTotalStr} MAD</td>
+        </tr>
+        <tr>
+          <td colspan="2" style="color:#666;font-size:10px">TVA (20%)</td>
+          <td class="right mono" style="color:#666;font-size:10px">${tvaStr} MAD</td>
+        </tr>
         <tr class="total-row">
-          <td colspan="2">Total (Facture Interne)</td>
-          <td class="right total-amount">${totalCost} MAD</td>
+          <td colspan="2">Total TTC</td>
+          <td class="right total-amount">${totalTtcStr} MAD</td>
         </tr>
       </tbody>
     </table>
@@ -3934,7 +4007,12 @@ export default function TicketDetailsModal({
       <div class="field-label">Intervention réalisée par :</div>
       <div class="field-value">${ticket.assigned_to || "—"}</div>
     </div>
+    <div style="margin-bottom:15px">
+      <div class="field-label">Type de résolution :</div>
+      <div class="field-value" style="font-weight:700;">${resType}</div>
+    </div>
     <div class="resolution-box">${formattedRes}</div>
+    ${signatureHtml}
   </div>
 </div>
 
@@ -4062,13 +4140,9 @@ export default function TicketDetailsModal({
                     {ticket.materials.map((m) => (
                       <div
                         key={m.id}
-                        className="grid grid-cols-3 gap-1 items-center bg-[hsl(var(--muted)/0.3)] px-3 py-2 rounded-lg border border-[hsl(var(--border)/0.5)]"
-                      >
+                        className="grid grid-cols-3 gap-1 items-center bg-[hsl(var(--muted)/0.3)] px-3 py-2 rounded-lg border border-[hsl(var(--border)/0.5)]">
                         <div className="flex items-center gap-2 text-xs font-semibold">
-                          <Cpu
-                            size={11}
-                            className="text-[hsl(var(--primary))]"
-                          />
+                          <Cpu size={11} className="text-[hsl(var(--primary))]" />
                           {m.name}
                         </div>
                         <span className="text-center text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-full w-fit mx-auto">
@@ -4079,21 +4153,44 @@ export default function TicketDetailsModal({
                         </span>
                       </div>
                     ))}
-                    <div className="flex items-center justify-between border-t border-[hsl(var(--border)/0.5)] pt-3 mt-1">
-                      <div className="flex items-center gap-2 font-bold text-sm">
-                        <Wallet size={16} className="text-emerald-500" />
-                        Total (Facture Interne)
-                      </div>
-                      <span className="font-mono text-lg font-black text-emerald-500">
-                        {(ticket.total_material_cost || 0).toFixed(2)} MAD
-                      </span>
-                    </div>
                   </div>
                 ) : (
                   <div className="text-xs text-[hsl(var(--muted-foreground))] italic text-center py-4">
                     Aucun matériel utilisé.
                   </div>
                 )}
+
+                {/* ── Totaux financiers ── */}
+                {(() => {
+                  const financials = calculateTicketFinancials(ticket, timelineData);
+                  return (
+                    <div className="border-t border-[hsl(var(--border)/0.5)] pt-3 mt-2 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-[hsl(var(--muted-foreground))] font-medium">Ressources</span>
+                        <span className="font-mono text-xs font-bold">{financials.resourcesCost.toFixed(2)} MAD</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-[hsl(var(--muted-foreground))] font-medium">Main d&apos;oeuvre</span>
+                        <span className="font-mono text-xs font-bold">{financials.laborCost.toFixed(2)} MAD</span>
+                      </div>
+                      <div className="flex items-center justify-between border-t border-[hsl(var(--border)/0.5)] pt-2 mt-1">
+                        <div className="flex items-center gap-2 font-bold text-sm">
+                          <Wallet size={16} className="text-emerald-500" />
+                          Total HT
+                        </div>
+                        <span className="font-mono text-sm font-black">{financials.grandTotal.toFixed(2)} MAD</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-[hsl(var(--muted-foreground))] font-medium">TVA (20%)</span>
+                        <span className="font-mono text-xs font-semibold text-[hsl(var(--muted-foreground))]">{financials.tva.toFixed(2)} MAD</span>
+                      </div>
+                      <div className="flex items-center justify-between bg-emerald-500/8 border border-emerald-500/20 rounded-lg px-3 py-2">
+                        <span className="text-sm font-black uppercase tracking-wide text-emerald-600 dark:text-emerald-400">Total TTC</span>
+                        <span className="font-mono text-xl font-black text-emerald-500">{financials.totalTtc.toFixed(2)} MAD</span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="p-4 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))]">
