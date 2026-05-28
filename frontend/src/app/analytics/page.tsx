@@ -14,10 +14,13 @@ import {
   TrendingUp,
   Calendar,
   ChevronDown,
+  X,
+  ExternalLink,
 } from "lucide-react";
 import StatsCard from "@/components/StatsCard";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import SlaPerformanceModal from "@/components/SlaPerformanceModal";
+import NotificationBell from "@/components/NotificationBell";
 import { useAuth } from "@/lib/auth";
 import {
   AreaChart,
@@ -77,6 +80,27 @@ function AnalyticsDashboard() {
   const [customEndDate, setCustomEndDate] = useState("");
   const [isMorePeriodsOpen, setIsMorePeriodsOpen] = useState(false);
   const [isSlaModalOpen, setIsSlaModalOpen] = useState(false);
+  // Phase 4.2 — Drill-down catégorie IA
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [categoryTickets, setCategoryTickets] = useState<any[]>([]);
+  const [loadingCatTickets, setLoadingCatTickets] = useState(false);
+
+  const fetchCategoryTickets = async (catName: string) => {
+    setLoadingCatTickets(true);
+    try {
+      const res = await axios.get(`${ODOO_URL}/api/tickets`);
+      const all: any[] = res.data?.data || [];
+      const filtered = all.filter(
+        (t: any) =>
+          (t.category || "").toLowerCase() === catName.toLowerCase()
+      );
+      setCategoryTickets(filtered.slice(0, 10));
+    } catch {
+      setCategoryTickets([]);
+    } finally {
+      setLoadingCatTickets(false);
+    }
+  };
 
   const customDateError = (() => {
     if (!customStartDate && !customEndDate) return null;
@@ -268,6 +292,11 @@ function AnalyticsDashboard() {
               </div>
             )}
           </div>
+          
+          {/* Nouvelle Cloche - Alignée à droite */}
+          <div className="hidden md:block ml-2">
+            <NotificationBell />
+          </div>
         </div>
 
         {/* ── KPI CARDS ────────────────────────────────────────────── */}
@@ -280,6 +309,7 @@ function AnalyticsDashboard() {
             color="#6366f1"
             loading={loading}
             delay={0}
+            tooltip="Nombre total de tickets créés sur la période sélectionnée, tous statuts confondus."
           />
           <StatsCard
             title="En Traitement"
@@ -288,6 +318,7 @@ function AnalyticsDashboard() {
             color="#f59e0b"
             loading={loading}
             delay={80}
+            tooltip="Tickets actuellement actifs : en cours de traitement + à risque SLA + déjà hors délai."
           />
           <StatsCard
             title="MTTR (Heures)"
@@ -296,6 +327,7 @@ function AnalyticsDashboard() {
             color="#ff6d5a"
             loading={loading}
             delay={160}
+            tooltip="Mean Time To Resolve : temps moyen en heures entre la création et la résolution d’un ticket. Plus c’est bas, mieux c’est."
           />
           <StatsCard
             title="SLA Respecté"
@@ -307,8 +339,8 @@ function AnalyticsDashboard() {
             onClick={() => setIsSlaModalOpen(true)}
             tooltip={
               !isTechUser
-                ? "Ce taux représente le pourcentage de tickets résolus avant la deadline par l'équipe technique uniquement."
-                : "Ce taux représente votre pourcentage de tickets résolus avant la deadline."
+                ? "Taux de tickets résolus avant la deadline SLA. Cliquez pour voir le détail par technicien."
+                : "Votre taux de tickets résolus avant la deadline SLA. Cliquez pour voir les 10 derniers."
             }
           />
         </div>
@@ -386,6 +418,11 @@ function AnalyticsDashboard() {
           <div className="glass-card p-4 sm:p-6 flex flex-col rounded-2xl shadow-sm border border-[hsl(var(--border)/0.5)]">
             <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-[hsl(var(--muted-foreground))] flex items-center gap-2 mb-4 sm:mb-6">
               <Target size={16} /> {pieTitle}
+              {!isTechUser && (
+                <span className="ml-auto text-[0.6rem] font-normal normal-case text-[hsl(var(--muted-foreground)/0.6)] italic">
+                  Cliquez une tranche pour détailler
+                </span>
+              )}
             </h3>
 
             <div className="flex-1 flex flex-col justify-center">
@@ -416,6 +453,12 @@ function AnalyticsDashboard() {
                           dataKey="value"
                           stroke="none"
                           cornerRadius={4}
+                          onClick={!isTechUser ? (entry: any) => {
+                            const cat = entry.name;
+                            setSelectedCategory(cat);
+                            fetchCategoryTickets(cat);
+                          } : undefined}
+                          style={!isTechUser ? { cursor: 'pointer' } : undefined}
                         >
                           {pieData.map((entry: any, index: number) => (
                             <Cell
@@ -425,6 +468,7 @@ function AnalyticsDashboard() {
                                   ? entry.name === "Résolus" ? "#10b981" : "#f59e0b"
                                   : COLORS[index % COLORS.length]
                               }
+                              opacity={selectedCategory && selectedCategory !== entry.name ? 0.4 : 1}
                             />
                           ))}
                         </Pie>
@@ -435,12 +479,14 @@ function AnalyticsDashboard() {
                     {/* Center label */}
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
                       <span className="text-2xl sm:text-3xl font-black text-[hsl(var(--foreground))]">
-                        {isTechUser
+                        {selectedCategory
+                          ? categoryTickets.length
+                          : isTechUser
                           ? data.counters.resolved + data.counters.overdue + data.counters.at_risk + data.counters.in_progress
                           : data.counters.total}
                       </span>
                       <p className="text-[0.6rem] font-bold uppercase tracking-widest text-[hsl(var(--muted-foreground))]">
-                        Total
+                        {selectedCategory ? "tickets" : "Total"}
                       </p>
                     </div>
                   </div>
@@ -448,7 +494,23 @@ function AnalyticsDashboard() {
                   {/* Legend */}
                   <div className="flex flex-wrap justify-center gap-x-3 gap-y-2 mt-3 max-h-[90px] overflow-y-auto custom-scrollbar px-1">
                     {pieData.map((c: any, i: number) => (
-                      <div key={i} className="flex items-center gap-1.5 text-xs font-medium">
+                      <button
+                        key={i}
+                        onClick={!isTechUser ? () => {
+                          if (selectedCategory === c.name) {
+                            setSelectedCategory(null);
+                            setCategoryTickets([]);
+                          } else {
+                            setSelectedCategory(c.name);
+                            fetchCategoryTickets(c.name);
+                          }
+                        } : undefined}
+                        className={`flex items-center gap-1.5 text-xs font-medium transition-opacity ${
+                          !isTechUser ? 'cursor-pointer hover:opacity-100' : ''
+                        } ${
+                          selectedCategory && selectedCategory !== c.name ? 'opacity-40' : ''
+                        }`}
+                      >
                         <div
                           className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
                           style={{
@@ -461,9 +523,56 @@ function AnalyticsDashboard() {
                           {c.name}
                           <span className="opacity-60 ml-1">({c.value})</span>
                         </span>
-                      </div>
+                      </button>
                     ))}
                   </div>
+
+                  {/* Phase 4.2 — Dréll-down panel : liste des tickets de la catégorie */}
+                  {selectedCategory && !isTechUser && (
+                    <div className="mt-4 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--muted)/0.2)] overflow-hidden animate-fade-in">
+                      <div className="flex items-center justify-between px-3 py-2 border-b border-[hsl(var(--border)/0.4)]">
+                        <span className="text-[11px] font-bold text-[hsl(var(--foreground))] truncate">
+                          📂 {selectedCategory}
+                        </span>
+                        <button
+                          onClick={() => { setSelectedCategory(null); setCategoryTickets([]); }}
+                          className="p-0.5 rounded hover:bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                      <div className="max-h-[160px] overflow-y-auto custom-scrollbar divide-y divide-[hsl(var(--border)/0.3)]">
+                        {loadingCatTickets ? (
+                          <div className="flex items-center justify-center py-4">
+                            <span className="text-xs text-[hsl(var(--muted-foreground))] animate-pulse">Chargement…</span>
+                          </div>
+                        ) : categoryTickets.length === 0 ? (
+                          <p className="text-xs text-center py-4 text-[hsl(var(--muted-foreground))]">Aucun ticket trouvé</p>
+                        ) : (
+                          categoryTickets.map((t: any) => (
+                            <div key={t.id} className="flex items-center gap-2 px-3 py-2">
+                              <span className="text-[10px] font-mono text-[hsl(var(--muted-foreground))] flex-shrink-0">
+                                TK-{String(t.id).padStart(4, '0')}
+                              </span>
+                              <span className="text-[11px] truncate flex-1">{t.name}</span>
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                                t.state === 'resolved' ? 'bg-emerald-500/15 text-emerald-500'
+                                : t.state === 'escalated' ? 'bg-orange-500/15 text-orange-500'
+                                : 'bg-blue-500/15 text-blue-500'
+                              }`}>
+                                {t.state}
+                              </span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      {categoryTickets.length === 10 && (
+                        <div className="px-3 py-1.5 text-center border-t border-[hsl(var(--border)/0.3)]">
+                          <span className="text-[10px] text-[hsl(var(--muted-foreground))]">Affichage limité aux 10 premiers</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
             </div>

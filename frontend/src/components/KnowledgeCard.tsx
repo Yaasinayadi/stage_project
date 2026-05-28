@@ -10,6 +10,7 @@ export type KbTag = { id: number; name: string };
 export type KbArticle = {
   id: number;
   title: string;
+  problem_description: string | null;
   solution: string | null;
   solution_preview: string;
   category: string | null;

@@ -39,6 +39,7 @@ import LinearSlaBar from "@/components/LinearSlaBar";
 import DualSlaGauge from "@/components/DualSlaGauge";
 import CompactTimeline from "@/components/CompactTimeline";
 import TicketCard from "@/components/TicketCard";
+import NotificationBell from "@/components/NotificationBell";
 import { useAuth } from "@/lib/auth";
 
 import { ODOO_URL } from "@/lib/config";
@@ -438,6 +439,9 @@ function QueuePage() {
               <RefreshCw size={15} />
               Actualiser
             </button>
+            <div className="hidden md:block">
+              <NotificationBell />
+            </div>
           </div>
         </div>
 

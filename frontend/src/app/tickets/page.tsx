@@ -27,7 +27,9 @@ import StatsCard from "@/components/StatsCard";
 import TicketCard, { getStatusInfo } from "@/components/TicketCard";
 import TicketTable from "@/components/TicketTable";
 import TicketModal from "@/components/TicketModal";
+import TicketDetailsModal from "@/components/TicketDetailsModal";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import NotificationBell from "@/components/NotificationBell";
 import { useAuth } from "@/lib/auth";
 import { ODOO_URL } from "@/lib/config";
 
@@ -74,6 +76,25 @@ const MORE_PERIODS = [
   { id: "30days", label: "30 Jours" },
 ];
 
+import { useSearchParams, useRouter } from "next/navigation";
+import { Suspense } from "react";
+
+function DeepLinkHandler({ onTicketId }: { onTicketId: (id: number) => void }) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const ticketIdParam = searchParams.get("ticketId");
+
+  useEffect(() => {
+    if (ticketIdParam) {
+      onTicketId(parseInt(ticketIdParam, 10));
+      // Clean the URL without triggering a hard reload
+      router.replace(window.location.pathname, { scroll: false });
+    }
+  }, [ticketIdParam, onTicketId, router]);
+
+  return null;
+}
+
 function Dashboard() {
   const { user } = useAuth();
   const [tickets, setTickets] = useState<TicketType[]>([]);
@@ -115,6 +136,10 @@ function Dashboard() {
     statuses: [],
     priorities: [],
   });
+
+  // Global Modal state for deep linking
+  const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
+
 
   const [openDropdown, setOpenDropdown] = useState<
     "status" | "priority" | "agent" | "category" | null
@@ -382,6 +407,10 @@ function Dashboard() {
         setIsMorePeriodsOpen(false);
       }}
     >
+      <Suspense fallback={null}>
+        <DeepLinkHandler onTicketId={setSelectedTicketId} />
+      </Suspense>
+
       {/* ─── Header ─── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-in relative z-50">
         <div>
@@ -400,16 +429,21 @@ function Dashboard() {
           </p>
         </div>
         {user?.x_support_role !== "admin" ? (
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="btn-primary shadow-md hover:shadow-lg transition-all shadow-[hsl(var(--primary)/0.2)]"
-            id="new-ticket-btn"
-          >
-            <PlusCircle size={18} />
-            Nouveau ticket
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="btn-primary shadow-md hover:shadow-lg transition-all shadow-[hsl(var(--primary)/0.2)]"
+              id="new-ticket-btn"
+            >
+              <PlusCircle size={18} />
+              Nouveau ticket
+            </button>
+            <div className="hidden md:block">
+              <NotificationBell />
+            </div>
+          </div>
         ) : (
-          <div className="flex items-center gap-2 relative z-50">
+          <div className="flex items-center gap-3 relative z-50">
             <div className="flex bg-[hsl(var(--muted)/0.3)] p-1.5 rounded-xl border border-[hsl(var(--border)/0.5)] shadow-sm w-max">
               {/* Primary Tabs */}
               {VISIBLE_PERIODS.map((p) => (
@@ -513,6 +547,9 @@ function Dashboard() {
                 </div>
               </div>
             )}
+            <div className="hidden md:block">
+              <NotificationBell />
+            </div>
           </div>
         )}
       </div>
@@ -974,6 +1011,16 @@ function Dashboard() {
         onClose={() => setIsModalOpen(false)}
         onSuccess={fetchTickets}
       />
+
+      {/* ─── Deep Linked Ticket Modal ─── */}
+      {selectedTicketId !== null && tickets.find(t => t.id === selectedTicketId) && (
+        <TicketDetailsModal
+          ticket={tickets.find(t => t.id === selectedTicketId) as TicketType}
+          isOpen={true}
+          onClose={() => setSelectedTicketId(null)}
+          onRefresh={fetchTickets}
+        />
+      )}
     </div>
   );
 }

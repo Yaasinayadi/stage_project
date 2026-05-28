@@ -310,11 +310,31 @@ class SupportTicket(models.Model):
                 continue
 
             if now > ticket.sla_deadline:
+                # Phase 2.4 — Déclencher l'email d'alerte SLA si on vient de passer "breached"
+                # Le contexte 'notif_sla_sent' évite la récursion en cas de recompute
+                if ticket.sla_status != 'breached' and not self.env.context.get('notif_sla_sent'):
+                    try:
+                        template = self.env.ref(
+                            'pfe_it_support.email_template_sla_breached', raise_if_not_found=False
+                        )
+                        if template:
+                            # Vérifier la préférence SLA du technicien assigné (ou du demandeur)
+                            recipient = ticket.assigned_to_id or ticket.user_id
+                            if recipient and getattr(recipient, 'x_notif_on_sla', True):
+                                template.sudo().with_context(notif_sla_sent=True).send_mail(
+                                    ticket.id, force_send=True
+                                )
+                    except Exception as e:
+                        import logging
+                        logging.getLogger(__name__).error(
+                            "[NOTIF] Échec email SLA breached pour TK-%04d : %s", ticket.id, e
+                        )
                 ticket.sla_status = 'breached'
             elif now > (ticket.sla_deadline - timedelta(hours=1)):
                 ticket.sla_status = 'at_risk'
             else:
                 ticket.sla_status = 'on_track'
+
 
     # ─── Calcul Centralisé des Statistiques SLA ──────────────────────────────
     @api.model
@@ -389,6 +409,49 @@ class SupportTicket(models.Model):
                     vals['date_accepted'] = fields.Datetime.now()
 
         result = super(SupportTicket, self).write(vals)
+
+        # Phase 2.4 — Envoyer l'email d'assignation (couvre dispatch, transfer, etc.)
+        # Phase 3   — Notification in-app d'assignation
+        if 'assigned_to_id' in vals and vals['assigned_to_id']:
+            for ticket in self:
+                if old_states.get(ticket.id) and ticket.assigned_to_id:
+                    if not self.env.context.get('notif_assign_sent'):
+                        # Email
+                        try:
+                            template = self.env.ref(
+                                'pfe_it_support.email_template_ticket_assigned', raise_if_not_found=False
+                            )
+                            if template:
+                                recipient = ticket.user_id
+                                if recipient and getattr(recipient, 'x_notif_on_assign', True):
+                                    template.sudo().with_context(notif_assign_sent=True).send_mail(
+                                        ticket.id, force_send=True
+                                    )
+                        except Exception as e:
+                            import logging
+                            logging.getLogger(__name__).warning("[NOTIF] Échec email assign TK-%04d: %s", ticket.id, e)
+
+                        # In-app
+                        try:
+                            if ticket.user_id and ticket.assigned_to_id:
+                                ticket_ref = f"TK-{str(ticket.id).zfill(4)}"
+                                tech_name = ticket.assigned_to_id.name
+                                self.env['support.notification'].sudo()._create_notif(
+                                    user_id=ticket.user_id.id,
+                                    notif_type='ticket_assigned',
+                                    message=f"🔧 Votre ticket {ticket_ref} a été assigné à {tech_name}.",
+                                    ticket_id=ticket.id,
+                                )
+                                # Notifier aussi le technicien de sa nouvelle assignation
+                                self.env['support.notification'].sudo()._create_notif(
+                                    user_id=ticket.assigned_to_id.id,
+                                    notif_type='ticket_assigned',
+                                    message=f"🎯 Nouveau ticket assigné : {ticket_ref}",
+                                    ticket_id=ticket.id,
+                                )
+                        except Exception as e:
+                            import logging
+                            logging.getLogger(__name__).warning("[NOTIF-INAPP] Échec notif assign TK-%04d: %s", ticket.id, e)
 
         # --- Décrémentation du stock à la résolution ---
         if 'state' in vals and vals['state'] in ('resolved', 'closed'):

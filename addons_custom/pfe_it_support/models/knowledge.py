@@ -15,6 +15,11 @@ class SupportKnowledge(models.Model):
         help='Titre clair et descriptif du problème ou de la procédure.'
     )
 
+    problem_description = fields.Text(
+        string='Description du problème',
+        help='Description du symptôme ou du problème rencontré par l\'utilisateur.'
+    )
+
     solution = fields.Html(
         string='Contenu / Solution',
         required=True,

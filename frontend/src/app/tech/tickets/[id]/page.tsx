@@ -409,7 +409,8 @@ function TicketDetailPage() {
   const [kbDraftData, setKbDraftData] = useState<{
     title: string;
     category: string;
-    content: string;
+    problemDescription: string;
+    solution: string;
     sourceTicketId: number;
   } | null>(null);
 
@@ -894,19 +895,11 @@ function TicketDetailPage() {
 
       if (addToKb && ticket) {
         // ── Cas 2 (Toggle ON) : Ouvrir le modal KB pré-rempli ──
-        // Étape B : Préparer les données fusionnées
-        const mergedContent = [
-          "<h3>📋 Description du problème</h3>",
-          `<p>${ticket.description.replace(/\n/g, "<br/>")}</p>`,
-          "<hr/>",
-          "<h3>Solution apportée</h3>",
-          `<p>${resolution.replace(/\n/g, "<br/>")}</p>`,
-        ].join("\n");
-
         setKbDraftData({
           title: ticket.name,
           category: ticket.category ?? "",
-          content: mergedContent,
+          problemDescription: ticket.description,
+          solution: resolution,
           sourceTicketId: ticket.id,
         });
 
@@ -2501,7 +2494,8 @@ function TicketDetailPage() {
       {kbDraftData && (
         <KnowledgeModal
           initialTitle={kbDraftData.title}
-          initialContent={kbDraftData.content}
+          initialProblemDescription={kbDraftData.problemDescription}
+          initialContent={kbDraftData.solution}
           initialCategory={kbDraftData.category}
           fromTicket={kbDraftData.sourceTicketId}
           onClose={handleKbClose}

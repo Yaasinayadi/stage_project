@@ -114,3 +114,41 @@ class ResUsers(models.Model):
                 user.x_support_role = 'tech'
             else:
                 user.x_support_role = 'user'
+
+    # ─── Phase 1 — Préférences de Notification ───────────────────────────────
+    # Ces 4 champs permettent à l'utilisateur de choisir sur quels événements
+    # il souhaite recevoir un email. Exposés via PATCH /api/me sur le frontend.
+    x_notif_on_create  = fields.Boolean(
+        string='Email à la création de ticket',
+        default=True,
+        help='Envoyer un email de confirmation quand un ticket est créé par cet utilisateur.',
+    )
+    x_notif_on_assign  = fields.Boolean(
+        string="Email à l'assignation",
+        default=True,
+        help='Envoyer un email quand un technicien est assigné au ticket de cet utilisateur.',
+    )
+    x_notif_on_comment = fields.Boolean(
+        string='Email aux nouveaux messages',
+        default=True,
+        help="Envoyer un email quand un nouveau commentaire est posté sur le ticket de l'utilisateur.",
+    )
+    x_notif_on_sla     = fields.Boolean(
+        string='Email si SLA dépassé',
+        default=True,
+        help="Alerter par email le technicien assigné si la deadline SLA est dépassée.",
+    )
+
+    # ─── Phase 1 — Sécurisation Email (vérification) ─────────────────────────
+    # x_email_verified : True si l'email a été confirmé (ou si connexion Google OAuth2).
+    # x_signup_token   : Token à usage unique envoyé par email lors de l'inscription.
+    x_email_verified = fields.Boolean(
+        string='Email vérifié',
+        default=False,
+        help="True si l'adresse email a été confirmée par l'utilisateur ou validée via Google OAuth2.",
+    )
+    x_signup_token   = fields.Char(
+        string='Token de validation inscription',
+        copy=False,
+        help='Token à usage unique — effacé après validation de l\'email.',
+    )

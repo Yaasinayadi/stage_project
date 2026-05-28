@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { X, Loader2, CheckCircle2, BookOpen, ArrowLeft } from "lucide-react";
+import { X, Loader2, CheckCircle2, BookOpen, ClipboardList, Lightbulb } from "lucide-react";
 import axios from "axios";
 import type { KbArticle, KbTag } from "./KnowledgeCard";
 import { ODOO_URL } from "@/lib/config";
@@ -10,6 +10,7 @@ import { ODOO_URL } from "@/lib/config";
 type Props = {
   article?: KbArticle | null;
   initialTitle?: string;
+  initialProblemDescription?: string;
   initialContent?: string;
   initialCategory?: string;
   fromTicket?: string | number | null;
@@ -24,6 +25,7 @@ type Step = "form" | "saving" | "success";
 export default function KnowledgeModal({
   article,
   initialTitle,
+  initialProblemDescription,
   initialContent,
   initialCategory,
   fromTicket,
@@ -44,7 +46,9 @@ export default function KnowledgeModal({
   const [tagInput, setTagInput] = useState(
     article?.tags.map((t) => t.name).join(", ") ?? "",
   );
-  const [content, setContent] = useState(initialContent ?? "");
+  // Phase 4.4 — Deux champs séparés : description du problème + solution
+  const [problemDescription, setProblemDescription] = useState(initialProblemDescription ?? "");
+  const [solution, setSolution] = useState(initialContent ?? "");
   const [isPublished, setIsPublished] = useState(
     article?.is_published ?? false,
   );
@@ -71,17 +75,31 @@ export default function KnowledgeModal({
       .catch(() => {}); // garde les catégories par défaut si erreur
   }, []);
 
-  // On édition, on charge le HTML complet via l'endpoint détail
+  // On édition, on charge les deux champs séparément
   useEffect(() => {
     if (article) {
       axios
         .get(`${ODOO_URL}/api/knowledge/${article.id}`)
         .then((res) => {
           if (res.data.status === 200) {
-            setContent(res.data.data.solution ?? "");
+            const raw: string = res.data.data.solution ?? "";
+            const problem_desc: string = res.data.data.problem_description ?? "";
+            
+            if (problem_desc) {
+                setProblemDescription(problem_desc);
+                setSolution(raw);
+            } else if (raw.includes('---SOLUTION---')) {
+              // Rétrocompatibilité si un article a été sauvegardé avec le séparateur avant la maj Odoo
+              const [desc, sol] = raw.split('---SOLUTION---');
+              setProblemDescription(desc.trim());
+              setSolution(sol.trim());
+            } else {
+              setProblemDescription("");
+              setSolution(raw);
+            }
           }
         })
-        .catch(() => setContent(""));
+        .catch(() => { setProblemDescription(""); setSolution(""); });
     }
   }, [article]);
 
@@ -103,8 +121,8 @@ export default function KnowledgeModal({
       e.preventDefault();
       setError(null);
 
-      if (!title.trim() || !content.trim()) {
-        setError("Le titre et le contenu sont requis.");
+      if (!title.trim() || !solution.trim()) {
+        setError("Le titre et la solution sont requis.");
         return;
       }
 
@@ -121,7 +139,8 @@ export default function KnowledgeModal({
             `${ODOO_URL}/api/knowledge/${article.id}`,
             {
               title,
-              solution: content,
+              problem_description: problemDescription.trim(),
+              solution: solution.trim(),
               category: category || undefined,
               is_published: isPublished,
               requester_id: userId,
@@ -138,7 +157,8 @@ export default function KnowledgeModal({
             `${ODOO_URL}/api/knowledge/create`,
             {
               title,
-              solution: content,
+              problem_description: problemDescription.trim(),
+              solution: solution.trim(),
               category: category || undefined,
               is_published: isPublished,
               author_id: userId,
@@ -176,7 +196,8 @@ export default function KnowledgeModal({
     },
     [
       title,
-      content,
+      solution,
+      problemDescription,
       category,
       tagInput,
       isPublished,
@@ -304,22 +325,38 @@ export default function KnowledgeModal({
                 />
               </div>
 
-              {/* Contenu */}
+              {/* Phase 4.4 — Champ 1 : Description du problème */}
               <div>
-                <label className="block text-sm font-semibold mb-1.5">
-                  Contenu / Solution <span className="text-red-500">*</span>
+                <label className="block text-sm font-semibold mb-1.5 flex items-center gap-1.5">
+                  <ClipboardList size={14} className="text-[hsl(var(--muted-foreground))]" />
+                  Description du problème
+                  <span className="text-[hsl(var(--muted-foreground))] font-normal text-xs ml-1">(optionnelle)</span>
+                </label>
+                <textarea
+                  value={problemDescription}
+                  onChange={(e) => setProblemDescription(e.target.value)}
+                  className="input-field focus-ring w-full resize-y"
+                  style={{ minHeight: "100px" }}
+                  placeholder="Décrivez le symptôme ou le problème rencontré par l'utilisateur..."
+                />
+              </div>
+
+              {/* Phase 4.4 — Champ 2 : Solution apportée */}
+              <div>
+                <label className="block text-sm font-semibold mb-1.5 flex items-center gap-1.5">
+                  <Lightbulb size={14} className="text-amber-400" />
+                  Solution apportée <span className="text-red-500">*</span>
                 </label>
                 <textarea
                   required
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
+                  value={solution}
+                  onChange={(e) => setSolution(e.target.value)}
                   className="input-field focus-ring w-full resize-y"
-                  style={{ minHeight: fromTicket ? "220px" : "180px" }}
+                  style={{ minHeight: fromTicket ? "180px" : "140px" }}
                   placeholder="Décrivez les étapes de résolution, commandes, liens utiles..."
                 />
                 <p className="text-[0.65rem] text-[hsl(var(--muted-foreground))] mt-1">
-                  Vous pouvez utiliser du HTML basique : &lt;b&gt;, &lt;ul&gt;,
-                  &lt;li&gt;, &lt;p&gt;, &lt;h3&gt;
+                  HTML accepté : &lt;b&gt;, &lt;ul&gt;, &lt;li&gt;, &lt;p&gt;, &lt;h3&gt;
                 </p>
               </div>
 

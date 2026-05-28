@@ -119,31 +119,36 @@ export default function Chatbot({
     return () => window.removeEventListener("toggle-chatbot", handleToggle);
   }, []);
 
-  // ── Fetch Tickets & Chat History ──
+  // ── Fetch Tickets (réutilisable) ──
+  const fetchTickets = async () => {
+    if (!user) return;
+    try {
+      const res = await axios.get(`${ODOO_URL}/api/tickets?user_id=${user.id}`);
+      if (res.data.status === 200) {
+        setRawUserTickets(res.data.data);
+        setUserTickets(
+          res.data.data.map((t: any) => ({
+            reference: `TK-${String(t.id).padStart(4, "0")}`,
+            sujet: t.name,
+            statut: t.state,
+            assigne_a: t.assigned_to || "Non assigné",
+            categorie: t.category,
+            priorite: t.priority,
+            escalated_by_name: t.escalated_by_name || null,
+          })),
+        );
+        return res.data.data;
+      }
+    } catch (e) {
+      console.error("Erreur récupération tickets", e);
+    }
+    return null;
+  };
+
+  // ── Fetch Tickets & Chat History au montage ──
   useEffect(() => {
     if (user) {
-      // Tickets
-      axios
-        .get(`${ODOO_URL}/api/tickets?user_id=${user.id}`)
-        .then((res) => {
-          if (res.data.status === 200) {
-            setRawUserTickets(res.data.data);
-            setUserTickets(
-              res.data.data.map((t: any) => ({
-                reference: `TK-${String(t.id).padStart(4, "0")}`,
-                sujet: t.name,
-                statut: t.state,
-                assigne_a: t.assigned_to || "Non assigné",
-                categorie: t.category,
-                priorite: t.priority,
-                escalated_by_name: t.escalated_by_name || null,
-              })),
-            );
-          }
-        })
-        .catch(console.error);
-
-      // History
+      fetchTickets();
       fetchHistory();
     }
   }, [user]);
@@ -276,11 +281,25 @@ export default function Chatbot({
     setIsLoading(true);
 
     try {
+      // Rafraîchir les tickets avant d'envoyer pour inclure les tickets récemment créés
+      const freshRaw = await fetchTickets();
+      const freshTickets = freshRaw
+        ? freshRaw.map((t: any) => ({
+            reference: `TK-${String(t.id).padStart(4, "0")}`,
+            sujet: t.name,
+            statut: t.state,
+            assigne_a: t.assigned_to || "Non assigné",
+            categorie: t.category,
+            priorite: t.priority,
+            escalated_by_name: t.escalated_by_name || null,
+          }))
+        : userTickets;
+
       const iaUrl = `http://${window.location.hostname}:8000/chat`;
       const res = await axios.post(iaUrl, {
         user_message: userMessage,
         session_id: sessionId,
-        user_tickets: userTickets,
+        user_tickets: freshTickets,
         user_name: user?.name || "Utilisateur",
       });
       const botText = res.data.text || res.data.bot_reply || "";

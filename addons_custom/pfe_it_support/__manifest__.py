@@ -19,6 +19,7 @@
         # user_data.xml supprimé : la création des comptes de démo est gérée
         # par post_init_hook (hooks.py) — idempotent, pas de UniqueViolation
         'data/material_data.xml',    # Catalogue matériel IT — noupdate=1
+        'data/email_templates.xml',  # Phase 2 — Templates email (création, assignation, commentaire, SLA)
         'views/ticket_views.xml',
         'views/sla_views.xml',
         'views/users_views.xml',

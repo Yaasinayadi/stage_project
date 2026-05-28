@@ -100,7 +100,11 @@ export default function SlaBadge({ slaDeadline, slaStatus, compact = false, tick
         title={`SLA deadline : ${parseDateString(slaDeadline).toLocaleString("fr-FR")}`}
       >
         {cfg.icon}
-        {timeInfo.isOverdue ? `En retard ${timeString}${isResolved ? " (clos)" : ""}` : timeString}
+        {timeInfo.isOverdue
+          ? isResolved
+            ? `Résolu hors SLA (+${timeInfo.hours}h ${timeInfo.minutes}m)`
+            : `En retard +${timeInfo.hours}h ${timeInfo.minutes}m ${timeInfo.seconds}s`
+          : `${timeInfo.hours}h ${timeInfo.minutes}m ${timeInfo.seconds}s`}
       </span>
     );
   }
@@ -111,9 +115,13 @@ export default function SlaBadge({ slaDeadline, slaStatus, compact = false, tick
     >
       <Clock size={13} />
       <span>
-        {timeInfo.isOverdue ? "SLA Dépassé de " : "SLA : "}
-        <span className="font-mono tabular-nums">{timeString}</span>
-        {timeInfo.isOverdue ? (isResolved ? " lors de la clôture" : "") : " restants"}
+        {timeInfo.isOverdue
+          ? isResolved
+            ? "Résolu hors SLA "
+            : "SLA Dépassé de "
+          : "SLA : "}
+        <span className="font-mono tabular-nums">+{timeInfo.hours}h {timeInfo.minutes}m {timeInfo.seconds}s</span>
+        {!timeInfo.isOverdue && " restants"}
       </span>
     </div>
   );

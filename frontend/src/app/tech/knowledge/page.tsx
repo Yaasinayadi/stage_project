@@ -19,6 +19,7 @@ import { useAuth } from "@/lib/auth";
 import KnowledgeCard, { type KbArticle } from "@/components/KnowledgeCard";
 import KnowledgeReadModal from "@/components/KnowledgeReadModal";
 import KnowledgeModal from "@/components/KnowledgeModal";
+import NotificationBell from "@/components/NotificationBell";
 
 import { ODOO_URL } from "@/lib/config";
 
@@ -204,6 +205,9 @@ function KnowledgePage() {
               Nouvel article
             </button>
           )}
+          <div className="hidden md:block">
+            <NotificationBell />
+          </div>
         </div>
       </div>
 

@@ -7,3 +7,4 @@ from . import comment
 from . import chat_history
 from . import knowledge_tag  # doit être importé AVANT knowledge (relation Many2many)
 from . import knowledge
+from . import notification   # Phase 3 — Centre de notifications in-app

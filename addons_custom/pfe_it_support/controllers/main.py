@@ -1,4 +1,4 @@
-from odoo import http
+from odoo import http, fields  # type: ignore
 from odoo.http import request
 import json
 import hashlib
@@ -178,6 +178,12 @@ class SupportTicketController(http.Controller):
                     'x_support_role': x_support_role,
                     'it_domains': [d.name for d in user.it_domain_ids],
                     'resolved_tickets': resolved_tickets,
+                    'preferences': {
+                        'notif_on_create': user.x_notif_on_create,
+                        'notif_on_assign': user.x_notif_on_assign,
+                        'notif_on_comment': user.x_notif_on_comment,
+                        'notif_on_sla': user.x_notif_on_sla,
+                    }
                 }
             })
 
@@ -205,6 +211,12 @@ class SupportTicketController(http.Controller):
                 vals['name'] = post['name'].strip()
             if 'phone' in post:
                 vals['phone'] = post['phone'].strip()
+            if 'preferences' in post:
+                prefs = post['preferences']
+                if 'notif_on_create' in prefs: vals['x_notif_on_create'] = prefs['notif_on_create']
+                if 'notif_on_assign' in prefs: vals['x_notif_on_assign'] = prefs['notif_on_assign']
+                if 'notif_on_comment' in prefs: vals['x_notif_on_comment'] = prefs['notif_on_comment']
+                if 'notif_on_sla' in prefs: vals['x_notif_on_sla'] = prefs['notif_on_sla']
                 
             if vals:
                 user.write(vals)
@@ -215,6 +227,12 @@ class SupportTicketController(http.Controller):
                 'data': {
                     'name': user.name,
                     'phone': user.phone or '',
+                    'preferences': {
+                        'notif_on_create': user.x_notif_on_create,
+                        'notif_on_assign': user.x_notif_on_assign,
+                        'notif_on_comment': user.x_notif_on_comment,
+                        'notif_on_sla': user.x_notif_on_sla,
+                    }
                 }
             })
         except Exception as e:
@@ -396,6 +414,44 @@ class SupportTicketController(http.Controller):
 
             env = request.env['support.ticket'].sudo()
             new_ticket = env.create(vals)
+
+            # Phase 2.4 — Envoyer l'email de confirmation de création
+            try:
+                self._send_notification(new_ticket, 'email_template_ticket_created')
+            except Exception as notif_err:
+                _logger.warning("[NOTIF] Erreur création notif: %s", notif_err)
+
+            # Phase 3 — Notification in-app : ticket créé
+            try:
+                if new_ticket.user_id:
+                    ticket_ref = f"TK-{str(new_ticket.id).zfill(4)}"
+                    request.env['support.notification'].sudo()._create_notif(
+                        user_id=new_ticket.user_id.id,
+                        notif_type='ticket_created',
+                        message=f"✅ Votre ticket {ticket_ref} a été créé avec succès.",
+                        ticket_id=new_ticket.id,
+                    )
+            except Exception as notif_err:
+                _logger.warning("[NOTIF-INAPP] Erreur création notif in-app: %s", notif_err)
+
+            # Phase 2.1 — Notifier tous les Admins du nouveau ticket
+            try:
+                ticket_ref = f"TK-{str(new_ticket.id).zfill(4)}"
+                admin_users = request.env['res.users'].sudo().search([
+                    ('x_support_role', '=', 'admin'),
+                    ('active', '=', True),
+                ])
+                notif_env = request.env['support.notification'].sudo()
+                for admin in admin_users:
+                    notif_env._create_notif(
+                        user_id=admin.id,
+                        notif_type='ticket_created',
+                        message=f"🎫 Nouveau ticket {ticket_ref} créé.",
+                        ticket_id=new_ticket.id,
+                    )
+            except Exception as admin_notif_err:
+                _logger.warning("[NOTIF-ADMIN] Erreur notif admin nouveau ticket: %s", admin_notif_err)
+
             return self._json_response({'status': 201, 'message': 'Success', 'ticket_id': new_ticket.id}, 201)
             
         except Exception as e:
@@ -428,6 +484,76 @@ class SupportTicketController(http.Controller):
     def _json_response(self, data, status_code=200):
         """Rétrocompatibilité : utilise _cors_response."""
         return self._cors_response(data, status_code)
+
+    # ─── Phase 2.4 — Déclenchement des Templates Email ──────────────────────
+    def _send_notification(self, ticket, template_xmlid, force_email=None):
+        """
+        Helper centralisé pour envoyer un email de notification via mail.template.
+        Vérifie les préférences de l'utilisateur (x_notif_on_*) avant l'envoi.
+
+        template_xmlid → ex: 'email_template_ticket_created'
+        force_email    → si fourni, override l'email_to du template
+        """
+        # Vérification des préférences de notification de l'utilisateur
+        notif_pref_map = {
+            'email_template_ticket_created':  'x_notif_on_create',
+            'email_template_ticket_assigned': 'x_notif_on_assign',
+            'email_template_ticket_comment':  'x_notif_on_comment',
+            'email_template_sla_breached':    'x_notif_on_sla',
+        }
+        pref_field = notif_pref_map.get(template_xmlid)
+        if pref_field and ticket.user_id:
+            user_pref = getattr(ticket.user_id, pref_field, True)
+            if not user_pref:
+                _logger.info(
+                    "[NOTIF] Email ignoré — préférence %s désactivée pour user %s",
+                    pref_field, ticket.user_id.login
+                )
+                return
+
+        # Phase 3.2 — Vérifier que l'utilisateur a un email valide et non-fictif
+        recipient = force_email or (ticket.user_id.email if ticket.user_id else None)
+        FAKE_DOMAINS = {'test.com', 'example.com', 'fake.com', 'noreply.com', 'invalid.com', 'test.fr', 'localhost'}
+        if not recipient:
+            _logger.warning(
+                "[NOTIF] Pas d'email valide pour le ticket TK-%04d — envoi ignoré.", ticket.id
+            )
+            return
+        domain_part = recipient.split('@')[-1].lower() if '@' in recipient else ''
+        if domain_part in FAKE_DOMAINS:
+            _logger.info(
+                "[NOTIF] Email '%s' ignoré — domaine de test détecté pour TK-%04d.", recipient, ticket.id
+            )
+            return
+
+        # Charger le template et envoyer
+        try:
+            template = request.env.ref(
+                f'pfe_it_support.{template_xmlid}', raise_if_not_found=False
+            )
+            if not template:
+                _logger.warning("[NOTIF] Template '%s' introuvable dans Odoo.", template_xmlid)
+                return
+
+            email_values = {}
+            if force_email:
+                email_values['email_to'] = force_email
+
+            template.sudo().send_mail(
+                ticket.id,
+                force_send=True,
+                email_values=email_values or None,
+            )
+            _logger.info(
+                "[NOTIF] ✅ Email '%s' envoyé pour TK-%04d → %s",
+                template_xmlid, ticket.id, recipient
+            )
+        except Exception as e:
+            # On ne fait jamais planter une action métier à cause d'un email
+            _logger.error(
+                "[NOTIF] ❌ Échec d'envoi du template '%s' pour TK-%04d : %s",
+                template_xmlid, ticket.id, e
+            )
 
     @http.route('/api/ticket/update/<int:ticket_id>', type='http', auth='public', methods=['PUT', 'OPTIONS'], csrf=False)
     def update_ticket(self, ticket_id, **kw):
@@ -479,11 +605,33 @@ class SupportTicketController(http.Controller):
             vals['x_is_manual_classification'] = True
 
         if 'state' in post: vals['state'] = post['state']
+        old_assigned_id = ticket.assigned_to_id.id if ticket.assigned_to_id else None
+        new_assigned_id = None
         if 'assigned_to_id' in post:
-            vals['assigned_to_id'] = int(post['assigned_to_id']) if post['assigned_to_id'] else False
+            new_assigned_id = int(post['assigned_to_id']) if post['assigned_to_id'] else False
+            vals['assigned_to_id'] = new_assigned_id
 
         try:
             ticket.write(vals)
+
+            # Phase 2.2 — Notif in-app au Technicien lors de l'assignation
+            if new_assigned_id and new_assigned_id != old_assigned_id:
+                try:
+                    ticket_ref = f"TK-{str(ticket.id).zfill(4)}"
+                    request.env['support.notification'].sudo()._create_notif(
+                        user_id=new_assigned_id,
+                        notif_type='ticket_assigned',
+                        message=f"📋 Le ticket {ticket_ref} vous a été assigné : {ticket.name[:60]}",
+                        ticket_id=ticket.id,
+                    )
+                    # Email d'assignation vers le tech (force_email sur son adresse)
+                    tech_user = request.env['res.users'].sudo().browse(new_assigned_id)
+                    if tech_user.exists() and tech_user.email:
+                        self._send_notification(ticket, 'email_template_ticket_assigned',
+                                                force_email=tech_user.email)
+                except Exception as tech_notif_err:
+                    _logger.warning("[NOTIF-TECH] Erreur notif assignation technicien: %s", tech_notif_err)
+
             return self._json_response({'status': 200, 'message': 'Success updated'}, 200)
         except Exception as e:
             return self._json_response({'status': 500, 'message': str(e)}, 500)
@@ -535,14 +683,54 @@ class SupportTicketController(http.Controller):
             # Publier dans la base de connaissances si demandé
             if add_to_kb:
                 try:
+                    import requests
+                    tag_names = []
+                    try:
+                        ia_res = requests.post(
+                            "http://ia_api:8000/extract_keywords",
+                            json={"description": ticket.description or ticket.name},
+                            timeout=5
+                        )
+                        if ia_res.status_code == 200:
+                            tag_names = ia_res.json().get("keywords", [])
+                    except Exception as ia_err:
+                        _logger.warning("IA keyword extraction failed: %s", ia_err)
+
+                    # Create tags
+                    tag_ids = []
+                    if tag_names:
+                        TagModel = request.env['support.knowledge.tag'].sudo()
+                        for tname in tag_names:
+                            tname = str(tname).strip()
+                            if not tname: continue
+                            tag = TagModel.search([('name', '=ilike', tname)], limit=1)
+                            if not tag:
+                                tag = TagModel.create({'name': tname})
+                            tag_ids.append(tag.id)
+
                     request.env['support.knowledge'].sudo().create({
-                        'title': f"[Résolu] {ticket.name}",
+                        'name': f"[Résolu] {ticket.name}",
+                        'problem_description': ticket.description or '',
                         'solution': resolution_note,
-                        'category': ticket.ai_classification.name if ticket.ai_classification else 'Général',
-                        'ticket_id': ticket.id
+                        'category': ticket.ai_classification.name if ticket.ai_classification else 'Autre',
+                        'ticket_id': ticket.id,
+                        'tag_ids': [(6, 0, tag_ids)] if tag_ids else []
                     })
                 except Exception as kb_err:
                     _logger.warning("KB publish failed: %s", kb_err)
+
+            # Phase 2.3 — Notif in-app User : ticket résolu
+            try:
+                if ticket.user_id:
+                    ticket_ref = f"TK-{str(ticket.id).zfill(4)}"
+                    request.env['support.notification'].sudo()._create_notif(
+                        user_id=ticket.user_id.id,
+                        notif_type='ticket_resolved',
+                        message=f"✅ Votre ticket {ticket_ref} a été résolu.",
+                        ticket_id=ticket.id,
+                    )
+            except Exception as res_notif_err:
+                _logger.warning("[NOTIF-USER] Erreur notif résolution user: %s", res_notif_err)
 
             return self._json_response({
                 'status': 200,
@@ -606,6 +794,37 @@ class SupportTicketController(http.Controller):
                 })
             except Exception as comment_err:
                 _logger.warning("Escalation comment failed: %s", comment_err)
+
+            # Phase 2.1 — Notif in-app vers tous les Admins (escalade)
+            try:
+                ticket_ref = f"TK-{str(ticket.id).zfill(4)}"
+                admin_users = request.env['res.users'].sudo().search([
+                    ('x_support_role', '=', 'admin'),
+                    ('active', '=', True),
+                ])
+                notif_env = request.env['support.notification'].sudo()
+                for admin in admin_users:
+                    notif_env._create_notif(
+                        user_id=admin.id,
+                        notif_type='ticket_escalated',
+                        message=f"🚨 Escalade sur {ticket_ref} par {tech_name} : {escalation_note[:80]}",
+                        ticket_id=ticket.id,
+                    )
+            except Exception as admin_esc_err:
+                _logger.warning("[NOTIF-ADMIN] Erreur notif admin escalade: %s", admin_esc_err)
+
+            # Phase 2.3 — Notif in-app vers le User propriétaire du ticket
+            try:
+                if ticket.user_id:
+                    ticket_ref = f"TK-{str(ticket.id).zfill(4)}"
+                    request.env['support.notification'].sudo()._create_notif(
+                        user_id=ticket.user_id.id,
+                        notif_type='ticket_escalated',
+                        message=f"⬆️ Votre ticket {ticket_ref} a été escaladé à l'administrateur.",
+                        ticket_id=ticket.id,
+                    )
+            except Exception as user_esc_err:
+                _logger.warning("[NOTIF-USER] Erreur notif user escalade: %s", user_esc_err)
 
             return self._json_response({
                 'status': 200,
@@ -701,6 +920,22 @@ class SupportTicketController(http.Controller):
                     'author_id': int(user_id) if user_id else request.env.user.id,
                 })
 
+            # Phase 2.3 — Notif in-app User : ticket mis en pause
+            try:
+                if ticket.user_id:
+                    ticket_ref = f"TK-{str(ticket.id).zfill(4)}"
+                    pause_msg = f"⏸️ Votre ticket {ticket_ref} est en attente"
+                    if justification:
+                        pause_msg += f" : {justification[:80]}"
+                    request.env['support.notification'].sudo()._create_notif(
+                        user_id=ticket.user_id.id,
+                        notif_type='ticket_waiting',
+                        message=pause_msg,
+                        ticket_id=ticket.id,
+                    )
+            except Exception as wait_notif_err:
+                _logger.warning("[NOTIF-USER] Erreur notif user pause: %s", wait_notif_err)
+
             return self._json_response({
                 'status': 200,
                 'message': 'Ticket mis en attente client.',
@@ -780,6 +1015,20 @@ class SupportTicketController(http.Controller):
                 'body': body,
                 'author_id': int(user_id) if user_id else request.env.user.id,
             })
+
+            # Phase 2.3 — Notif in-app User : attente matériel
+            try:
+                if ticket.user_id:
+                    ticket_ref = f"TK-{str(ticket.id).zfill(4)}"
+                    mat_label = ', '.join(mat_names[:2]) if mat_names else 'matériel requis'
+                    request.env['support.notification'].sudo()._create_notif(
+                        user_id=ticket.user_id.id,
+                        notif_type='ticket_waiting',
+                        message=f"📦 Votre ticket {ticket_ref} est en attente de matériel ({mat_label}).",
+                        ticket_id=ticket.id,
+                    )
+            except Exception as mat_notif_err:
+                _logger.warning("[NOTIF-USER] Erreur notif user attente matériel: %s", mat_notif_err)
 
             return self._json_response({
                 'status': 200,
@@ -944,6 +1193,18 @@ class SupportTicketController(http.Controller):
                         if articles:
                             data['kb_article_id'] = articles[0].id
                             data['kb_article_title'] = articles[0].name
+                            
+                            # Phase 4.2 - Notification Spéciale IA
+                            try:
+                                if ticket.user_id:
+                                    request.env['support.notification'].sudo()._create_notif(
+                                        user_id=ticket.user_id.id,
+                                        notif_type='ia_solution',
+                                        message=f"🤖 L'IA a trouvé une solution pour votre ticket TK-{str(ticket.id).zfill(4)}",
+                                        ticket_id=ticket.id,
+                                    )
+                            except Exception as notif_err:
+                                _logger.warning("[NOTIF-IA] Erreur création notif IA: %s", notif_err)
 
                 return self._json_response({'status': 'success', 'data': data})
             else:
@@ -1205,7 +1466,31 @@ class SupportTicketController(http.Controller):
                 message_type='comment',
                 subtype_xmlid='mail.mt_comment'
             )
-            
+
+            # Phase 2.4 — Notifier l'auteur du ticket qu'un message a été ajouté
+            # On n'envoie la notif que si l'auteur du commentaire n'est pas lui-même
+            commenter_id = int(user_id) if user_id else None
+            ticket_owner_id = ticket.user_id.id if ticket.user_id else None
+            if commenter_id != ticket_owner_id:
+                try:
+                    self._send_notification(ticket, 'email_template_ticket_comment')
+                except Exception as notif_err:
+                    _logger.warning("[NOTIF] Erreur commentaire notif: %s", notif_err)
+
+            # Phase 3 — Notification in-app : nouveau commentaire
+            try:
+                if ticket.user_id and commenter_id != ticket_owner_id:
+                    ticket_ref = f"TK-{str(ticket.id).zfill(4)}"
+                    commenter_name = new_comment.author_id.name if new_comment.author_id else (author_name or 'Un agent')
+                    request.env['support.notification'].sudo()._create_notif(
+                        user_id=ticket.user_id.id,
+                        notif_type='new_comment',
+                        message=f"💬 {commenter_name} a répondu à votre ticket {ticket_ref}.",
+                        ticket_id=ticket.id,
+                    )
+            except Exception as notif_err:
+                _logger.warning("[NOTIF-INAPP] Erreur commentaire notif in-app: %s", notif_err)
+
             return self._cors_response({
                 'status': 201, 
                 'message': 'Commentaire ajouté.',
@@ -2204,3 +2489,117 @@ class SupportTicketController(http.Controller):
             import logging
             logging.getLogger(__name__).error("chat_history_action error: %s", e)
             return self._cors_response({'status': 'error', 'message': str(e)}, status_code=500)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # PHASE 3 — NOTIFICATION CENTER API
+    # ─────────────────────────────────────────────────────────────────────────
+
+    @http.route('/api/notifications', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
+    def get_notifications(self, **kw):
+        """Retourne les 20 dernières notifications de l'utilisateur (non lues en premier)."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+        try:
+            user_id = kw.get('user_id')
+            if not user_id:
+                return self._cors_response({'status': 400, 'message': 'user_id requis.'}, 400)
+
+            notifs = request.env['support.notification'].sudo().search([
+                ('user_id', '=', int(user_id)),
+            ], limit=20, order='is_read asc, create_date desc')
+
+            data = [{
+                'id':          n.id,
+                'notif_type':  n.notif_type,
+                'message':     n.message,
+                'ticket_id':   n.ticket_id.id if n.ticket_id else None,
+                'ticket_name': n.ticket_id.name if n.ticket_id else None,
+                'is_read':     n.is_read,
+                'create_date': str(n.create_date) if n.create_date else None,
+                'read_at':     str(n.read_at) if n.read_at else None,
+            } for n in notifs]
+
+            unread_count = sum(1 for n in data if not n['is_read'])
+
+            return self._cors_response({
+                'status': 200,
+                'data': data,
+                'unread_count': unread_count,
+            })
+        except Exception as e:
+            return self._cors_response({'status': 500, 'message': str(e)}, 500)
+
+    @http.route('/api/notifications/<int:notif_id>/read', type='http', auth='public', methods=['PATCH', 'OPTIONS'], csrf=False)
+    def mark_notification_read(self, notif_id, **kw):
+        """Marque une notification spécifique comme lue."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+        try:
+            notif = request.env['support.notification'].sudo().browse(notif_id)
+            if not notif.exists():
+                return self._cors_response({'status': 404, 'message': 'Notification introuvable.'}, 404)
+            notif.write({'is_read': True, 'read_at': fields.Datetime.now()})
+            return self._cors_response({'status': 200, 'message': 'Notification marquée comme lue.'})
+        except Exception as e:
+            return self._cors_response({'status': 500, 'message': str(e)}, 500)
+
+    @http.route('/api/notifications/read-all', type='http', auth='public', methods=['PATCH', 'OPTIONS'], csrf=False)
+    def mark_all_notifications_read(self, **kw):
+        """Marque toutes les notifications d'un utilisateur comme lues."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+        try:
+            post = json.loads(request.httprequest.data.decode('utf-8')) if request.httprequest.data else {}
+            user_id = post.get('user_id')
+            if not user_id:
+                return self._cors_response({'status': 400, 'message': 'user_id requis.'}, 400)
+
+            notifs = request.env['support.notification'].sudo().search([
+                ('user_id', '=', int(user_id)),
+                ('is_read', '=', False),
+            ])
+            now = datetime.now()
+            notifs.write({'is_read': True, 'read_at': now})
+            return self._cors_response({'status': 200, 'message': f'{len(notifs)} notification(s) marquée(s) comme lues.'})
+        except Exception as e:
+            return self._cors_response({'status': 500, 'message': str(e)}, 500)
+
+    @http.route('/api/notifications/<int:notif_id>', type='http', auth='public', methods=['DELETE', 'OPTIONS'], csrf=False)
+    def delete_notification(self, notif_id, **kw):
+        """Supprime une notification."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+        try:
+            notif = request.env['support.notification'].sudo().browse(notif_id)
+            if not notif.exists():
+                return self._cors_response({'status': 404, 'message': 'Notification introuvable.'}, 404)
+            notif.unlink()
+            return self._cors_response({'status': 200, 'message': 'Notification supprimée.'})
+        except Exception as e:
+            return self._cors_response({'status': 500, 'message': str(e)}, 500)
+
+    @http.route('/api/notifications/create', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
+    def create_notification(self, **kw):
+        """Crée une notification in-app (utilisé par le service IA ou des appels internes)."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+        try:
+            post = json.loads(request.httprequest.data.decode('utf-8')) if request.httprequest.data else {}
+            user_id   = post.get('user_id')
+            notif_type = post.get('notif_type')
+            message   = post.get('message')
+            ticket_id = post.get('ticket_id')
+
+            if not user_id or not notif_type or not message:
+                return self._cors_response({'status': 400, 'message': 'user_id, notif_type et message requis.'}, 400)
+
+            notif_env = request.env['support.notification'].sudo()
+            notif_env._create_notif(
+                user_id=int(user_id),
+                notif_type=notif_type,
+                message=message,
+                ticket_id=int(ticket_id) if ticket_id else None,
+            )
+            return self._cors_response({'status': 201, 'message': 'Notification créée.'}, 201)
+        except Exception as e:
+            return self._cors_response({'status': 500, 'message': str(e)}, 500)

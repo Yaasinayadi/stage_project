@@ -12,6 +12,8 @@ import {
   Trash2,
   BookOpen,
   ArrowLeft,
+  ClipboardList,
+  Lightbulb,
 } from "lucide-react";
 import type { KbArticle } from "./KnowledgeCard";
 import { getCategoryColor } from "./KnowledgeCard";
@@ -176,23 +178,40 @@ export default function KnowledgeReadModal({
             </div>
           )}
 
-          {/* HTML Content */}
-          {safeHtml ? (
-            <div
-              className="prose prose-sm max-w-none text-[hsl(var(--foreground))]
-                         prose-headings:font-semibold prose-headings:text-[hsl(var(--foreground))]
-                         prose-strong:text-[hsl(var(--foreground))]
-                         prose-code:bg-[hsl(var(--muted))] prose-code:px-1 prose-code:rounded
-                         prose-ul:my-2 prose-li:my-0.5
-                         prose-a:text-[hsl(var(--primary))]"
-              dangerouslySetInnerHTML={{ __html: safeHtml }}
-            />
-          ) : (
-            <div className="flex flex-col items-center justify-center py-12 text-[hsl(var(--muted-foreground))]">
-              <BookOpen size={32} className="mb-2 opacity-30" />
-              <p className="text-sm">Contenu non disponible.</p>
+          {/* Problem description */}
+          {article.problem_description && (
+            <div className="bg-[hsl(var(--muted)/0.3)] p-4 rounded-xl border border-[hsl(var(--border)/0.5)]">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-[hsl(var(--muted-foreground))] flex items-center gap-1.5 mb-2">
+                <ClipboardList size={14} /> Description du problème
+              </h3>
+              <p className="text-sm whitespace-pre-wrap text-[hsl(var(--foreground))] leading-relaxed">
+                {article.problem_description}
+              </p>
             </div>
           )}
+
+          {/* HTML Content */}
+          <div className="pt-2">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-amber-500 flex items-center gap-1.5 mb-3">
+              <Lightbulb size={14} /> Solution apportée
+            </h3>
+            {safeHtml ? (
+              <div
+                className="prose prose-sm max-w-none text-[hsl(var(--foreground))]
+                           prose-headings:font-semibold prose-headings:text-[hsl(var(--foreground))]
+                           prose-strong:text-[hsl(var(--foreground))]
+                           prose-code:bg-[hsl(var(--muted))] prose-code:px-1 prose-code:rounded
+                           prose-ul:my-2 prose-li:my-0.5
+                           prose-a:text-[hsl(var(--primary))]"
+                dangerouslySetInnerHTML={{ __html: safeHtml }}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 text-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted)/0.1)] rounded-xl border border-dashed border-[hsl(var(--border))]">
+                <BookOpen size={24} className="mb-2 opacity-30" />
+                <p className="text-sm">Contenu non disponible.</p>
+              </div>
+            )}
+          </div>
 
           {/* Source ticket */}
           {article.source_ticket_id && (

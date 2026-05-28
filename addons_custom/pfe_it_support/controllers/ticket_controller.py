@@ -729,7 +729,8 @@ class TicketController(http.Controller):
             'write_date': str(kb.write_date) if getattr(kb, 'write_date', None) else None,
             'is_published': kb.is_published,
             'tags': tags,
-            'solution_preview': getattr(kb, 'solution_preview', '') or ''
+            'solution_preview': getattr(kb, 'solution_preview', '') or '',
+            'problem_description': getattr(kb, 'problem_description', '') or ''
         }
         
         # Always add solution for now to prevent frontend issues, 
@@ -826,6 +827,7 @@ class TicketController(http.Controller):
 
                 vals = {}
                 if 'title'        in post: vals['name']         = post['title']
+                if 'problem_description' in post: vals['problem_description'] = post['problem_description']
                 if 'solution'     in post: vals['solution']      = post['solution']
                 if 'category'     in post: vals['category']      = post['category']
                 if 'is_published' in post: vals['is_published']  = bool(post['is_published'])
@@ -880,6 +882,7 @@ class TicketController(http.Controller):
             body = json.loads(request.httprequest.data.decode('utf-8')) if request.httprequest.data else {}
 
             title        = body.get('title', '').strip() if body.get('title') else ''
+            problem_description = body.get('problem_description', '').strip() if body.get('problem_description') else ''
             solution     = body.get('solution', '').strip() if body.get('solution') else ''
             category     = body.get('category', '').strip() if body.get('category') else None
             is_published = bool(body.get('is_published', False))
@@ -895,6 +898,7 @@ class TicketController(http.Controller):
 
             vals = {
                 'name':         title,
+                'problem_description': problem_description,
                 'solution':     solution,
                 'is_published': is_published,
             }

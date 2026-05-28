@@ -23,6 +23,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import WelcomeSlider from "./WelcomeSlider";
 import TicketModal from "@/components/TicketModal";
 import Chatbot from "@/components/Chatbot";
+import NotificationBell from "@/components/NotificationBell";
 import { ODOO_URL } from "@/lib/config";
 
 // ─── KPI hook ───────────────────────────────────────────────────────────────
@@ -346,7 +347,7 @@ function Welcome() {
   return (
     <div className="p-6 lg:p-8 max-w-[1440px] mx-auto space-y-10">
       {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 animate-fade-in">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 animate-fade-in relative z-[10]">
         {/* Left: greeting */}
         <div>
           <h1 className="text-3xl lg:text-4xl font-bold tracking-tight mb-2 text-[hsl(var(--foreground))]">
@@ -374,6 +375,11 @@ function Welcome() {
             <Info size={16} />
             Guide d&apos;utilisation
           </button>
+
+          {/* Nouvelle Cloche - Alignée à droite */}
+          <div className="hidden md:block">
+            <NotificationBell />
+          </div>
 
           {/* Nouveau Ticket — action principale (Masqué pour les utilisateurs standards) */}
           {!isUser && (

@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { ODOO_URL as ODOO } from "@/lib/config";
 import { toast } from "sonner";
+import NotificationBell from "@/components/NotificationBell";
 
 /* ─────────────────────────────────────────────────────── types ── */
 type UserData = {
@@ -577,6 +578,9 @@ function UsersManagement() {
             <p className="text-sm text-[hsl(var(--muted-foreground))] mt-0.5">
               Gérez les rôles, spécialisations et accès au portail IT.
             </p>
+          </div>
+          <div className="hidden md:block">
+            <NotificationBell />
           </div>
         </div>
 

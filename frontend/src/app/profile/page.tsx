@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
-import { ArrowLeft, User as UserIcon, Shield, Star, CheckCircle, Loader2, Eye, EyeOff, UserCheck, Save } from "lucide-react";
+import { ArrowLeft, User as UserIcon, Shield, Star, CheckCircle, Loader2, Eye, EyeOff, UserCheck, Save, Bell } from "lucide-react";
 import axios from "axios";
 import { ODOO_URL } from "@/lib/config";
 import { toast } from "sonner";
@@ -27,6 +27,14 @@ export default function ProfilePage() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
+  
+  // Preferences State
+  const [prefs, setPrefs] = useState({
+    notif_on_create: true,
+    notif_on_assign: true,
+    notif_on_comment: true,
+    notif_on_sla: true,
+  });
 
   // Password Form State
   const [oldPassword, setOldPassword] = useState("");
@@ -48,6 +56,9 @@ export default function ProfilePage() {
         setLastName("");
       }
       setPhone(user.phone || "");
+      if (user.preferences) {
+        setPrefs(user.preferences);
+      }
     }
   }, [user]);
 
@@ -76,7 +87,20 @@ export default function ProfilePage() {
     if (!user) return false;
     const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
     const origPhone = user.phone || "";
-    return fullName !== user.name || phone !== origPhone;
+    
+    let prefsChanged = false;
+    if (user.preferences) {
+      prefsChanged = 
+        prefs.notif_on_create !== user.preferences.notif_on_create ||
+        prefs.notif_on_assign !== user.preferences.notif_on_assign ||
+        prefs.notif_on_comment !== user.preferences.notif_on_comment ||
+        prefs.notif_on_sla !== user.preferences.notif_on_sla;
+    } else {
+      // user has no saved preferences yet — any toggle state counts as changed
+      prefsChanged = true;
+    }
+    
+    return fullName !== user.name || phone !== origPhone || prefsChanged;
   })();
 
   const handleProfileSubmit = async (e: React.FormEvent) => {
@@ -90,6 +114,7 @@ export default function ProfilePage() {
         user_id: user.id,
         name: fullName,
         phone: phone,
+        preferences: prefs,
       });
       
       if (res.data.status === 200) {
@@ -339,7 +364,53 @@ export default function ProfilePage() {
 
           {/* Right Column: Preferences & Stats */}
           <div className="space-y-6">
-            <section className="stat-card animate-slide-up stagger-3">
+            <section className="glass-card p-6 animate-slide-up stagger-3">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))] rounded-lg">
+                  <Bell size={20} />
+                </div>
+                <h3 className="text-xl font-bold">Préférences de Notifications</h3>
+              </div>
+              <form onSubmit={handleProfileSubmit} className="space-y-4">
+                <label className="flex items-center justify-between cursor-pointer group">
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium text-[hsl(var(--foreground))] group-hover:text-[hsl(var(--primary))] transition-colors">Création de ticket</p>
+                    <p className="text-xs text-[hsl(var(--muted-foreground))]">Recevoir un email lors de la création</p>
+                  </div>
+                  <input type="checkbox" className="toggle toggle-primary" checked={prefs.notif_on_create} onChange={(e) => setPrefs({...prefs, notif_on_create: e.target.checked})} />
+                </label>
+                <label className="flex items-center justify-between cursor-pointer group">
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium text-[hsl(var(--foreground))] group-hover:text-[hsl(var(--primary))] transition-colors">Assignation de ticket</p>
+                    <p className="text-xs text-[hsl(var(--muted-foreground))]">Recevoir un email lors d'une assignation</p>
+                  </div>
+                  <input type="checkbox" className="toggle toggle-primary" checked={prefs.notif_on_assign} onChange={(e) => setPrefs({...prefs, notif_on_assign: e.target.checked})} />
+                </label>
+                <label className="flex items-center justify-between cursor-pointer group">
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium text-[hsl(var(--foreground))] group-hover:text-[hsl(var(--primary))] transition-colors">Nouveaux messages</p>
+                    <p className="text-xs text-[hsl(var(--muted-foreground))]">Recevoir un email lors d'un commentaire</p>
+                  </div>
+                  <input type="checkbox" className="toggle toggle-primary" checked={prefs.notif_on_comment} onChange={(e) => setPrefs({...prefs, notif_on_comment: e.target.checked})} />
+                </label>
+                <label className="flex items-center justify-between cursor-pointer group">
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium text-[hsl(var(--foreground))] group-hover:text-[hsl(var(--primary))] transition-colors">Alerte SLA</p>
+                    <p className="text-xs text-[hsl(var(--muted-foreground))]">Recevoir un email en cas de violation</p>
+                  </div>
+                  <input type="checkbox" className="toggle toggle-primary" checked={prefs.notif_on_sla} onChange={(e) => setPrefs({...prefs, notif_on_sla: e.target.checked})} />
+                </label>
+                
+                <div className="flex justify-end pt-4 border-t border-[hsl(var(--border)/0.5)] mt-2">
+                  <button type="submit" className="btn-primary py-2 px-4 text-sm" disabled={isLoadingProfile || !hasProfileChanged}>
+                    {isLoadingProfile ? <Loader2 size={14} className="animate-spin mr-1.5" /> : <Save size={14} className="mr-1.5" />}
+                    Enregistrer les préférences
+                  </button>
+                </div>
+              </form>
+            </section>
+
+            <section className="stat-card animate-slide-up stagger-4">
               <div className="flex items-center gap-3 mb-4">
                 <div className="p-2 bg-[hsl(var(--warning)/0.1)] text-[hsl(var(--warning))] rounded-lg">
                   <Star size={20} />
@@ -348,10 +419,13 @@ export default function ProfilePage() {
               </div>
               
               <div className="space-y-4">
-                <div className="flex items-center justify-between p-3 rounded-lg bg-[hsl(var(--muted)/0.3)] border border-[hsl(var(--border)/0.5)]">
-                  <span className="text-sm text-[hsl(var(--muted-foreground))]">Tickets résolus</span>
-                  <span className="text-2xl font-bold text-[hsl(var(--foreground))]">{user.resolved_tickets || 0}</span>
-                </div>
+                {/* Tickets résolus — uniquement pertinent pour les techniciens */}
+                {user.x_support_role === 'tech' && (
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-[hsl(var(--muted)/0.3)] border border-[hsl(var(--border)/0.5)]">
+                    <span className="text-sm text-[hsl(var(--muted-foreground))]">Tickets résolus</span>
+                    <span className="text-2xl font-bold text-[hsl(var(--foreground))]">{user.resolved_tickets || 0}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between p-3 rounded-lg bg-[hsl(var(--muted)/0.3)] border border-[hsl(var(--border)/0.5)]">
                   <span className="text-sm text-[hsl(var(--muted-foreground))]">Rôle système</span>
                   <span className="text-sm font-semibold uppercase">{user.x_support_role}</span>
@@ -360,7 +434,7 @@ export default function ProfilePage() {
             </section>
 
             {user.x_support_role === 'tech' && (
-              <section className="glass-card p-6 animate-slide-up stagger-4">
+              <section className="glass-card p-6 animate-slide-up stagger-5">
                 <h3 className="text-lg font-bold mb-4">Domaines d'expertise</h3>
                 {user.it_domains && user.it_domains.length > 0 ? (
                   <div className="flex flex-wrap gap-2">

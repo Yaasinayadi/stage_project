@@ -65,4 +65,6 @@ ia_service/attachments.db
 project_for_ai.txt
 
 AGENTS.md
-
+test_db.py
+test_odoo_logic.py
+test_pause.py

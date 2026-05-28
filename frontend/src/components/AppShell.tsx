@@ -6,6 +6,7 @@ import { Menu, Headphones, Sparkles } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
 import Chatbot from "@/components/Chatbot";
+import NotificationBell from "@/components/NotificationBell";
 
 /**
  * AppShell conditionally renders the sidebar and chatbot
@@ -48,7 +49,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </button>
 
             {/* Brand mark */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-1">
               <div className="w-7 h-7 rounded-lg flex items-center justify-center accent-gradient">
                 <Headphones size={14} className="text-white" />
               </div>
@@ -58,6 +59,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 IA
               </span>
             </div>
+
+            {/* Notification Bell — mobile */}
+            <NotificationBell />
           </header>
 
           {/* Page content */}

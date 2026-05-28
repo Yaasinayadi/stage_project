@@ -31,6 +31,7 @@ import {
 import { toast } from "sonner";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import NotificationBell from "@/components/NotificationBell";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -350,20 +351,17 @@ export default function AdminInventoryPage() {
                 disponibilité.
               </p>
             </div>
-            <button
-              onClick={showCatalog ? () => setShowCatalog(false) : openCatalog}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--secondary)/0.3)] hover:bg-[hsl(var(--secondary)/0.6)] text-sm font-semibold transition-all shrink-0"
-            >
-              {showCatalog ? (
-                <>
-                  <X size={15} /> Fermer l&apos;inventaire
-                </>
-              ) : (
-                <>
-                  <Warehouse size={15} /> Voir l&apos;Inventaire Complet
-                </>
-              )}
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={showCatalog ? () => setShowCatalog(false) : openCatalog}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--secondary)/0.3)] hover:bg-[hsl(var(--secondary)/0.6)] text-sm font-semibold transition-all shrink-0"
+              >
+                {showCatalog ? <><X size={15} /> Fermer l&apos;inventaire</> : <><Warehouse size={15} /> Voir l&apos;Inventaire Complet</>}
+              </button>
+              <div className="hidden md:block">
+                <NotificationBell />
+              </div>
+            </div>
           </div>
 
           {/* ── Stat cards ───────────────────────────────────────────────────── */}
