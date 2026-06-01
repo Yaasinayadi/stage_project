@@ -719,14 +719,27 @@ class SupportTicketController(http.Controller):
                 except Exception as kb_err:
                     _logger.warning("KB publish failed: %s", kb_err)
 
-            # Phase 2.3 — Notif in-app User : ticket résolu
+            # Phase 2.3 — Notif in-app User et Admin : ticket résolu
             try:
+                ticket_ref = f"TK-{str(ticket.id).zfill(4)}"
+                notif_env = request.env['support.notification'].sudo()
                 if ticket.user_id:
-                    ticket_ref = f"TK-{str(ticket.id).zfill(4)}"
-                    request.env['support.notification'].sudo()._create_notif(
+                    notif_env._create_notif(
                         user_id=ticket.user_id.id,
                         notif_type='ticket_resolved',
                         message=f"✅ Votre ticket {ticket_ref} a été résolu.",
+                        ticket_id=ticket.id,
+                    )
+                # Notifier les admins
+                admin_users = request.env['res.users'].sudo().search([
+                    ('x_support_role', '=', 'admin'),
+                    ('active', '=', True),
+                ])
+                for admin in admin_users:
+                    notif_env._create_notif(
+                        user_id=admin.id,
+                        notif_type='ticket_resolved',
+                        message=f"✅ Le ticket {ticket_ref} a été résolu.",
                         ticket_id=ticket.id,
                     )
             except Exception as res_notif_err:
@@ -2506,7 +2519,7 @@ class SupportTicketController(http.Controller):
 
             notifs = request.env['support.notification'].sudo().search([
                 ('user_id', '=', int(user_id)),
-            ], limit=20, order='is_read asc, create_date desc')
+            ], limit=20, order='create_date desc')
 
             data = [{
                 'id':          n.id,
@@ -2514,6 +2527,7 @@ class SupportTicketController(http.Controller):
                 'message':     n.message,
                 'ticket_id':   n.ticket_id.id if n.ticket_id else None,
                 'ticket_name': n.ticket_id.name if n.ticket_id else None,
+                'x_accepted':  n.ticket_id.x_accepted if n.ticket_id else False,
                 'is_read':     n.is_read,
                 'create_date': str(n.create_date) if n.create_date else None,
                 'read_at':     str(n.read_at) if n.read_at else None,

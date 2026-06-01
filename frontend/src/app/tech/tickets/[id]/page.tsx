@@ -66,6 +66,7 @@ import Link from "next/link";
 import { ODOO_URL } from "@/lib/config";
 import { toast } from "sonner";
 import KnowledgeModal from "@/components/KnowledgeModal";
+import NotificationBell from "@/components/NotificationBell";
 
 // Attachments are now handled directly by Odoo (ir.attachment) — no Flask needed here
 
@@ -1013,13 +1014,18 @@ function TicketDetailPage() {
         </span>
       </nav>
 
-      {/* Back button */}
-      <button
-        onClick={() => router.back()}
-        className="btn-ghost text-sm flex items-center gap-1.5"
-      >
-        <ArrowLeft size={15} /> Retour
-      </button>
+      <div className="flex items-center justify-between">
+        {/* Back button */}
+        <button
+          onClick={() => router.back()}
+          className="btn-ghost text-sm flex items-center gap-1.5"
+        >
+          <ArrowLeft size={15} /> Retour
+        </button>
+        <div className="hidden md:block">
+          <NotificationBell />
+        </div>
+      </div>
 
       {/* DOUBLE PANEL LAYOUT */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">

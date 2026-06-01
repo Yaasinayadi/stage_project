@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Phase 2 — Templates Email Odoo (mail.template)
+    4 événements : création, assignation, commentaire, SLA dépassé.
+    Déclenchés via _send_notification() dans ticket_controller.py.
+    Les champs x_notif_on_* de res.users sont vérifiés avant l'envoi.
+-->
+<odoo noupdate="1">
+    <data>
+
+        <!-- ══════════════════════════════════════════════════════════════════
+             Template 1 — Confirmation de Création de Ticket
+             Destinataire : l'utilisateur ayant soumis le ticket (user_id)
+             ══════════════════════════════════════════════════════════════════ -->
+        <record id="email_template_ticket_created" model="mail.template">
+            <field name="name">Ticket IT — Confirmation de création</field>
+            <field name="model_id" ref="model_support_ticket"/>
+            <field name="subject">✅ Ticket {{ object.name[:50] }} créé — Réf. TK-{{ '%04d' % object.id }}</field>
+            <field name="email_to">{{ object.user_id.email }}</field>
+            <field name="auto_delete" eval="True"/>
+            <field name="body_html"><![CDATA[
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.07);">
+    <!-- En-tête violet -->
+    <div style="background:linear-gradient(135deg,#6366f1,#4f46e5);padding:28px 24px;text-align:center;">
+        <h1 style="color:white;margin:0;font-size:20px;letter-spacing:0.5px;">🎫 Votre ticket a été créé</h1>
+    </div>
+    <!-- Corps -->
+    <div style="padding:28px 24px;">
+        <p style="margin:0 0 16px;">Bonjour <strong>{{ object.user_id.name }}</strong>,</p>
+        <p style="margin:0 0 20px;color:#374151;">Votre demande a bien été enregistrée dans notre système de support IT. Notre équipe technique vous contactera dans les meilleurs délais.</p>
+
+        <table style="width:100%;border-collapse:collapse;margin:20px 0;font-size:14px;">
+            <tr>
+                <td style="padding:10px 12px;background:#f3f4f6;font-weight:bold;color:#374151;width:38%;border-radius:4px 0 0 0;">Référence</td>
+                <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;">TK-{{ '%04d' % object.id }}</td>
+            </tr>
+            <tr>
+                <td style="padding:10px 12px;font-weight:bold;color:#374151;">Sujet</td>
+                <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;">{{ object.name }}</td>
+            </tr>
+            <tr>
+                <td style="padding:10px 12px;background:#f3f4f6;font-weight:bold;color:#374151;">Priorité</td>
+                <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;">
+                    {% if object.priority == '3' %}<span style="color:#ef4444;font-weight:bold;">🔴 Critique</span>
+                    {% elif object.priority == '2' %}<span style="color:#f97316;font-weight:bold;">🟠 Haute</span>
+                    {% elif object.priority == '1' %}<span style="color:#eab308;font-weight:bold;">🟡 Moyenne</span>
+                    {% else %}<span style="color:#22c55e;">🟢 Basse</span>{% endif %}
+                </td>
+            </tr>
+            <tr>
+                <td style="padding:10px 12px;font-weight:bold;color:#374151;">Deadline SLA</td>
+                <td style="padding:10px 12px;color:#ef4444;">{{ object.sla_deadline and object.sla_deadline.strftime('%d/%m/%Y à %H:%M') or 'Non définie' }}</td>
+            </tr>
+        </table>
+
+        <p style="color:#6b7280;font-size:13px;margin:0;">Un technicien prendra en charge votre demande. Vous recevrez une notification dès l'assignation.</p>
+    </div>
+    <!-- Pied de page -->
+    <div style="background:#f9fafb;padding:16px 24px;text-align:center;border-top:1px solid #e5e7eb;">
+        <p style="margin:0;color:#9ca3af;font-size:12px;">PFE IT Support — Système de gestion des tickets</p>
+    </div>
+</div>
+            ]]></field>
+        </record>
+
+        <!-- ══════════════════════════════════════════════════════════════════
+             Template 2 — Assignation à un Technicien
+             Destinataire : l'utilisateur ayant soumis le ticket (user_id)
+             ══════════════════════════════════════════════════════════════════ -->
+        <record id="email_template_ticket_assigned" model="mail.template">
+            <field name="name">Ticket IT — Assignation technicien</field>
+            <field name="model_id" ref="model_support_ticket"/>
+            <field name="subject">👷 Ticket TK-{{ '%04d' % object.id }} — Pris en charge par {{ object.assigned_to_id.name or 'un technicien' }}</field>
+            <field name="email_to">{{ object.user_id.email }}</field>
+            <field name="auto_delete" eval="True"/>
+            <field name="body_html"><![CDATA[
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.07);">
+    <!-- En-tête vert -->
+    <div style="background:linear-gradient(135deg,#10b981,#059669);padding:28px 24px;text-align:center;">
+        <h1 style="color:white;margin:0;font-size:20px;letter-spacing:0.5px;">✅ Votre ticket est pris en charge</h1>
+    </div>
+    <!-- Corps -->
+    <div style="padding:28px 24px;">
+        <p style="margin:0 0 16px;">Bonjour <strong>{{ object.user_id.name }}</strong>,</p>
+        <p style="margin:0 0 8px;color:#374151;">Bonne nouvelle ! Le technicien <strong style="color:#059669;">{{ object.assigned_to_id.name or 'un agent' }}</strong> vient d'être assigné à votre ticket.</p>
+
+        <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:16px;margin:20px 0;">
+            <p style="margin:0 0 8px;font-weight:bold;color:#166534;">📋 Détails du ticket</p>
+            <p style="margin:0;color:#374151;font-size:14px;"><strong>Référence :</strong> TK-{{ '%04d' % object.id }}</p>
+            <p style="margin:4px 0 0;color:#374151;font-size:14px;"><strong>Sujet :</strong> {{ object.name }}</p>
+            <p style="margin:4px 0 0;color:#374151;font-size:14px;"><strong>Technicien :</strong> {{ object.assigned_to_id.name or 'N/A' }}</p>
+        </div>
+
+        <p style="color:#6b7280;font-size:13px;margin:0;">Connectez-vous à votre espace pour suivre l'avancement en temps réel.</p>
+    </div>
+    <div style="background:#f9fafb;padding:16px 24px;text-align:center;border-top:1px solid #e5e7eb;">
+        <p style="margin:0;color:#9ca3af;font-size:12px;">PFE IT Support — Système de gestion des tickets</p>
+    </div>
+</div>
+            ]]></field>
+        </record>
+
+        <!-- ══════════════════════════════════════════════════════════════════
+             Template 3 — Nouveau Commentaire / Message
+             Destinataire : l'utilisateur ayant soumis le ticket (user_id)
+             ══════════════════════════════════════════════════════════════════ -->
+        <record id="email_template_ticket_comment" model="mail.template">
+            <field name="name">Ticket IT — Nouveau message</field>
+            <field name="model_id" ref="model_support_ticket"/>
+            <field name="subject">💬 Nouveau message sur votre ticket TK-{{ '%04d' % object.id }}</field>
+            <field name="email_to">{{ object.user_id.email }}</field>
+            <field name="auto_delete" eval="True"/>
+            <field name="body_html"><![CDATA[
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.07);">
+    <!-- En-tête bleu -->
+    <div style="background:linear-gradient(135deg,#3b82f6,#2563eb);padding:28px 24px;text-align:center;">
+        <h1 style="color:white;margin:0;font-size:20px;letter-spacing:0.5px;">💬 Un message a été ajouté</h1>
+    </div>
+    <!-- Corps -->
+    <div style="padding:28px 24px;">
+        <p style="margin:0 0 16px;">Bonjour <strong>{{ object.user_id.name }}</strong>,</p>
+        <p style="margin:0 0 20px;color:#374151;">
+            Un technicien a répondu sur votre ticket
+            <strong style="color:#2563eb;">TK-{{ '%04d' % object.id }}</strong>
+            — <em>{{ object.name }}</em>.
+        </p>
+        <p style="margin:0 0 20px;color:#374151;">Connectez-vous à votre espace personnel pour consulter la réponse et poursuivre la conversation.</p>
+        <p style="color:#6b7280;font-size:13px;margin:0;">Si vous avez déjà résolu votre problème, vous pouvez fermer le ticket depuis votre interface.</p>
+    </div>
+    <div style="background:#f9fafb;padding:16px 24px;text-align:center;border-top:1px solid #e5e7eb;">
+        <p style="margin:0;color:#9ca3af;font-size:12px;">PFE IT Support — Système de gestion des tickets</p>
+    </div>
+</div>
+            ]]></field>
+        </record>
+
+        <!-- ══════════════════════════════════════════════════════════════════
+             Template 4 — Alerte SLA Dépassé (URGENT)
+             Destinataire : le technicien assigné (ou l'utilisateur si non assigné)
+             ══════════════════════════════════════════════════════════════════ -->
+        <record id="email_template_sla_breached" model="mail.template">
+            <field name="name">Ticket IT — Alerte SLA dépassé</field>
+            <field name="model_id" ref="model_support_ticket"/>
+            <field name="subject">🚨 URGENT — SLA dépassé : TK-{{ '%04d' % object.id }}</field>
+            <field name="email_to">{{ object.assigned_to_id.email or object.user_id.email }}</field>
+            <field name="auto_delete" eval="True"/>
+            <field name="body_html"><![CDATA[
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;border:2px solid #fca5a5;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px rgba(239,68,68,0.15);">
+    <!-- En-tête rouge urgent -->
+    <div style="background:linear-gradient(135deg,#ef4444,#dc2626);padding:28px 24px;text-align:center;">
+        <h1 style="color:white;margin:0;font-size:20px;letter-spacing:0.5px;">🚨 Alerte SLA — Délai dépassé</h1>
+        <p style="color:#fecaca;margin:8px 0 0;font-size:14px;">Action immédiate requise</p>
+    </div>
+    <!-- Corps -->
+    <div style="padding:28px 24px;">
+        <p style="margin:0 0 16px;">
+            {% if object.assigned_to_id %}
+            Bonjour <strong>{{ object.assigned_to_id.name }}</strong>,
+            {% else %}
+            Bonjour,
+            {% endif %}
+        </p>
+        <p style="margin:0 0 20px;color:#374151;">Le ticket suivant a <strong style="color:#ef4444;">dépassé son délai SLA</strong>. Une intervention immédiate est nécessaire.</p>
+
+        <table style="width:100%;border-collapse:collapse;margin:20px 0;font-size:14px;border:1px solid #fecaca;border-radius:8px;overflow:hidden;">
+            <tr>
+                <td style="padding:10px 12px;background:#fef2f2;font-weight:bold;color:#991b1b;width:38%;">Référence</td>
+                <td style="padding:10px 12px;border-bottom:1px solid #fecaca;font-weight:bold;">TK-{{ '%04d' % object.id }}</td>
+            </tr>
+            <tr>
+                <td style="padding:10px 12px;font-weight:bold;color:#991b1b;">Sujet</td>
+                <td style="padding:10px 12px;border-bottom:1px solid #fecaca;">{{ object.name }}</td>
+            </tr>
+            <tr>
+                <td style="padding:10px 12px;background:#fef2f2;font-weight:bold;color:#991b1b;">Deadline SLA était</td>
+                <td style="padding:10px 12px;border-bottom:1px solid #fecaca;color:#ef4444;font-weight:bold;">{{ object.sla_deadline and object.sla_deadline.strftime('%d/%m/%Y à %H:%M') or 'N/A' }}</td>
+            </tr>
+            <tr>
+                <td style="padding:10px 12px;font-weight:bold;color:#991b1b;">Priorité</td>
+                <td style="padding:10px 12px;border-bottom:1px solid #fecaca;">
+                    {% if object.priority == '3' %}🔴 Critique{% elif object.priority == '2' %}🟠 Haute{% elif object.priority == '1' %}🟡 Moyenne{% else %}🟢 Basse{% endif %}
+                </td>
+            </tr>
+            <tr>
+                <td style="padding:10px 12px;background:#fef2f2;font-weight:bold;color:#991b1b;">Statut actuel</td>
+                <td style="padding:10px 12px;">{{ dict(object._fields['state'].selection).get(object.state, 'N/A') }}</td>
+            </tr>
+        </table>
+
+        <div style="background:#fef2f2;border-left:4px solid #ef4444;padding:12px 16px;border-radius:0 4px 4px 0;margin:20px 0;">
+            <p style="margin:0;color:#dc2626;font-weight:bold;font-size:14px;">⚠️ Merci de résoudre ou d'escalader ce ticket immédiatement pour préserver le taux de conformité SLA.</p>
+        </div>
+    </div>
+    <div style="background:#fef2f2;padding:16px 24px;text-align:center;border-top:1px solid #fecaca;">
+        <p style="margin:0;color:#9ca3af;font-size:12px;">PFE IT Support — Alertes SLA automatiques</p>
+    </div>
+</div>
+            ]]></field>
+        </record>
+
+    </data>
+</odoo>

@@ -226,6 +226,51 @@ class TicketController(http.Controller):
                 status=500
             )
 
+    @http.route('/api/ticket/<int:ticket_id>/reject', type='http', auth='public', methods=['PATCH', 'OPTIONS'], csrf=False)
+    def reject_ticket(self, ticket_id, **kwargs):
+        """
+        Technicien refuse la mission : retour à la file d'attente (assigned_to_id = False, state = new).
+        """
+        origin = request.httprequest.headers.get('Origin', 'http://localhost:3000')
+        headers = [
+            ('Access-Control-Allow-Origin', origin),
+            ('Access-Control-Allow-Methods', 'PATCH, OPTIONS'),
+            ('Access-Control-Allow-Credentials', 'true'),
+            ('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization')
+        ]
+        
+        if request.httprequest.method == 'OPTIONS':
+            return request.make_response('', headers=headers)
+            
+        try:
+            ticket = request.env['support.ticket'].sudo().browse(ticket_id)
+            if not ticket.exists():
+                headers.append(('Content-Type', 'application/json'))
+                return request.make_response(json.dumps({'status': 'error', 'message': 'Ticket introuvable'}), headers=headers, status=404)
+            
+            # Reject the mission
+            ticket.write({
+                'assigned_to_id': False,
+                'x_accepted': False,
+                'state': 'new'
+            })
+            
+            headers.append(('Content-Type', 'application/json'))
+            return request.make_response(
+                json.dumps({
+                    'status': 'success', 
+                    'message': f"Vous avez refusé le ticket TK-{str(ticket.id).zfill(4)}."
+                }),
+                headers=headers
+            )
+        except Exception as e:
+            headers.append(('Content-Type', 'application/json'))
+            return request.make_response(
+                json.dumps({'status': 'error', 'message': str(e)}),
+                headers=headers,
+                status=500
+            )
+
     @http.route('/api/ticket/<int:ticket_id>/dispatch', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
     def dispatch_ticket(self, ticket_id, **kwargs):
         """

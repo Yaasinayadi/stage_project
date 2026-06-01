@@ -155,6 +155,7 @@ class SupportTicket(models.Model):
     # Acceptation explicite par le technicien
     x_accepted = fields.Boolean(string='Accepté par le technicien', default=False)
     date_accepted = fields.Datetime(string="Date d'Acceptation", readonly=True)
+    x_sla_warning_sent = fields.Boolean(string='Alerte SLA H-1 envoyée', default=False)
 
     # Pièces jointes (logs, images, captures d'écran)
     attachment_ids = fields.Many2many(
@@ -329,6 +330,26 @@ class SupportTicket(models.Model):
                         logging.getLogger(__name__).error(
                             "[NOTIF] Échec email SLA breached pour TK-%04d : %s", ticket.id, e
                         )
+                        
+                    # Notification in-app pour l'Admin
+                    try:
+                        admins = self.env['res.users'].sudo().search([
+                            ('x_support_role', '=', 'admin'),
+                            ('active', '=', True)
+                        ])
+                        for adm in admins:
+                            tech_name = ticket.assigned_to_id.name if ticket.assigned_to_id else "Non assigné"
+                            ticket_ref = f"TK-{str(ticket.id).zfill(4)}"
+                            self.env['support.notification'].sudo()._create_notif(
+                                user_id=adm.id,
+                                notif_type='sla_breached',
+                                message=f"SLA dépassé sur le ticket {ticket_ref} assigné à {tech_name}.",
+                                ticket_id=ticket.id
+                            )
+                    except Exception as e:
+                        import logging
+                        logging.getLogger(__name__).error("[NOTIF-INAPP] Échec SLA breached pour TK-%04d : %s", ticket.id, e)
+                        
                 ticket.sla_status = 'breached'
             elif now > (ticket.sla_deadline - timedelta(hours=1)):
                 ticket.sla_status = 'at_risk'
@@ -409,6 +430,85 @@ class SupportTicket(models.Model):
                     vals['date_accepted'] = fields.Datetime.now()
 
         result = super(SupportTicket, self).write(vals)
+
+        # ─── MASTER PLAN V2 : Traçabilité & Cycle de Vie ────────────────────────
+        try:
+            admins = self.env['res.users'].sudo().search([
+                ('x_support_role', '=', 'admin'),
+                ('active', '=', True)
+            ])
+            
+            for ticket in self:
+                ticket_ref = f"TK-{str(ticket.id).zfill(4)}"
+                tech_name = ticket.assigned_to_id.name if ticket.assigned_to_id else "Un technicien"
+
+                # 1. Acceptation de mission
+                if vals.get('x_accepted') and not self.env.context.get('notif_accept_sent'):
+                    for adm in admins:
+                        self.env['support.notification'].sudo()._create_notif(
+                            user_id=adm.id,
+                            notif_type='ticket_assigned',
+                            message=f"Le technicien {tech_name} a accepté la mission pour le ticket {ticket_ref}.",
+                            ticket_id=ticket.id
+                        )
+
+                # 2. Auto-assignation
+                if 'assigned_to_id' in vals and ticket.assigned_to_id and ticket.assigned_by_id and ticket.assigned_to_id == ticket.assigned_by_id:
+                    if not self.env.context.get('notif_autoassign_sent'):
+                        for adm in admins:
+                            self.env['support.notification'].sudo()._create_notif(
+                                user_id=adm.id,
+                                notif_type='ticket_assigned',
+                                message=f"Le technicien {tech_name} s'est auto-assigné le ticket {ticket_ref} depuis le flux d'expertise.",
+                                ticket_id=ticket.id
+                            )
+
+                # 3. Visibilité du cycle de vie (Pauses et Reprises)
+                if 'state' in vals:
+                    old_state = old_states.get(ticket.id)
+                    new_state = vals['state']
+                    
+                    # Pause
+                    if new_state in ('waiting', 'waiting_material') and old_state not in ('waiting', 'waiting_material', 'blocked', 'escalated'):
+                        pause_reason = "Client" if new_state == 'waiting' else "Matériel"
+                        # User
+                        if ticket.user_id:
+                            self.env['support.notification'].sudo()._create_notif(
+                                user_id=ticket.user_id.id,
+                                notif_type='ticket_waiting',
+                                message=f"Votre demande {ticket_ref} est en attente ({pause_reason}).",
+                                ticket_id=ticket.id
+                            )
+                        # Admin
+                        for adm in admins:
+                            self.env['support.notification'].sudo()._create_notif(
+                                user_id=adm.id,
+                                notif_type='ticket_waiting',
+                                message=f"Le ticket {ticket_ref} a été mis en attente par {tech_name}.",
+                                ticket_id=ticket.id
+                            )
+                            
+                    # Reprise
+                    elif new_state == 'in_progress' and old_state in ('waiting', 'waiting_material', 'blocked', 'escalated'):
+                        # User
+                        if ticket.user_id:
+                            self.env['support.notification'].sudo()._create_notif(
+                                user_id=ticket.user_id.id,
+                                notif_type='ticket_assigned',
+                                message=f"Le technicien a repris le travail sur votre demande {ticket_ref}.",
+                                ticket_id=ticket.id
+                            )
+                        # Admin
+                        for adm in admins:
+                            self.env['support.notification'].sudo()._create_notif(
+                                user_id=adm.id,
+                                notif_type='ticket_assigned',
+                                message=f"Le ticket {ticket_ref} est de nouveau en cours de traitement.",
+                                ticket_id=ticket.id
+                            )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("[NOTIF-V2] Échec notifications: %s", e)
 
         # Phase 2.4 — Envoyer l'email d'assignation (couvre dispatch, transfer, etc.)
         # Phase 3   — Notification in-app d'assignation
@@ -515,12 +615,25 @@ class SupportTicket(models.Model):
                         'date_first_assigned': False, # Réactive le chronomètre Réponse
                         **pause_update,
                     })
-                    # Recompute la deadline immédiatement
                     ticket._compute_sla_deadline()
                     ticket.message_post(
                         body=f"🚨 <b>Escalade N2</b> — SLA Résolution mis en pause. SLA Réponse réactivé. Bonus de <b>{bonus}h</b>.",
                         message_type='notification',
                     )
+                    
+                    # Notification in-app pour l'Utilisateur
+                    if ticket.user_id:
+                        try:
+                            ticket_ref = f"TK-{str(ticket.id).zfill(4)}"
+                            self.env['support.notification'].sudo()._create_notif(
+                                user_id=ticket.user_id.id,
+                                notif_type='ticket_escalated',
+                                message=f"Votre demande {ticket_ref} a été escaladée pour une prise en charge prioritaire.",
+                                ticket_id=ticket.id
+                            )
+                        except Exception as e:
+                            import logging
+                            logging.getLogger(__name__).error("[NOTIF-INAPP] Échec escalade user TK-%04d : %s", ticket.id, e)
 
                 # ── CAS 1 : On entre dans un état pausé ───────────────────────
                 if new_state in PAUSED_STATES and new_state != 'escalated' and old_state not in PAUSED_STATES:
@@ -574,6 +687,35 @@ class SupportTicket(models.Model):
                         ticket._compute_sla_deadline()
 
         return result
+
+    @api.model
+    def _cron_check_sla_warnings(self):
+        """Cron job (exécuté toutes les 15 minutes) pour vérifier les alertes H-1 SLA."""
+        now = fields.Datetime.now()
+        warning_limit = now + timedelta(hours=1)
+        
+        # Tickets en cours dont la deadline approche (entre maintenant et H+1)
+        tickets = self.search([
+            ('state', 'in', ('assigned', 'in_progress')),
+            ('sla_deadline', '>', now),
+            ('sla_deadline', '<=', warning_limit),
+            ('x_sla_warning_sent', '=', False)
+        ])
+        
+        for ticket in tickets:
+            if ticket.assigned_to_id:
+                try:
+                    ticket_ref = f"TK-{str(ticket.id).zfill(4)}"
+                    self.env['support.notification'].sudo()._create_notif(
+                        user_id=ticket.assigned_to_id.id,
+                        notif_type='sla_breached',
+                        message=f"Attention : Il reste moins d'une heure pour traiter le ticket {ticket_ref}.",
+                        ticket_id=ticket.id
+                    )
+                    ticket.write({'x_sla_warning_sent': True})
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).error("[NOTIF-INAPP] Échec cron H-1 SLA pour TK-%04d : %s", ticket.id, e)
 
 class SupportTicketMaterialLine(models.Model):
     _name = 'support.ticket.material.line'

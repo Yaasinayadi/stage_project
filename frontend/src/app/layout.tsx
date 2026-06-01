@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/lib/auth";
+import { NotificationProvider } from "@/lib/NotificationContext";
 import AppShell from "@/components/AppShell";
 import { Toaster } from "sonner";
 
@@ -23,8 +24,10 @@ export default function RootLayout({
       <body className={`${inter.className} antialiased bg-[hsl(var(--background))] text-[hsl(var(--foreground))]`}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
           <AuthProvider>
-            <AppShell>{children}</AppShell>
-            <Toaster richColors position="top-right" theme="system" />
+            <NotificationProvider>
+              <AppShell>{children}</AppShell>
+              <Toaster richColors position="top-right" theme="system" />
+            </NotificationProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

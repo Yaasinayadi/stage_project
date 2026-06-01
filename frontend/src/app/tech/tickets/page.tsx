@@ -37,6 +37,7 @@ import LinearSlaBar from "@/components/LinearSlaBar";
 import DualSlaGauge from "@/components/DualSlaGauge";
 import CompactTimeline from "@/components/CompactTimeline";
 import TicketCard from "@/components/TicketCard";
+import NotificationBell from "@/components/NotificationBell";
 import { useRouter } from "next/navigation";
 
 import { ODOO_URL } from "@/lib/config";
@@ -552,20 +553,23 @@ function MyTicketsPage() {
             Tickets qui vous sont assignés
           </p>
         </div>
-        <button
-          onClick={async () => {
-            setLoading(true);
-            await Promise.all([
-              fetchMyTickets(),
-              new Promise((r) => setTimeout(r, 500)),
-            ]);
-            setLoading(false);
-          }}
-          className="btn-ghost flex items-center gap-2 text-sm"
-          title="Actualiser"
-        >
-          <RefreshCw size={15} /> Actualiser
-        </button>
+        <div className="flex items-center gap-4">
+          <NotificationBell />
+          <button
+            onClick={async () => {
+              setLoading(true);
+              await Promise.all([
+                fetchMyTickets(),
+                new Promise((r) => setTimeout(r, 500)),
+              ]);
+              setLoading(false);
+            }}
+            className="btn-ghost flex items-center gap-2 text-sm"
+            title="Actualiser"
+          >
+            <RefreshCw size={15} /> Actualiser
+          </button>
+        </div>
       </div>
 
       {/* KPIs */}
