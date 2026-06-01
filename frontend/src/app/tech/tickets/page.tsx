@@ -848,8 +848,8 @@ function MyTicketsPage() {
         </div>
       ) : viewMode === "cards" ? (
         <div
-          key={`cards-${activeTab}-${viewMode}`}
-          className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 animate-fade-in"
+          key={`cards-view-${viewMode}`}
+          className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 animate-fade-in items-stretch"
         >
           {currentList.map((ticket, idx) => {
             const isGlow = ticket.id === resolvedId;

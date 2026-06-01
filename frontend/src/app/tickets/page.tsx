@@ -100,6 +100,7 @@ function Dashboard() {
   const [tickets, setTickets] = useState<TicketType[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedTicket, setSelectedTicket] = useState<TicketType | null>(null);
   const [activeTab, setActiveTab] = useState<"active" | "resolved">("active");
   const [period, setPeriod] = useState("month");
   const [customStartDate, setCustomStartDate] = useState("");
@@ -989,15 +990,20 @@ function Dashboard() {
         </div>
       ) : viewMode === "cards" ? (
         <div
-          key={activeTab}
-          className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
-        >
+            key={`cards-view-${viewMode}`}
+            className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 animate-fade-in items-stretch"
+          >
           {tabFilteredTickets.map((ticket, idx) => (
             <TicketCard
               key={ticket.id}
               ticket={ticket}
               index={idx}
               onRefresh={fetchTickets}
+              timelineLarge={true}
+              onClickOverride={(e) => {
+                e.preventDefault();
+                setSelectedTicket(ticket);
+              }}
             />
           ))}
         </div>
@@ -1005,19 +1011,22 @@ function Dashboard() {
         <TicketTable tickets={tabFilteredTickets} onRefresh={fetchTickets} />
       )}
 
-      {/* ─── Modal ─── */}
+      {/* ─── Modal Création ─── */}
       <TicketModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSuccess={fetchTickets}
       />
 
-      {/* ─── Deep Linked Ticket Modal ─── */}
-      {selectedTicketId !== null && tickets.find(t => t.id === selectedTicketId) && (
+      {/* ─── Modal Détails ─── */}
+      {(selectedTicket || (selectedTicketId !== null && tickets.find(t => t.id === selectedTicketId))) && (
         <TicketDetailsModal
-          ticket={tickets.find(t => t.id === selectedTicketId) as TicketType}
           isOpen={true}
-          onClose={() => setSelectedTicketId(null)}
+          ticket={(selectedTicket || tickets.find(t => t.id === selectedTicketId)) as any}
+          onClose={() => {
+            setSelectedTicket(null);
+            setSelectedTicketId(null);
+          }}
           onRefresh={fetchTickets}
         />
       )}

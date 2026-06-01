@@ -97,7 +97,8 @@ class TicketController(http.Controller):
                     # ── Timestamps & résolution ───────────────────────────────────────────
                     'date_resolved': str(t.date_done) if getattr(t, 'date_done', False) else None,
                     # ── Divers ──────────────────────────────────────────────────────────
-                    'user_id': t.user_id.name if t.user_id else None,
+                    'user_id': t.user_id.id if t.user_id else None,
+                    'user_name': t.user_id.name if t.user_id else None,
                     'category': t.ai_classification.name if t.ai_classification else None,
                     'x_is_manual_classification': t.x_is_manual_classification,
                     'x_total_paused_duration': t.x_total_paused_duration or 0.0,

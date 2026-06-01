@@ -17,8 +17,10 @@ import {
   ClipboardList,
   BookOpen,
   X,
+  Sun,
+  Moon,
 } from "lucide-react";
-import { ThemeToggle } from "./ThemeToggle";
+import { useTheme } from "next-themes";
 import { useAuth } from "@/lib/auth";
 
 type NavItem = {
@@ -34,21 +36,97 @@ interface SidebarProps {
   onMobileClose?: () => void;
 }
 
+// Composant unifié pour toutes les lignes de la sidebar
+const SidebarItem = ({
+  icon,
+  label,
+  expanded,
+  active = false,
+  disabled = false,
+  onClick,
+  href,
+  badge,
+  className = "",
+  title,
+  danger = false,
+  as = "button"
+}: any) => {
+  const content = (
+    <>
+      {/* Indicateur d'état actif positionné de manière absolue à gauche de la sidebar entière (-left-3 compense le px-3 du parent) */}
+      {active && (
+        <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-[3px] h-[60%] bg-[hsl(var(--primary))] rounded-r-[4px]" />
+      )}
+      
+      {/* Conteneur d'icône invariant : largeur fixe (w-12 = 48px) */}
+      <div className="w-12 flex-shrink-0 flex items-center justify-center">
+        {icon}
+      </div>
+      
+      {/* Alignement du texte avec flex items-center */}
+      <span className={`whitespace-nowrap flex-1 text-left flex items-center transition-all duration-300 ease-in-out overflow-hidden ${expanded ? "opacity-100 max-w-[200px]" : "opacity-0 max-w-0"}`}>
+        {label}
+      </span>
+      
+      {badge && (
+        <span className={`text-[0.6rem] uppercase bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] px-1.5 py-0.5 rounded font-semibold transition-all duration-300 ease-in-out overflow-hidden ${expanded ? "opacity-100 max-w-[50px] mr-2" : "opacity-0 max-w-0 mr-0"}`}>
+          {badge}
+        </span>
+      )}
+    </>
+  );
+
+  const baseClasses = `relative flex items-center w-full min-h-[44px] rounded-xl transition-all duration-200 ease-in-out text-sm ${
+    disabled ? "opacity-40 cursor-not-allowed" : as !== "div" ? "cursor-pointer active:scale-95 active:bg-zinc-800/50" : ""
+  } ${
+    active 
+      ? "text-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.1)] font-semibold" 
+      : danger 
+        ? "text-[hsl(var(--muted-foreground))] hover:text-rose-500 hover:bg-rose-500/10 font-medium" 
+        : as !== "div" ? "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-white/10 font-medium" : "text-[hsl(var(--muted-foreground))] font-medium"
+  } ${className}`;
+
+  if (href && !disabled) {
+    return (
+      <Link href={href} onClick={onClick} className={baseClasses} title={title}>
+        {content}
+      </Link>
+    );
+  }
+
+  if (as === "div") {
+    return (
+      <div className={baseClasses} title={title}>
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <button onClick={onClick} disabled={disabled} className={baseClasses} title={title}>
+      {content}
+    </button>
+  );
+};
+
 export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
-  // Desktop: collapsed = icon-only. Default collapsed on desktop.
   const [collapsed, setCollapsed] = useState(true);
   const [hovered, setHovered] = useState(false);
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const sidebarRef = useRef<HTMLDivElement>(null);
+  
+  const { setTheme, theme } = useTheme();
+  const [mounted, setMounted] = useState(false);
 
-  // Close mobile drawer on route change
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   useEffect(() => {
     if (onMobileClose) onMobileClose();
   }, [pathname]);
 
-
-  // Prevent body scroll when mobile drawer open
   useEffect(() => {
     if (mobileOpen) {
       document.body.style.overflow = "hidden";
@@ -58,7 +136,6 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
     return () => { document.body.style.overflow = ""; };
   }, [mobileOpen]);
 
-  // On desktop: expanded when hovered OR when manually toggled to expanded
   const isExpanded = !collapsed || hovered;
 
   let navItems: NavItem[] = [];
@@ -98,16 +175,17 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
     admin: "Administrateur",
   };
 
-  // ── Shared inner content ────────────────────────────────────────────────
   const sidebarContent = (isMobile: boolean) => {
     const expanded = isMobile ? true : isExpanded;
 
     return (
-      <>
+      <div className="flex flex-col h-full w-full px-3 py-3">
         {/* Logo */}
-        <div className={`flex items-center h-16 border-b border-[hsl(var(--border)/0.5)] flex-shrink-0 transition-all duration-300 ease-in-out ${expanded ? "gap-3 px-4" : "justify-center gap-0 px-0"}`}>
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 accent-gradient">
-            <Headphones size={18} className="text-white" />
+        <div className="flex items-center min-h-[56px] flex-shrink-0 transition-all duration-300 ease-in-out w-full border-b border-[hsl(var(--border)/0.5)] mb-2 pb-2">
+          <div className="w-12 flex-shrink-0 flex items-center justify-center">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 accent-gradient shadow-md">
+              <Headphones size={18} className="text-white" />
+            </div>
           </div>
           <div className={`transition-all duration-300 ease-in-out overflow-hidden flex-1 ${expanded ? "opacity-100 max-w-[200px]" : "opacity-0 max-w-0"}`}>
             <h1 className="text-sm font-bold tracking-tight whitespace-nowrap">IT Support</h1>
@@ -116,11 +194,10 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
               Propulsé par l&apos;IA
             </p>
           </div>
-          {/* Mobile close button */}
           {isMobile && (
             <button
               onClick={onMobileClose}
-              className="ml-auto p-1.5 rounded-lg hover:bg-[hsl(var(--muted)/0.5)] text-[hsl(var(--muted-foreground))]"
+              className="p-1.5 rounded-lg hover:bg-[hsl(var(--muted)/0.5)] text-[hsl(var(--muted-foreground))]"
             >
               <X size={18} />
             </button>
@@ -128,119 +205,104 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto custom-scrollbar">
-          <p className={`text-[0.65rem] font-semibold uppercase tracking-widest text-[hsl(var(--muted-foreground))] px-3 mb-3 transition-all duration-300 ease-in-out whitespace-nowrap overflow-hidden ${expanded ? "opacity-100 max-h-10" : "opacity-0 max-h-0 mb-0"}`}>
+        <nav className="flex-1 py-2 space-y-1 overflow-y-auto custom-scrollbar w-full">
+          <p className={`text-[0.65rem] font-semibold uppercase tracking-widest text-[hsl(var(--muted-foreground))] px-3 mb-2 transition-all duration-300 ease-in-out whitespace-nowrap overflow-hidden ${expanded ? "opacity-100 max-h-10" : "opacity-0 max-h-0 mb-0"}`}>
             Navigation
           </p>
           {navItems.map((item) => {
             const isActive = pathname === item.href;
-            if (item.disabled) {
-              return (
-                <button
-                  key={item.id}
-                  className={`sidebar-item w-full opacity-40 cursor-not-allowed ${!expanded ? "justify-center px-0 !gap-0" : ""}`}
-                  title={!expanded ? item.label : undefined}
-                  disabled
-                >
-                  <span className="flex-shrink-0">{item.icon}</span>
-                  <span className={`whitespace-nowrap flex-1 text-left transition-all duration-300 ease-in-out overflow-hidden ${expanded ? "opacity-100 max-w-[200px] ml-2" : "opacity-0 max-w-0 ml-0"}`}>
-                    {item.label}
-                  </span>
-                  <span className={`text-[0.6rem] uppercase bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] px-1.5 py-0.5 rounded font-semibold transition-all duration-300 ease-in-out overflow-hidden ${expanded ? "opacity-100 max-w-[50px] ml-auto" : "opacity-0 max-w-0 ml-0"}`}>
-                    Bientôt
-                  </span>
-                </button>
-              );
-            }
             return (
-              <Link
+              <SidebarItem
                 key={item.id}
+                icon={item.icon}
+                label={item.label}
                 href={item.href}
-                onClick={() => {
-                  if (isMobile && onMobileClose) {
-                    onMobileClose();
-                  }
-                }}
-                className={`sidebar-item w-full active:scale-[0.98] active:opacity-75 ${isActive ? "active" : ""} ${!expanded ? "justify-center px-0 !gap-0" : ""}`}
+                active={isActive}
+                disabled={item.disabled}
+                expanded={expanded}
+                badge={item.disabled ? "Bientôt" : undefined}
                 title={!expanded ? item.label : undefined}
-              >
-                <span className="flex-shrink-0">{item.icon}</span>
-                <span className={`whitespace-nowrap transition-all duration-300 ease-in-out overflow-hidden ${expanded ? "opacity-100 max-w-[200px] ml-2" : "opacity-0 max-w-0 ml-0"}`}>
-                  {item.label}
-                </span>
-              </Link>
+                onClick={() => {
+                  if (isMobile && onMobileClose) onMobileClose();
+                }}
+              />
             );
           })}
         </nav>
 
         {/* Footer */}
-        <div className="px-3 py-3 border-t border-[hsl(var(--border)/0.5)] space-y-2 flex-shrink-0">
+        <div className="pt-3 border-t border-[hsl(var(--border)/0.5)] space-y-1 flex-shrink-0 w-full">
           {user && (
-            <Link
+            <SidebarItem
               href="/profile"
+              expanded={expanded}
+              icon={
+                <div
+                  className="w-8 h-8 rounded-lg accent-gradient flex items-center justify-center text-white text-xs font-bold"
+                  title={user.name}
+                >
+                  {initials}
+                </div>
+              }
+              label={
+                <div className="flex flex-col min-w-0 w-full">
+                  <p className="text-sm font-semibold truncate leading-tight text-[hsl(var(--foreground))]">{user.name}</p>
+                  <p className="text-[0.65rem] text-[hsl(var(--muted-foreground))] truncate font-normal mt-0.5">
+                    {roleLabels[user.x_support_role] || user.x_support_role}
+                  </p>
+                </div>
+              }
+              title={!expanded ? "Profil" : undefined}
               onClick={() => {
-                if (isMobile && onMobileClose) {
-                  onMobileClose();
-                }
+                if (isMobile && onMobileClose) onMobileClose();
               }}
-              className={`flex items-center py-2 rounded-xl hover:bg-[hsl(var(--muted)/0.5)] transition-colors ${expanded ? "gap-3 px-2" : "justify-center gap-0 px-0"}`}
-            >
-              <div
-                className="w-8 h-8 rounded-lg accent-gradient flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-                title={user.name}
-              >
-                {initials}
-              </div>
-              <div className={`transition-all duration-300 ease-in-out overflow-hidden flex-1 min-w-0 ${expanded ? "opacity-100 max-w-[200px]" : "opacity-0 max-w-0"}`}>
-                <p className="text-xs font-semibold truncate">{user.name}</p>
-                <p className="text-[0.6rem] text-[hsl(var(--muted-foreground))] truncate">
-                  {roleLabels[user.x_support_role] || user.x_support_role}
-                </p>
-              </div>
-            </Link>
+            />
           )}
 
-          <div className={`flex ${!expanded ? "flex-col items-center gap-1" : "justify-between items-center px-2"}`}>
-            <span className={`text-xs font-medium text-[hsl(var(--muted-foreground))] transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap ${expanded ? "opacity-100 max-w-[100px]" : "opacity-0 max-w-0"}`}>
-              Thème
-            </span>
-            <ThemeToggle />
-          </div>
+          <SidebarItem
+            expanded={expanded}
+            icon={
+              <div className="relative flex items-center justify-center w-full h-full">
+                {mounted ? (
+                  <>
+                    <Sun className="h-[18px] w-[18px] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                    <Moon className="absolute h-[18px] w-[18px] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                  </>
+                ) : (
+                  <div className="w-[18px] h-[18px]" />
+                )}
+              </div>
+            }
+            label="Thème"
+            title={!expanded ? "Changer de thème" : undefined}
+            onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+          />
 
-          <button
+          <SidebarItem
+            expanded={expanded}
+            icon={<LogOut size={18} />}
+            label="Déconnexion"
+            danger={true}
             onClick={logout}
-            className={`sidebar-item w-full text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive)/0.08)] ${!expanded ? "justify-center px-0" : ""}`}
             title={!expanded ? "Déconnexion" : undefined}
-          >
-            <LogOut size={18} className="flex-shrink-0" />
-            <span className={`text-sm whitespace-nowrap transition-all duration-300 ease-in-out overflow-hidden ${expanded ? "opacity-100 max-w-[200px] ml-2 text-left" : "opacity-0 max-w-0 ml-0"}`}>
-              Déconnexion
-            </span>
-          </button>
+          />
 
-          {/* Desktop collapse toggle — hidden on mobile drawer */}
           {!isMobile && (
-            <button
+            <SidebarItem
+              expanded={expanded}
+              icon={isExpanded ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
+              label={collapsed ? "Épingler" : "Réduire"}
               onClick={() => setCollapsed(!collapsed)}
-              className="sidebar-item w-full justify-center text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
               title={collapsed ? "Épingler la barre" : "Réduire"}
-            >
-              {isExpanded ? <ChevronLeft size={18} className="flex-shrink-0" /> : <ChevronRight size={18} className="flex-shrink-0" />}
-              <span className={`text-xs whitespace-nowrap transition-all duration-300 ease-in-out overflow-hidden ${expanded ? "opacity-100 max-w-[200px] ml-2 text-left" : "opacity-0 max-w-0 ml-0"}`}>
-                {collapsed ? "Épingler" : "Réduire"}
-              </span>
-            </button>
+            />
           )}
         </div>
-      </>
+      </div>
     );
   };
 
   return (
     <>
-      {/* ── DESKTOP SIDEBAR (md+) ─────────────────────────────────────── */}
-      {/* Spacer div to reserve layout space — no z-index to avoid creating a
-           stacking context that would cap the fixed aside's z-[100] */}
       <div 
         className="hidden md:block flex-shrink-0 transition-all duration-300 ease-in-out" 
         style={{ width: collapsed ? "var(--sidebar-collapsed)" : "var(--sidebar-width)" }}
@@ -260,20 +322,17 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
         </aside>
       </div>
 
-      {/* ── MOBILE DRAWER (< md) ─────────────────────────────────────── */}
       <div
         className={`md:hidden fixed inset-0 z-[9999] transition-all duration-300 ${
           mobileOpen ? "pointer-events-auto" : "pointer-events-none"
         }`}
       >
-        {/* Backdrop */}
         <div
           className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${
             mobileOpen ? "opacity-100" : "opacity-0"
           }`}
           onClick={onMobileClose}
         />
-        {/* Drawer panel */}
         <aside
           className={`absolute top-0 left-0 h-full sidebar flex flex-col pointer-events-auto
             transition-transform duration-300 ease-in-out shadow-2xl

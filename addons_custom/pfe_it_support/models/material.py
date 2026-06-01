@@ -1,10 +1,18 @@
 from odoo import fields, models  # type: ignore
 
 
+class ItMaterialCategory(models.Model):
+    _name = 'pfe.it.material.category'
+    _description = 'Catégorie de matériel IT'
+    _order = 'name'
+
+    name = fields.Char(string='Nom de la catégorie', required=True)
+
+
 class ItMaterial(models.Model):
     _name = 'pfe.it.material'
     _description = 'Catalogue de matériel IT'
-    _order = 'category, name'
+    _order = 'category_id, name'
 
     name = fields.Char(
         string='Désignation',
@@ -12,12 +20,12 @@ class ItMaterial(models.Model):
         help='Ex: RAM 8GB DDR4, Clavier AZERTY, Câble RJ45...'
     )
 
-    category = fields.Selection([
-        ('hardware', 'Matériel'),
-        ('software', 'Logiciel'),
-        ('cable',    'Câblage'),
-        ('other',    'Autre'),
-    ], string='Catégorie', default='hardware', required=True)
+    category_id = fields.Many2one(
+        'pfe.it.material.category',
+        string='Catégorie',
+        required=True,
+        ondelete='restrict'
+    )
 
     reference = fields.Char(
         string='Référence interne',

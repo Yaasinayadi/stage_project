@@ -27,11 +27,13 @@ import {
   Save,
   Database,
   Tag,
+  PackagePlus,
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import NotificationBell from "@/components/NotificationBell";
+import CreateMaterialModal from "@/components/CreateMaterialModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -57,16 +59,15 @@ type CatalogItem = {
   category: string;
   qty_available: number;
   unit_cost: number;
+  category_id?: number | null;
+};
+
+type MaterialCategory = {
+  id: number;
+  name: string;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const CATEGORY_LABELS: Record<string, string> = {
-  hardware: "Matériel",
-  software: "Logiciel",
-  cable: "Câblage",
-  other: "Autre",
-};
 
 const getPriorityBadge = (priority?: string) => {
   switch (priority) {
@@ -123,9 +124,11 @@ export default function AdminInventoryPage() {
 
   // Catalog state
   const [showCatalog, setShowCatalog] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [stockLoading, setStockLoading] = useState<number | null>(null);
+  const [categories, setCategories] = useState<MaterialCategory[]>([]);
 
   // Filters & Draft state
   const [searchQuery, setSearchQuery] = useState("");
@@ -134,11 +137,11 @@ export default function AdminInventoryPage() {
   const [draftPrices, setDraftPrices] = useState<Record<number, number>>({});
 
   const catalogCategories = Array.from(
-    new Set(catalog.map((c) => CATEGORY_LABELS[c.category] || c.category)),
+    new Set(catalog.map((c) => c.category)),
   ).sort();
 
   const filteredCatalog = catalog.filter((item) => {
-    const catLabel = CATEGORY_LABELS[item.category] || item.category;
+    const catLabel = item.category;
     const matchesSearch =
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (item.reference || "").toLowerCase().includes(searchQuery.toLowerCase());
@@ -164,6 +167,9 @@ export default function AdminInventoryPage() {
 
   useEffect(() => {
     fetchInventory();
+    axios.get(`${ODOO_URL}/api/material-categories`).then(res => {
+      if (res.data.status === 200) setCategories(res.data.data);
+    }).catch(err => console.error("Error fetching categories:", err));
   }, [fetchInventory]);
 
   // ── Fetch catalog ────────────────────────────────────────────────────────────
@@ -284,7 +290,12 @@ export default function AdminInventoryPage() {
     setDraftPrices((prev) => ({ ...prev, [materialId]: isNaN(val) ? 0 : val }));
   };
 
-  const hasAnyChanges = Object.keys(draftStock).length > 0 || Object.keys(draftPrices).length > 0;
+  // Bouton visible UNIQUEMENT si une valeur diffère réellement de l'original
+  const hasAnyChanges = catalog.some(
+    (item) =>
+      (draftStock[item.id] !== undefined && draftStock[item.id] !== item.qty_available) ||
+      (draftPrices[item.id] !== undefined && draftPrices[item.id] !== item.unit_cost),
+  );
 
   const handleSaveBatch = async () => {
     if (!hasAnyChanges) return;
@@ -422,16 +433,25 @@ export default function AdminInventoryPage() {
                   <Warehouse size={14} />
                   Inventaire Complet
                 </h2>
-                {hasAnyChanges && (
+                <div className="flex items-center gap-3">
+                  {hasAnyChanges && (
+                    <button
+                      onClick={handleSaveBatch}
+                      disabled={catalogLoading}
+                      className="flex items-center gap-2 px-4 py-2 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.9)] text-primary-foreground text-xs font-bold rounded-lg transition-all shadow-sm disabled:opacity-50"
+                    >
+                      {catalogLoading ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                      Enregistrer
+                    </button>
+                  )}
                   <button
-                    onClick={handleSaveBatch}
-                    disabled={catalogLoading}
-                    className="flex items-center gap-2 px-4 py-2 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.9)] text-primary-foreground text-xs font-bold rounded-lg transition-all shadow-sm disabled:opacity-50"
+                    onClick={() => setShowCreateModal(true)}
+                    className="bg-emerald-600 text-white hover:bg-emerald-700 px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all shrink-0"
                   >
-                    {catalogLoading ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                    Enregistrer les modifications
+                    <PackagePlus size={18} className="mr-2" />
+                    Nouveau matériel
                   </button>
-                )}
+                </div>
               </div>
 
               {catalogLoading ? (
@@ -542,7 +562,7 @@ export default function AdminInventoryPage() {
                               <p className="text-[11px] text-[hsl(var(--muted-foreground))] mt-0.5 flex items-center gap-2 flex-wrap">
                                 <span>{item.reference || "—"}</span>
                                 <span>&middot;</span>
-                                <span>{CATEGORY_LABELS[item.category] || item.category}</span>
+                                <span>{item.category}</span>
                               </p>
                             </div>
                             <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0 w-full sm:w-auto mt-2 sm:mt-0">
@@ -811,6 +831,17 @@ export default function AdminInventoryPage() {
           )}
         </div>
       </div>
+
+      {/* ── Create Material Modal ─────────────────────────────────────────── */}
+      {showCreateModal && (
+        <CreateMaterialModal
+          categories={categories}
+          onClose={() => setShowCreateModal(false)}
+          onCreated={(newItem) => {
+            setCatalog((prev) => [newItem, ...prev]);
+          }}
+        />
+      )}
     </ProtectedRoute>
   );
 }

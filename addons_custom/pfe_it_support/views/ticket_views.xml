@@ -158,7 +158,7 @@
                                 <list string="Matériel requis" editable="bottom">
                                     <field name="material_id"/>
                                     <field name="quantity"/>
-                                    <field name="material_category" readonly="1"/>
+                                    <field name="material_category_id" readonly="1"/>
                                     <field name="material_reference" optional="show" readonly="1"/>
                                     <field name="status" widget="badge"
                                            decoration-warning="status == 'requested'"
@@ -168,7 +168,7 @@
                                     <group>
                                         <field name="material_id"/>
                                         <field name="quantity"/>
-                                        <field name="material_category" readonly="1"/>
+                                        <field name="material_category_id" readonly="1"/>
                                         <field name="material_reference" readonly="1"/>
                                         <field name="status"/>
                                     </group>

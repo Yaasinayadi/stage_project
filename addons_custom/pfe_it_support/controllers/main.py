@@ -356,7 +356,7 @@ class SupportTicketController(http.Controller):
             'materials': [{
                 'id':        line.material_id.id,
                 'name':      line.material_id.name,
-                'category':  line.material_id.category,
+                'category':  line.material_id.category_id.name if line.material_id.category_id else 'Autre',
                 'status':    line.status,
                 'line_id':   line.id,
                 'unit_cost': line.material_id.unit_cost,
@@ -1093,7 +1093,7 @@ class SupportTicketController(http.Controller):
             materials = [{
                 'id':        line.material_id.id,
                 'name':      line.material_id.name,
-                'category':  line.material_id.category,
+                'category':  line.material_id.category_id.name if line.material_id.category_id else 'Autre',
                 'status':    line.status,
                 'line_id':   line.id,
                 'unit_cost': line.material_id.unit_cost,
@@ -1270,11 +1270,11 @@ class SupportTicketController(http.Controller):
         if request.httprequest.method == 'OPTIONS':
             return self._cors_response()
         try:
-            mats = request.env['pfe.it.material'].sudo().search([('active', '=', True)], order='category, name')
+            mats = request.env['pfe.it.material'].sudo().search([('active', '=', True)], order='category_id, name')
             data = [{
                 'id':            m.id,
                 'name':          m.name,
-                'category':      m.category,
+                'category':      m.category_id.name if m.category_id else 'Autre',
                 'reference':     m.reference or '',
                 'qty_available': m.qty_available,
                 'unit_cost':     m.unit_cost,
@@ -2191,6 +2191,18 @@ class SupportTicketController(http.Controller):
         except Exception as e:
             return self._json_response({'status': 500, 'message': str(e)}, 500)
 
+    @http.route('/api/material-categories', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
+    def get_material_categories(self, **kwargs):
+        """Retourne la liste des catégories de matériel dynamiques."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+
+        try:
+            categories = request.env['pfe.it.material.category'].sudo().search([], order='name')
+            data = [{'id': cat.id, 'name': cat.name} for cat in categories]
+            return self._json_response({'status': 200, 'data': data})
+        except Exception as e:
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
 
     @http.route('/api/admin/catalog', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
     def get_admin_catalog(self, **kwargs):
@@ -2199,20 +2211,73 @@ class SupportTicketController(http.Controller):
             return self._cors_response()
 
         try:
-            materials = request.env['pfe.it.material'].sudo().search([('active', '=', True)], order='category, name')
+            materials = request.env['pfe.it.material'].sudo().search([('active', '=', True)], order='category_id, name')
             data = []
             for mat in materials:
                 data.append({
                     'id': mat.id,
                     'name': mat.name,
                     'reference': mat.reference or '',
-                    'category': mat.category or 'other',
+                    'category': mat.category_id.name if mat.category_id else 'Autre',
+                    'category_id': mat.category_id.id if mat.category_id else None,
                     'qty_available': mat.qty_available,
                     'unit_cost': mat.unit_cost,
                 })
                 
             total_inventory_value = sum(m.qty_available * m.unit_cost for m in materials)
             return self._json_response({'status': 200, 'data': data, 'total_inventory_value': total_inventory_value})
+        except Exception as e:
+            return self._json_response({'status': 500, 'message': str(e)}, 500)
+
+    @http.route('/api/admin/catalog/create', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
+    def create_catalog_material(self, **kwargs):
+        """Crée un nouveau matériel IT dans le catalogue (modèle pfe.it.material)."""
+        if request.httprequest.method == 'OPTIONS':
+            return self._cors_response()
+
+        try:
+            raw = request.httprequest.data.decode('utf-8')
+            payload = json.loads(raw) if raw else {}
+
+            name = (payload.get('name') or '').strip()
+            category_id = payload.get('category_id') or payload.get('category')
+            reference = (payload.get('reference') or '').strip()
+            unit_cost = float(payload.get('unit_cost') or 0)
+            qty_available = int(payload.get('qty_available') or 0)
+
+            if not name:
+                return self._json_response({'status': 400, 'message': 'La désignation est requise.'}, 400)
+
+            if not category_id:
+                return self._json_response({'status': 400, 'message': 'La catégorie est requise.'}, 400)
+
+            try:
+                category_id = int(category_id)
+            except ValueError:
+                return self._json_response({'status': 400, 'message': 'Format de catégorie invalide.'}, 400)
+
+            new_mat = request.env['pfe.it.material'].sudo().create({
+                'name': name,
+                'category_id': category_id,
+                'reference': reference,
+                'unit_cost': unit_cost,
+                'qty_available': qty_available,
+                'active': True,
+            })
+
+            return self._json_response({
+                'status': 201,
+                'message': 'Matériel créé avec succès.',
+                'data': {
+                    'id': new_mat.id,
+                    'name': new_mat.name,
+                    'reference': new_mat.reference or '',
+                    'category': new_mat.category_id.name if new_mat.category_id else 'Autre',
+                    'category_id': new_mat.category_id.id if new_mat.category_id else None,
+                    'qty_available': new_mat.qty_available,
+                    'unit_cost': new_mat.unit_cost,
+                }
+            }, 201)
         except Exception as e:
             return self._json_response({'status': 500, 'message': str(e)}, 500)
 

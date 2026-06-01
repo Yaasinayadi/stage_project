@@ -724,7 +724,7 @@ class SupportTicketMaterialLine(models.Model):
     ticket_id = fields.Many2one('support.ticket', string='Ticket', ondelete='cascade', required=True)
     material_id = fields.Many2one('pfe.it.material', string='Matériel', ondelete='cascade', required=True)
     
-    material_category = fields.Selection(related='material_id.category', string='Catégorie', readonly=True)
+    material_category_id = fields.Many2one(related='material_id.category_id', string='Catégorie', readonly=True)
     material_reference = fields.Char(related='material_id.reference', string='Référence', readonly=True)
 
     status = fields.Selection([

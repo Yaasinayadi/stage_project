@@ -1449,8 +1449,23 @@ function VerticalTimeline({
         interval.pause.id,
         interval.pause.date,
         <MRow
-          bgClass={motif.toLowerCase().includes("matériel") || motif.toLowerCase().includes("pièces") ? "bg-orange-600/10 border border-orange-600/20" : "bg-amber-500/10 border border-amber-500/20"}
-          icon={<PauseCircle size={14} className={motif.toLowerCase().includes("matériel") || motif.toLowerCase().includes("pièces") ? "text-orange-500" : "text-amber-500"} />}
+          bgClass={
+            motif.toLowerCase().includes("matériel") ||
+            motif.toLowerCase().includes("pièces")
+              ? "bg-orange-600/10 border border-orange-600/20"
+              : "bg-amber-500/10 border border-amber-500/20"
+          }
+          icon={
+            <PauseCircle
+              size={14}
+              className={
+                motif.toLowerCase().includes("matériel") ||
+                motif.toLowerCase().includes("pièces")
+                  ? "text-orange-500"
+                  : "text-amber-500"
+              }
+            />
+          }
           label={`Mise en pause — Raison : ${motif}`}
           author={interval.pause.author}
           date={interval.pause.date}
@@ -1930,7 +1945,7 @@ function InlineCategorySelect({
             {category}
           </span>
         ) : (
-          <span className="inline-flex items-center px-2.5 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest bg-zinc-500/10 text-zinc-400 border-zinc-500/20">
+          <span className="inline-flex items-center px-2.5 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest bg-[hsl(var(--muted)/0.3)] text-[hsl(var(--muted-foreground))] border-[hsl(var(--border)/0.5)] dark:bg-zinc-500/10 dark:text-zinc-400 dark:border-zinc-500/20">
             Non classé
           </span>
         )}
@@ -2579,7 +2594,6 @@ export default function TicketDetailsModal({
                 : ticket.state === "escalated"
                   ? "purple"
                   : "sky";
-
       }
 
       chainNodes.push({
@@ -2840,7 +2854,7 @@ export default function TicketDetailsModal({
                       className="input-field focus-ring disabled:opacity-50 text-base font-semibold animate-fade-in"
                     />
                   ) : (
-                    <h3 className="text-xl font-bold">{ticket.name}</h3>
+                    <h3 className="text-xl font-bold text-[hsl(var(--foreground))]">{ticket.name}</h3>
                   )}
                 </div>
 
@@ -2877,7 +2891,7 @@ export default function TicketDetailsModal({
                       )}
                     </div>
                   ) : (
-                    <div className="whitespace-pre-wrap text-[hsl(var(--muted-foreground))] text-sm leading-relaxed bg-[hsl(var(--muted)/0.2)] p-4 rounded-xl border border-[hsl(var(--border)/0.5)]">
+                    <div className="whitespace-pre-wrap text-[hsl(var(--foreground)/0.9)] dark:text-[hsl(var(--muted-foreground))] text-sm leading-relaxed bg-[hsl(var(--muted)/0.3)] dark:bg-[hsl(var(--muted)/0.2)] p-4 rounded-xl border border-[hsl(var(--border)/0.5)]">
                       {ticket.description}
                     </div>
                   )}
@@ -2885,8 +2899,8 @@ export default function TicketDetailsModal({
 
                 {/* ── Statut + Priorité + Catégorie ── */}
                 <div className="grid grid-cols-3 gap-3">
-                  <div className="bg-zinc-900/40 border border-white/5 p-4 rounded-xl">
-                    <span className="block text-[12px] text-zinc-500 leading-relaxed mb-2">
+                  <div className="bg-[hsl(var(--card))] border border-[hsl(var(--border)/0.5)] p-4 rounded-xl">
+                    <span className="block text-[12px] text-[hsl(var(--muted-foreground))] font-medium leading-relaxed mb-2">
                       Statut
                     </span>
                     <div className="flex items-center gap-2">
@@ -2897,8 +2911,8 @@ export default function TicketDetailsModal({
                       </span>
                     </div>
                   </div>
-                  <div className="bg-zinc-900/40 border border-white/5 p-4 rounded-xl overflow-visible">
-                    <span className="block text-[12px] text-zinc-500 leading-relaxed mb-2">
+                  <div className="bg-[hsl(var(--card))] border border-[hsl(var(--border)/0.5)] p-4 rounded-xl overflow-visible">
+                    <span className="block text-[12px] text-[hsl(var(--muted-foreground))] font-medium leading-relaxed mb-2">
                       Priorité
                     </span>
                     <InlinePrioritySelect
@@ -2910,8 +2924,8 @@ export default function TicketDetailsModal({
                       }
                     />
                   </div>
-                  <div className="bg-zinc-900/40 border border-white/5 p-4 rounded-xl overflow-visible">
-                    <span className="block text-[12px] text-zinc-500 leading-relaxed mb-2">
+                  <div className="bg-[hsl(var(--card))] border border-[hsl(var(--border)/0.5)] p-4 rounded-xl overflow-visible">
+                    <span className="block text-[12px] text-[hsl(var(--muted-foreground))] font-medium leading-relaxed mb-2">
                       Catégorie
                     </span>
                     <InlineCategorySelect
@@ -3771,19 +3785,25 @@ export default function TicketDetailsModal({
                     const prioLabel = ticket.priority
                       ? prioMap[ticket.priority] || ticket.priority
                       : "—";
-                      
+
                     const resolutionTypeLabels: Record<string, string> = {
                       success: "Succès Total",
                       partial: "Succès Partiel (Contournement)",
                       failed: "Échec (Non résolu)",
                     };
-                    const rawResType = (ticket as any).resolution_type as string | null | undefined;
+                    const rawResType = (ticket as any).resolution_type as
+                      | string
+                      | null
+                      | undefined;
                     const resType = rawResType
                       ? resolutionTypeLabels[rawResType] || rawResType
                       : "—";
 
                     // Signature: prefer fresh field from API, fallback to any pre-existing source
-                    const sigB64 = (ticket as any).digital_signature as string | null | undefined;
+                    const sigB64 = (ticket as any).digital_signature as
+                      | string
+                      | null
+                      | undefined;
                     // Declare now/ref early — used in signatureHtml template
                     const ref = formatTicketRef(ticket.id);
                     const now = new Date().toLocaleString("fr-FR", {
@@ -3794,9 +3814,17 @@ export default function TicketDetailsModal({
                       minute: "2-digit",
                     });
                     // Generate verification hash (SHA-256 fingerprint simulation)
-                    const verifyId = `${ticket.id}-${ticket.create_date || ""}-${ticket.assigned_to || ""}`
-                      .split("").reduce((acc, c) => ((acc << 5) - acc + c.charCodeAt(0)) | 0, 0)
-                      .toString(16).replace("-", "").toUpperCase().padStart(8, "0");
+                    const verifyId =
+                      `${ticket.id}-${ticket.create_date || ""}-${ticket.assigned_to || ""}`
+                        .split("")
+                        .reduce(
+                          (acc, c) => ((acc << 5) - acc + c.charCodeAt(0)) | 0,
+                          0,
+                        )
+                        .toString(16)
+                        .replace("-", "")
+                        .toUpperCase()
+                        .padStart(8, "0");
                     const signatureHtml = sigB64
                       ? `<div style="margin-top:24px;padding-top:18px;border-top:2px solid #e5e7eb;">
                            <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#9ca3af;margin-bottom:12px;">Signature Électronique</div>
@@ -3823,7 +3851,10 @@ export default function TicketDetailsModal({
                             .join("")
                         : `<tr><td colspan="3" class="center muted">Aucun matériel utilisé</td></tr>`;
 
-                    const financials = calculateTicketFinancials(ticket, timelineData);
+                    const financials = calculateTicketFinancials(
+                      ticket,
+                      timelineData,
+                    );
                     const totalCost = financials.resourcesCost.toFixed(2);
                     const laborCostStr = financials.laborCost.toFixed(2);
                     const grandTotalStr = financials.grandTotal.toFixed(2);
@@ -4140,9 +4171,13 @@ export default function TicketDetailsModal({
                     {ticket.materials.map((m) => (
                       <div
                         key={m.id}
-                        className="grid grid-cols-3 gap-1 items-center bg-[hsl(var(--muted)/0.3)] px-3 py-2 rounded-lg border border-[hsl(var(--border)/0.5)]">
+                        className="grid grid-cols-3 gap-1 items-center bg-[hsl(var(--muted)/0.3)] px-3 py-2 rounded-lg border border-[hsl(var(--border)/0.5)]"
+                      >
                         <div className="flex items-center gap-2 text-xs font-semibold">
-                          <Cpu size={11} className="text-[hsl(var(--primary))]" />
+                          <Cpu
+                            size={11}
+                            className="text-[hsl(var(--primary))]"
+                          />
                           {m.name}
                         </div>
                         <span className="text-center text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-full w-fit mx-auto">
@@ -4162,31 +4197,52 @@ export default function TicketDetailsModal({
 
                 {/* ── Totaux financiers ── */}
                 {(() => {
-                  const financials = calculateTicketFinancials(ticket, timelineData);
+                  const financials = calculateTicketFinancials(
+                    ticket,
+                    timelineData,
+                  );
                   return (
                     <div className="border-t border-[hsl(var(--border)/0.5)] pt-3 mt-2 space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-[hsl(var(--muted-foreground))] font-medium">Ressources</span>
-                        <span className="font-mono text-xs font-bold">{financials.resourcesCost.toFixed(2)} MAD</span>
+                        <span className="text-xs text-[hsl(var(--muted-foreground))] font-medium">
+                          Ressources
+                        </span>
+                        <span className="font-mono text-xs font-bold">
+                          {financials.resourcesCost.toFixed(2)} MAD
+                        </span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-[hsl(var(--muted-foreground))] font-medium">Main d&apos;oeuvre</span>
-                        <span className="font-mono text-xs font-bold">{financials.laborCost.toFixed(2)} MAD</span>
+                        <span className="text-xs text-[hsl(var(--muted-foreground))] font-medium">
+                          Main d&apos;oeuvre
+                        </span>
+                        <span className="font-mono text-xs font-bold">
+                          {financials.laborCost.toFixed(2)} MAD
+                        </span>
                       </div>
                       <div className="flex items-center justify-between border-t border-[hsl(var(--border)/0.5)] pt-2 mt-1">
                         <div className="flex items-center gap-2 font-bold text-sm">
                           <Wallet size={16} className="text-emerald-500" />
                           Total HT
                         </div>
-                        <span className="font-mono text-sm font-black">{financials.grandTotal.toFixed(2)} MAD</span>
+                        <span className="font-mono text-sm font-black">
+                          {financials.grandTotal.toFixed(2)} MAD
+                        </span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-[hsl(var(--muted-foreground))] font-medium">TVA (20%)</span>
-                        <span className="font-mono text-xs font-semibold text-[hsl(var(--muted-foreground))]">{financials.tva.toFixed(2)} MAD</span>
+                        <span className="text-xs text-[hsl(var(--muted-foreground))] font-medium">
+                          TVA (20%)
+                        </span>
+                        <span className="font-mono text-xs font-semibold text-[hsl(var(--muted-foreground))]">
+                          {financials.tva.toFixed(2)} MAD
+                        </span>
                       </div>
                       <div className="flex items-center justify-between bg-emerald-500/8 border border-emerald-500/20 rounded-lg px-3 py-2">
-                        <span className="text-sm font-black uppercase tracking-wide text-emerald-600 dark:text-emerald-400">Total TTC</span>
-                        <span className="font-mono text-xl font-black text-emerald-500">{financials.totalTtc.toFixed(2)} MAD</span>
+                        <span className="text-sm font-black uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
+                          Total TTC
+                        </span>
+                        <span className="font-mono text-xl font-black text-emerald-500">
+                          {financials.totalTtc.toFixed(2)} MAD
+                        </span>
                       </div>
                     </div>
                   );
@@ -4247,18 +4303,26 @@ export default function TicketDetailsModal({
                       ticket.x_total_paused_duration ??
                       0;
                     pausedMinutes = pausedHoursRaw * 60;
-                    if (pausedMinutes > totalElapsedMinutes && totalElapsedMinutes > 0) {
+                    if (
+                      pausedMinutes > totalElapsedMinutes &&
+                      totalElapsedMinutes > 0
+                    ) {
                       console.warn(
                         `[SLA] actual_paused_hours non disponible. Utilisation de total_paused_hours ` +
-                        `(${pausedMinutes.toFixed(1)} min) qui peut inclure des bonus d'escalade. ` +
-                        `Temps total : ${totalElapsedMinutes.toFixed(1)} min.`
+                          `(${pausedMinutes.toFixed(1)} min) qui peut inclure des bonus d'escalade. ` +
+                          `Temps total : ${totalElapsedMinutes.toFixed(1)} min.`,
                       );
                     }
-                    pausedMinutes = Math.min(pausedMinutes, totalElapsedMinutes);
+                    pausedMinutes = Math.min(
+                      pausedMinutes,
+                      totalElapsedMinutes,
+                    );
                   }
 
-                  const netMinutes = Math.max(0, totalElapsedMinutes - pausedMinutes);
-
+                  const netMinutes = Math.max(
+                    0,
+                    totalElapsedMinutes - pausedMinutes,
+                  );
 
                   // Temps total imparti = Deadline Ajustée - Create Date
                   let totalAllowedMinutes = 0;

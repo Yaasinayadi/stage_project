@@ -142,7 +142,7 @@ export default function LinearSlaBar({
     <div className="w-full flex flex-col gap-1.5 mt-auto mb-2 pt-2">
       {/* Badge de Temps */}
       <div className="flex items-center justify-between w-full">
-        <span className="text-[10px] font-bold tracking-tight text-[hsl(var(--foreground))/0.9] flex items-center">
+        <span className="text-[10px] font-bold tracking-tight text-slate-900 dark:text-[hsl(var(--foreground))/0.9] flex items-center">
           {resMet ? (
             <CheckCircle2 size={12} className="inline mr-1 text-emerald-500" />
           ) : (
@@ -156,7 +156,7 @@ export default function LinearSlaBar({
       </div>
 
       {/* Barre de Progression */}
-      <div className="h-1 w-full bg-zinc-800 rounded-full overflow-hidden">
+      <div className="h-1 w-full bg-slate-200 dark:bg-zinc-800 rounded-full overflow-hidden">
         <div 
           className={`h-full rounded-full transition-all duration-500 ${fillColorClass}`}
           style={{ width: `${barWidth}%` }}

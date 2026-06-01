@@ -560,7 +560,7 @@ function QueuePage() {
         ) : viewMode === "cards" ? (
           <div
             key={`cards-view-${viewMode}`}
-            className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 animate-fade-in"
+            className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 animate-fade-in items-stretch"
           >
             {sorted.map((ticket, idx) => {
               return (
@@ -589,7 +589,11 @@ function QueuePage() {
                   }}
                   onRefresh={fetchQueue}
                   showSlaResponse={ticket.sla_response_deadline ? true : false}
-                  onClickOverride={isAdmin ? () => openDispatch(ticket) : () => openTechModal(ticket)}
+                  onClickOverride={
+                    isAdmin
+                      ? () => openDispatch(ticket)
+                      : () => openTechModal(ticket)
+                  }
                   footerLeftOverride={
                     <div className="flex items-center gap-2 text-[hsl(var(--muted-foreground))]">
                       {ticket.user_name ? (
@@ -618,18 +622,19 @@ function QueuePage() {
                           e.stopPropagation();
                           openDispatch(ticket);
                         }}
-                        className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all"
+                        className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg border border-[hsl(var(--border)/0.5)] bg-transparent text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--primary))] hover:text-white hover:border-[hsl(var(--primary))] text-[11px] font-bold transition-all"
                       >
                         <Users size={14} /> Assigner à
                       </button>
-                    ) : ticket.assigned_to_id === user?.id && !ticket.x_accepted ? (
+                    ) : ticket.assigned_to_id === user?.id &&
+                      !ticket.x_accepted ? (
                       <button
                         disabled={assigning === ticket.id}
                         onClick={(e) => {
                           e.stopPropagation();
                           handleAccept(ticket.id);
                         }}
-                        className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all disabled:opacity-50"
+                        className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg border border-[hsl(var(--border)/0.5)] bg-transparent text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--primary))] hover:text-white hover:border-[hsl(var(--primary))] text-[11px] font-bold transition-all disabled:opacity-50"
                       >
                         <ShieldCheck size={14} />
                         {assigning === ticket.id
@@ -643,7 +648,7 @@ function QueuePage() {
                           e.stopPropagation();
                           handleAssign(ticket.id);
                         }}
-                        className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition-all disabled:opacity-50"
+                        className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-transparent text-slate-600 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white text-[11px] font-bold transition-all disabled:opacity-50"
                       >
                         <Inbox size={14} />
                         {assigning === ticket.id
