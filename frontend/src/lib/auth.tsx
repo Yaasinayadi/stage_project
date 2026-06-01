@@ -24,6 +24,12 @@ export type User = {
   it_domains?: string[];
   resolved_tickets?: number;
   token?: string;
+  preferences?: {
+    notif_on_create: boolean;
+    notif_on_assign: boolean;
+    notif_on_comment: boolean;
+    notif_on_sla: boolean;
+  };
 };
 
 type AuthContextType = {

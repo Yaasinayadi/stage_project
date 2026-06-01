@@ -210,7 +210,7 @@ export default function NotificationBell() {
       if (res.ok) {
         toast.success("Ticket accepté avec succès !");
         markRead(notifId, true);
-        setNotifs((prev) => prev.filter((n) => n.id !== notifId));
+        deleteNotif(notifId);
       }
     } catch {}
   };
@@ -223,7 +223,7 @@ export default function NotificationBell() {
       if (res.ok) {
         toast.error("Mission refusée.");
         markRead(notifId, true);
-        setNotifs((prev) => prev.filter((n) => n.id !== notifId));
+        deleteNotif(notifId);
       }
     } catch {}
   };
@@ -491,7 +491,6 @@ export default function NotificationBell() {
         id="notification-bell-btn"
         onClick={() => {
           setOpen((prev) => !prev);
-          if (!open) fetchNotifications();
         }}
         className={`relative p-2 rounded-xl transition-colors ${
           isSnoozed ? "bg-indigo-500/10 text-indigo-400" : "hover:bg-[hsl(var(--muted)/0.6)] text-[hsl(var(--muted-foreground))]"
