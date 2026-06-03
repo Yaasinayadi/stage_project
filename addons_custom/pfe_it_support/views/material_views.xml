@@ -133,9 +133,22 @@
         <field name="name">pfe.it.material.category.tree</field>
         <field name="model">pfe.it.material.category</field>
         <field name="arch" type="xml">
-            <list editable="bottom">
+            <list editable="bottom" decoration-muted="active == False">
                 <field name="name"/>
+                <field name="active" widget="boolean_toggle"/>
             </list>
+        </field>
+    </record>
+
+    <record id="view_pfe_it_material_category_search" model="ir.ui.view">
+        <field name="name">pfe.it.material.category.search</field>
+        <field name="model">pfe.it.material.category</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <separator/>
+                <filter string="Archivé" name="inactive" domain="[('active', '=', False)]"/>
+            </search>
         </field>
     </record>
 

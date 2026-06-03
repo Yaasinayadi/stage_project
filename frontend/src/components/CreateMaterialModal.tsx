@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import { ODOO_URL } from "@/lib/config";
 import {
@@ -13,6 +13,8 @@ import {
   DollarSign,
   Archive,
   ChevronDown,
+  Check,
+  PlusCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -65,17 +67,157 @@ const inputClass =
 
 // ─── Modal ────────────────────────────────────────────────────────────────────
 
-export default function CreateMaterialModal({
+function CustomCategorySelect({
+  value,
+  onChange,
   categories,
+  onCreateCategory,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  categories: { id: number; name: string }[];
+  onCreateCategory: (name: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  useEffect(() => {
+    if (!open) {
+      setSearch("");
+    } else {
+      setTimeout(() => inputRef.current?.focus(), 10);
+    }
+  }, [open]);
+
+  const selectedOption = categories.find((o) => o.id.toString() === value) || categories[0];
+  const filteredOptions = categories.filter(o => o.name.toLowerCase().includes(search.toLowerCase()));
+  const exactMatch = categories.find(o => o.name.toLowerCase() === search.toLowerCase().trim());
+
+  return (
+    <div ref={ref} className="relative w-full">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={`${inputClass} flex items-center justify-between text-left`}
+      >
+        <span className="font-semibold block truncate pr-4">
+          {selectedOption ? selectedOption.name : "Sélectionnez une catégorie"}
+        </span>
+        <ChevronDown
+          size={16}
+          className={`transition-transform text-[hsl(var(--muted-foreground))] shrink-0 ${
+            open ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute top-[calc(100%+8px)] left-0 z-50 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-2xl backdrop-blur-lg overflow-hidden animate-fade-in flex flex-col">
+          <div className="p-2 border-b border-[hsl(var(--border)/0.5)]">
+            <input
+              ref={inputRef}
+              type="text"
+              placeholder="Rechercher ou créer..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-transparent border-none text-sm text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground)/0.5)] focus:ring-0 focus:outline-none px-2 py-1"
+            />
+          </div>
+          <div className="p-2 space-y-1 overflow-y-auto custom-scrollbar max-h-48">
+            {filteredOptions.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => {
+                  onChange(opt.id.toString());
+                  setOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-semibold transition-all
+                  ${
+                    opt.id.toString() === value
+                      ? "bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]"
+                      : "hover:bg-[hsl(var(--muted)/0.5)] text-[hsl(var(--foreground)/0.8)] hover:text-[hsl(var(--foreground))]"
+                  }`}
+              >
+                <span className="truncate pr-2">{opt.name}</span>
+                {opt.id.toString() === value && (
+                  <Check
+                    size={14}
+                    className="shrink-0 text-[hsl(var(--foreground))]"
+                  />
+                )}
+              </button>
+            ))}
+            {search.trim() && !exactMatch && (
+              <button
+                type="button"
+                onClick={() => {
+                  onCreateCategory(search.trim());
+                  setOpen(false);
+                }}
+                className="w-full flex items-center px-3 py-2.5 rounded-lg text-sm font-semibold transition-all hover:bg-[hsl(var(--muted)/0.5)] text-[hsl(var(--foreground)/0.8)] hover:text-[hsl(var(--foreground))]"
+              >
+                <PlusCircle size={14} className="text-emerald-500 mr-2 shrink-0" />
+                <span className="truncate">Créer "{search.trim()}"</span>
+              </button>
+            )}
+            {filteredOptions.length === 0 && !search.trim() && (
+              <div className="text-center py-2 text-sm text-[hsl(var(--muted-foreground))]">
+                Aucune catégorie
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function CreateMaterialModal({
+  categories: initialCategories,
   onClose,
   onCreated,
 }: CreateMaterialModalProps) {
+  const [localCategories, setLocalCategories] = useState(initialCategories);
   const [name, setName] = useState("");
-  const [categoryId, setCategoryId] = useState(categories.length > 0 ? categories[0].id.toString() : "");
+  const [categoryId, setCategoryId] = useState(localCategories.length > 0 ? localCategories[0].id.toString() : "");
   const [reference, setReference] = useState("");
   const [unitCost, setUnitCost] = useState("");
   const [qtyAvailable, setQtyAvailable] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    setLocalCategories(initialCategories);
+  }, [initialCategories]);
+
+  const handleCreateCategory = async (catName: string) => {
+    try {
+      const res = await axios.post(`${ODOO_URL}/api/material-categories`, { name: catName });
+      if (res.data.status === 201 || res.data.status === 200) {
+        const newCat = res.data.data;
+        setLocalCategories((prev) => {
+          if (prev.find((c) => c.id === newCat.id)) return prev;
+          return [...prev, newCat];
+        });
+        setCategoryId(newCat.id.toString());
+        toast.success(`Catégorie "${newCat.name}" ${res.data.status === 201 ? "créée" : "sélectionnée"} avec succès.`);
+      } else {
+        toast.error(res.data.message || "Erreur lors de la création de la catégorie.");
+      }
+    } catch (err) {
+      toast.error("Impossible de créer la catégorie.");
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -167,22 +309,12 @@ export default function CreateMaterialModal({
 
           {/* Catégorie */}
           <Field label="Catégorie" icon={Layers}>
-            <div className="relative">
-              <select
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-                className={`${inputClass} appearance-none cursor-pointer pr-10`}
-              >
-                {categories.map((opt) => (
-                  <option key={opt.id} value={opt.id} className="bg-[hsl(var(--background))] text-[hsl(var(--foreground))] py-1">
-                    {opt.name}
-                  </option>
-                ))}
-              </select>
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[hsl(var(--muted-foreground))]">
-                <ChevronDown size={16} />
-              </div>
-            </div>
+            <CustomCategorySelect
+              value={categoryId}
+              onChange={setCategoryId}
+              categories={localCategories}
+              onCreateCategory={handleCreateCategory}
+            />
           </Field>
 
           {/* Référence Interne */}

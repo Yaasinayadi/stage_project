@@ -555,20 +555,6 @@ function MyTicketsPage() {
         </div>
         <div className="flex items-center gap-4">
           <NotificationBell />
-          <button
-            onClick={async () => {
-              setLoading(true);
-              await Promise.all([
-                fetchMyTickets(),
-                new Promise((r) => setTimeout(r, 500)),
-              ]);
-              setLoading(false);
-            }}
-            className="btn-ghost flex items-center gap-2 text-sm"
-            title="Actualiser"
-          >
-            <RefreshCw size={15} /> Actualiser
-          </button>
         </div>
       </div>
 

@@ -27,6 +27,7 @@ import {
   RefreshCw,
   Check,
   ChevronDown,
+  ChevronLeft,
   ChevronUp,
   ChevronRight,
   Users,
@@ -150,6 +151,7 @@ type TicketDetailsModalProps = {
   viewType?: "default" | "live" | "report";
   onClose: () => void;
   onRefresh?: () => void;
+  hideBack?: boolean;
 };
 
 // ─── Constants ───
@@ -2091,6 +2093,7 @@ export default function TicketDetailsModal({
   viewType = "default",
   onClose,
   onRefresh,
+  hideBack = false,
 }: TicketDetailsModalProps) {
   // ══════════════════════════════════════════
   //  HOOKS — tous AVANT le return conditionnel
@@ -2098,6 +2101,7 @@ export default function TicketDetailsModal({
 
   const { user } = useAuth();
   const [ticket, setTicket] = useState<Ticket>(initialTicket);
+  const [internalViewType, setInternalViewType] = useState(viewType);
   const [isEditing, setIsEditing] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -2149,10 +2153,9 @@ export default function TicketDetailsModal({
     setTicket(initialTicket);
   }, [initialTicket]);
 
-  // Sync ticket prop to state when modal opens or prop changes
   useEffect(() => {
-    setTicket(initialTicket);
-  }, [initialTicket]);
+    setInternalViewType(viewType);
+  }, [viewType, isOpen]);
 
   // Chargement des pièces jointes et commentaires
   const fetchAttachments = useCallback(async () => {
@@ -2797,6 +2800,30 @@ export default function TicketDetailsModal({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Bouton Compte-Rendu */}
+            {["done", "resolved", "closed", "résolu"].includes(ticket.state) && internalViewType !== "report" && (
+              <button
+                onClick={() => setInternalViewType("report")}
+                className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/30 transition-all mr-1"
+                title="Consulter le compte-rendu"
+              >
+                <FileText size={16} />
+                Compte-rendu
+              </button>
+            )}
+
+            {/* Bouton Retour (si déjà en report) */}
+            {internalViewType === "report" && !hideBack && (
+              <button
+                onClick={() => setInternalViewType(viewType || "default")}
+                className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-semibold bg-[hsl(var(--secondary))] hover:bg-[hsl(var(--secondary)/0.8)] text-[hsl(var(--foreground))] border border-[hsl(var(--border))] transition-all mr-1"
+                title="Retour au ticket"
+              >
+                <ChevronLeft size={16} />
+                Retour
+              </button>
+            )}
+
             {/* Bouton MODIFIER — uniquement en mode lecture */}
             {!isEditing && canEdit && (
               <button
@@ -2835,7 +2862,7 @@ export default function TicketDetailsModal({
 
         {/* ══ CORPS SCROLLABLE ══ */}
         <div className="flex-1 overflow-y-auto custom-scrollbar">
-          {(!viewType || viewType === "default") && (
+          {(!internalViewType || internalViewType === "default") && (
             <>
               <form onSubmit={handleGroupedSave} className="p-6 space-y-6">
                 {/* ── Titre ── */}
@@ -2961,7 +2988,7 @@ export default function TicketDetailsModal({
                     <VerticalTimeline
                       events={timelineData?.events ?? []}
                       loading={timelineLoading}
-                      viewType={viewType}
+                      viewType={internalViewType}
                     />
                   </div>
 
@@ -3480,7 +3507,7 @@ export default function TicketDetailsModal({
           )}
 
           {/* ══ VUE LIVE / TEMPS RÉEL ══ */}
-          {viewType === "live" && (
+          {internalViewType === "live" && (
             <div className="p-6 space-y-5">
               {/* APERÇU DE LA DEMANDE */}
               <div className="p-5 bg-[hsl(var(--secondary)/0.1)] border border-[hsl(var(--border)/0.5)] rounded-xl mb-6">
@@ -3565,7 +3592,7 @@ export default function TicketDetailsModal({
                 <VerticalTimeline
                   events={timelineData?.events ?? []}
                   loading={timelineLoading}
-                  viewType={viewType}
+                  viewType={internalViewType}
                 />
               </div>
               <div className="p-4 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--card))]">
@@ -3706,7 +3733,7 @@ export default function TicketDetailsModal({
           )}
 
           {/* ══ VUE REPORT / COMPTE-RENDU ══ */}
-          {viewType === "report" && (
+          {internalViewType === "report" && (
             <div className="p-6 space-y-5">
               <div className="flex items-center justify-between">
                 <div>
@@ -3733,18 +3760,16 @@ export default function TicketDetailsModal({
                     };
 
                     // Compute SLA metrics
+                    const financials = calculateTicketFinancials(ticket, timelineData);
+                    const totalElapsedMin = financials.totalElapsedMinutes;
+                    const pausedMin = financials.pausedMinutes;
+                    const netMin = financials.netMinutes;
+
                     const parseDateSafe = (s: string | null | undefined) =>
                       s ? new Date(s.endsWith("Z") ? s : s + "Z").getTime() : 0;
                     const createdTs = parseDateSafe(ticket.create_date);
                     const resolvedTs = parseDateSafe(ticket.date_resolved);
                     const adjustedSlaTs = parseDateSafe(ticket.sla_deadline);
-                    const pausedMin =
-                      (ticket.x_total_paused_duration || 0) * 60;
-                    const totalElapsedMin =
-                      createdTs && resolvedTs
-                        ? (resolvedTs - createdTs) / 60000
-                        : 0;
-                    const netMin = Math.max(0, totalElapsedMin - pausedMin);
                     const totalAllowedMin =
                       createdTs && adjustedSlaTs
                         ? (adjustedSlaTs - createdTs) / 60000
@@ -3851,10 +3876,6 @@ export default function TicketDetailsModal({
                             .join("")
                         : `<tr><td colspan="3" class="center muted">Aucun matériel utilisé</td></tr>`;
 
-                    const financials = calculateTicketFinancials(
-                      ticket,
-                      timelineData,
-                    );
                     const totalCost = financials.resourcesCost.toFixed(2);
                     const laborCostStr = financials.laborCost.toFixed(2);
                     const grandTotalStr = financials.grandTotal.toFixed(2);
@@ -4163,7 +4184,7 @@ export default function TicketDetailsModal({
                 </div>
                 {ticket.materials && ticket.materials.length > 0 ? (
                   <div className="space-y-2">
-                    <div className="grid grid-cols-3 gap-1 text-[10px] font-bold uppercase tracking-wide text-[hsl(var(--muted-foreground))] px-2 pb-1 border-b border-[hsl(var(--border)/0.5)]">
+                    <div className="grid grid-cols-[2fr_1fr_1fr] gap-1 text-[10px] font-bold uppercase tracking-wide text-[hsl(var(--muted-foreground))] px-2 pb-1 border-b border-[hsl(var(--border)/0.5)]">
                       <span>Matériel</span>
                       <span className="text-center">Statut</span>
                       <span className="text-right">Coût</span>
@@ -4171,20 +4192,27 @@ export default function TicketDetailsModal({
                     {ticket.materials.map((m) => (
                       <div
                         key={m.id}
-                        className="grid grid-cols-3 gap-1 items-center bg-[hsl(var(--muted)/0.3)] px-3 py-2 rounded-lg border border-[hsl(var(--border)/0.5)]"
+                        className="grid grid-cols-[2fr_1fr_1fr] gap-1 items-center bg-[hsl(var(--muted)/0.3)] px-3 py-2 rounded-lg border border-[hsl(var(--border)/0.5)]"
                       >
-                        <div className="flex items-center gap-2 text-xs font-semibold">
+                        <div className="flex items-center gap-2 text-xs font-semibold overflow-hidden">
                           <Cpu
                             size={11}
-                            className="text-[hsl(var(--primary))]"
+                            className="text-[hsl(var(--primary))] flex-shrink-0"
                           />
-                          {m.name}
+                          <span className="truncate">
+                            {m.name}
+                            {(m as any).quantity > 1 && (
+                              <span className="text-[hsl(var(--muted-foreground))]">
+                                (x{(m as any).quantity})
+                              </span>
+                            )}
+                          </span>
                         </div>
                         <span className="text-center text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-full w-fit mx-auto">
                           {m.status}
                         </span>
                         <span className="text-right text-xs font-mono font-bold">
-                          {(m.unit_cost || 0).toFixed(2)} MAD
+                          {((m.unit_cost || 0) * ((m as any).quantity || 1)).toFixed(2)} MAD
                         </span>
                       </div>
                     ))}
@@ -4278,51 +4306,10 @@ export default function TicketDetailsModal({
                   const initialSlaDate = parseDateSafe(initialSlaStr);
                   const adjustedSlaDate = parseDateSafe(adjustedSlaStr);
 
-                  let totalElapsedMinutes = 0;
-                  if (createdDate && endDate) {
-                    // Unité unique : secondes → conversion finale en minutes
-                    const totalElapsedSeconds = (endDate - createdDate) / 1000;
-                    totalElapsedMinutes = totalElapsedSeconds / 60;
-                  }
-
-                  // actual_paused_hours = vraie durée de pause (sans les bonus d'escalade artificielle)
-                  // total_paused_hours = durée SLA ajustée (inclut les bonus → NE PAS afficher)
-                  const actualPausedHoursRaw =
-                    timelineData?.actual_paused_hours ??
-                    ticket.x_actual_paused_duration ??
-                    null;
-
-                  // Si le nouveau champ est disponible, on l'utilise directement.
-                  // Sinon on fallback sur l'ancien champ en loggant un avertissement.
-                  let pausedMinutes: number;
-                  if (actualPausedHoursRaw !== null) {
-                    pausedMinutes = actualPausedHoursRaw * 60;
-                  } else {
-                    const pausedHoursRaw =
-                      timelineData?.total_paused_hours ??
-                      ticket.x_total_paused_duration ??
-                      0;
-                    pausedMinutes = pausedHoursRaw * 60;
-                    if (
-                      pausedMinutes > totalElapsedMinutes &&
-                      totalElapsedMinutes > 0
-                    ) {
-                      console.warn(
-                        `[SLA] actual_paused_hours non disponible. Utilisation de total_paused_hours ` +
-                          `(${pausedMinutes.toFixed(1)} min) qui peut inclure des bonus d'escalade. ` +
-                          `Temps total : ${totalElapsedMinutes.toFixed(1)} min.`,
-                      );
-                    }
-                    pausedMinutes = Math.min(
-                      pausedMinutes,
-                      totalElapsedMinutes,
-                    );
-                  }
-
-                  const netMinutes = Math.max(
-                    0,
-                    totalElapsedMinutes - pausedMinutes,
-                  );
+                  const financials = calculateTicketFinancials(ticket, timelineData);
+                  const totalElapsedMinutes = financials.totalElapsedMinutes;
+                  const pausedMinutes = financials.pausedMinutes;
+                  const netMinutes = financials.netMinutes;
 
                   // Temps total imparti = Deadline Ajustée - Create Date
                   let totalAllowedMinutes = 0;
@@ -4485,7 +4472,7 @@ export default function TicketDetailsModal({
                 <VerticalTimeline
                   events={timelineData?.events ?? []}
                   loading={timelineLoading}
-                  viewType={viewType}
+                  viewType={internalViewType}
                   ticket={{
                     date_resolved: ticket.date_resolved,
                     assigned_to: ticket.assigned_to,

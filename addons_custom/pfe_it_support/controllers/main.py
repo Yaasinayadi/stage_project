@@ -2191,13 +2191,37 @@ class SupportTicketController(http.Controller):
         except Exception as e:
             return self._json_response({'status': 500, 'message': str(e)}, 500)
 
-    @http.route('/api/material-categories', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
-    def get_material_categories(self, **kwargs):
-        """Retourne la liste des catégories de matériel dynamiques."""
+    @http.route('/api/material-categories', type='http', auth='public', methods=['GET', 'POST', 'OPTIONS'], csrf=False)
+    def manage_material_categories(self, **kwargs):
+        """Retourne la liste des catégories de matériel dynamiques, ou en crée une nouvelle."""
         if request.httprequest.method == 'OPTIONS':
             return self._cors_response()
 
         try:
+            if request.httprequest.method == 'POST':
+                raw = request.httprequest.data.decode('utf-8')
+                payload = json.loads(raw) if raw else {}
+                name = (payload.get('name') or '').strip()
+
+                if not name:
+                    return self._json_response({'status': 400, 'message': 'Le nom de la catégorie est requis.'}, 400)
+
+                existing = request.env['pfe.it.material.category'].sudo().search([('name', '=ilike', name)], limit=1)
+                if existing:
+                    return self._json_response({
+                        'status': 200,
+                        'message': 'Catégorie existante trouvée.',
+                        'data': {'id': existing.id, 'name': existing.name}
+                    }, 200)
+
+                new_cat = request.env['pfe.it.material.category'].sudo().create({'name': name})
+                return self._json_response({
+                    'status': 201,
+                    'message': 'Catégorie créée avec succès.',
+                    'data': {'id': new_cat.id, 'name': new_cat.name}
+                }, 201)
+
+            # Méthode GET par défaut
             categories = request.env['pfe.it.material.category'].sudo().search([], order='name')
             data = [{'id': cat.id, 'name': cat.name} for cat in categories]
             return self._json_response({'status': 200, 'data': data})
@@ -2280,6 +2304,8 @@ class SupportTicketController(http.Controller):
             }, 201)
         except Exception as e:
             return self._json_response({'status': 500, 'message': str(e)}, 500)
+
+
 
     @http.route('/api/admin/catalog/<int:material_id>/stock', type='http', auth='public', methods=['PATCH', 'OPTIONS'], csrf=False)
     def update_catalog_stock(self, material_id, **kwargs):

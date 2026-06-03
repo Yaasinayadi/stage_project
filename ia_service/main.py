@@ -51,7 +51,7 @@ def classify_ticket():
     description = data["description"]
     
     if not llm:
-        return jsonify(_mock_classify(description))
+        return jsonify({"error": "Connexion à l'IA non configurée"}), 503
         
     try:
         messages = [SystemMessage(content=CLASSIFY_SYSTEM_PROMPT), HumanMessage(content=f"Ticket :\n{description}")]
@@ -70,8 +70,8 @@ def classify_ticket():
             "suggested_solution": parsed_data.get("suggested_solution", "Contactez le support.")
         })
     except Exception as e:
-        print(f"Erreur LLM classification: {e}")
-        return jsonify(_mock_classify(description))
+        print(f"Erreur LLM classification: {e}", flush=True)
+        return jsonify({"error": str(e)}), 500
 
 # ─────────────────────────────────────────────
 # ROUTE : Analyse IA Détaillée (Résumé + Procédure)
@@ -208,7 +208,7 @@ RÈGLES STRICTES :
 8. Si le ticket est en statut 'escalated', tu DOIS impérativement utiliser cette formulation précise : "Le ticket [Référence] a été escaladé par [escalated_by_name] et attend une ré-assignation par l'administrateur." (où [Référence] est le name du ticket, et [escalated_by_name] est le nom de celui qui a escaladé)."""
     
     if not llm:
-        return jsonify(_mock_chat(user_message))
+        return jsonify({"bot_reply": "Erreur système: Connexion à l'IA non configurée (Clé API manquante).", "text": "Erreur système: Connexion à l'IA non configurée.", "ticket_id": None})
         
     try:
         if session_id not in chat_histories:
@@ -243,8 +243,10 @@ RÈGLES STRICTES :
             "ticket_id": ticket_id
         })
     except Exception as e:
-        print(f"Erreur LLM chat: {e}")
-        return jsonify(_mock_chat(user_message))
+        import traceback
+        err_msg = traceback.format_exc()
+        print(f"Erreur LLM chat: {err_msg}", flush=True)
+        return jsonify({"bot_reply": f"Erreur LLM: {str(e)}", "text": f"Erreur LLM: {str(e)}", "ticket_id": None})
 
 # ─────────────────────────────────────────────
 # HEALTH CHECK
@@ -267,21 +269,6 @@ def _cors_preflight():
     res.headers["Access-Control-Allow-Methods"] = "GET, POST, DELETE, OPTIONS"
     res.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
     return res
-
-def _mock_classify(description: str) -> dict:
-    desc_lower = description.lower()
-    cat, prio, sol, conf = "Logiciel", "1", "Veuillez redémarrer l'application.", 50.0
-    if any(w in desc_lower for w in ["internet", "wifi", "réseau", "vpn", "connexion"]):
-        cat, prio, sol, conf = "Réseau", "2", "Vérifiez le routeur.", 85.0
-    elif any(w in desc_lower for w in ["accès", "mot de passe"]):
-        cat, prio, sol, conf = "Accès", "1", "Changez votre mot de passe.", 90.0
-    return {"category": cat, "priority": prio, "confidence": conf, "suggested_solution": sol}
-
-def _mock_chat(user_message: str) -> dict:
-    reply = "Simulation IA : Je comprends. Pouvez-vous détailler ?"
-    if "bonjour" in user_message.lower():
-        reply = "Bonjour ! Je suis l'assistant IT simulé."
-    return {"bot_reply": reply, "text": reply, "ticket_id": None}
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=False)

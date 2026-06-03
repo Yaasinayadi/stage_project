@@ -12,6 +12,8 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   PackageX,
   Wallet,
   ClipboardList,
@@ -28,6 +30,8 @@ import {
   Database,
   Tag,
   PackagePlus,
+  User,
+  AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -120,6 +124,7 @@ export default function AdminInventoryPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [historyPage, setHistoryPage] = useState(1);
   const [totalLaborCost, setTotalLaborCost] = useState(0);
 
   // Catalog state
@@ -347,12 +352,6 @@ export default function AdminInventoryPage() {
           {/* ── Header ────────────────────────────────────────────────────────── */}
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
             <div>
-              <Link
-                href="/tickets"
-                className="text-xs font-semibold text-[hsl(var(--muted-foreground))] flex items-center gap-1 hover:text-[hsl(var(--foreground))] transition-colors mb-2 w-fit"
-              >
-                <ArrowLeft size={14} /> Retour
-              </Link>
               <h1 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-3">
                 <PackageSearch className="text-[hsl(var(--primary))]" />
                 Gestion des Ressources
@@ -632,122 +631,141 @@ export default function AdminInventoryPage() {
             </div>
           ) : (
             <div className="space-y-10">
-              {/* A PREPARER */}
+              {/* A PREPARER — groupé par ticket */}
               <div>
                 <h2 className="text-xs font-black uppercase tracking-[0.2em] text-[hsl(var(--muted-foreground))] mb-4 flex items-center gap-2">
                   <span className="relative flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
                   </span>
-                  À PRÉPARER ({requestedLines.length})
+                  À PRÉPARER ({requestedLines.length} ressource{requestedLines.length > 1 ? "s" : ""})
                 </h2>
 
                 {requestedLines.length === 0 ? (
                   <div className="flex flex-col items-center justify-center p-12 border border-[hsl(var(--border)/0.5)] rounded-lg bg-[hsl(var(--secondary)/0.05)] border-dashed">
-                    <Inbox
-                      size={32}
-                      className="opacity-20 mb-2 text-[hsl(var(--foreground))]"
-                    />
-                    <p className="text-sm font-medium text-[hsl(var(--muted-foreground))]">
-                      Toutes les ressources sont prêtes.
-                    </p>
+                    <Inbox size={32} className="opacity-20 mb-2 text-[hsl(var(--foreground))]" />
+                    <p className="text-sm font-medium text-[hsl(var(--muted-foreground))]">Toutes les ressources sont prêtes.</p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    {requestedLines.map((line) => (
-                      <div
-                        key={line.id}
-                        className="flex flex-col md:flex-row md:items-center justify-between bg-[hsl(var(--secondary)/0.1)] hover:bg-[hsl(var(--secondary)/0.2)] border border-[hsl(var(--border)/0.5)] rounded-lg p-4 transition-all gap-4"
-                      >
-                        {/* Gauche: Matériel + stock + prix */}
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <div className="text-sm font-bold text-[hsl(var(--foreground))]">
-                              {line.material_name}
+                  <div className="space-y-4">
+                    {(() => {
+                      // Grouper par ticket_id
+                      const grouped = requestedLines.reduce<Record<number, typeof requestedLines>>((acc, line) => {
+                        if (!acc[line.ticket_id]) acc[line.ticket_id] = [];
+                        acc[line.ticket_id].push(line);
+                        return acc;
+                      }, {});
+
+                      return Object.entries(grouped).map(([ticketIdStr, lines]) => {
+                        const firstLine = lines[0];
+                        const hasOverStock = lines.some(l => l.qty_available < (l.quantity || 1));
+
+                        return (
+                          <div
+                            key={ticketIdStr}
+                            className="bg-[hsl(var(--card))] border border-[hsl(var(--border)/0.5)] rounded-xl overflow-hidden shadow-sm"
+                          >
+                            {/* ── Header du bloc Ticket ── */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 bg-[hsl(var(--secondary)/0.15)] border-b border-[hsl(var(--border)/0.4)]">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="h-8 w-8 rounded-full bg-[hsl(var(--primary)/0.12)] text-[hsl(var(--primary))] flex items-center justify-center text-xs font-bold shrink-0">
+                                  {getInitials(firstLine.user_name)}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-xs font-mono font-bold text-[hsl(var(--foreground))] bg-[hsl(var(--secondary)/0.5)] px-2 py-0.5 rounded">
+                                      {firstLine.ticket_name}
+                                    </span>
+                                    {getPriorityBadge(firstLine.ticket_priority)}
+                                    {hasOverStock && (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">
+                                        <AlertCircle size={10} />
+                                        Stock insuffisant
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                    <User size={11} className="text-[hsl(var(--muted-foreground))]" />
+                                    <span className="text-[11px] text-[hsl(var(--muted-foreground))]">{firstLine.user_name}</span>
+                                    <span className="text-[hsl(var(--border))]">&middot;</span>
+                                    <span className="text-[11px] text-[hsl(var(--muted-foreground))]">{lines.length} ressource{lines.length > 1 ? "s" : ""} demandée{lines.length > 1 ? "s" : ""}</span>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
-                            <span className="text-sm font-black text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded">
-                              x{line.quantity || 1}
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-[hsl(var(--muted-foreground))] mt-0.5">
-                            {line.material_reference || "N/A"}
-                          </div>
-                          <div className="flex items-center gap-3 mt-1.5">
-                            <span
-                              className={`text-[11px] font-semibold ${line.qty_available === 0 ? "text-rose-500" : "text-[hsl(var(--muted-foreground))]"}`}
-                            >
-                              Stock&nbsp;: {line.qty_available}
-                            </span>
-                            <span className="text-[11px] text-[hsl(var(--muted-foreground))]">
-                              Prix&nbsp;: {fmt(line.unit_cost)} DH
-                            </span>
-                          </div>
-                        </div>
 
-                        {/* Centre: Technicien & Ticket & Priorité */}
-                        <div className="flex-1 flex items-center gap-4">
-                          <div className="flex items-center gap-2">
-                            <div className="h-8 w-8 rounded-full bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))] flex items-center justify-center text-xs font-bold shrink-0">
-                              {getInitials(line.user_name)}
+                            {/* ── Lignes de ressources ── */}
+                            <div className="divide-y divide-[hsl(var(--border)/0.2)]">
+                              {lines.map((line) => {
+                                const isShortage = line.qty_available < (line.quantity || 1);
+                                const isRupture = line.qty_available <= 0;
+                                return (
+                                  <div
+                                    key={line.id}
+                                    className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-4 px-4 py-3 hover:bg-[hsl(var(--secondary)/0.06)] transition-colors"
+                                  >
+                                    {/* Col 1 — Désignation + quantité inline */}
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-medium text-[hsl(var(--foreground))] truncate">
+                                        {line.material_name}
+                                        <span className="ml-1.5 text-[hsl(var(--muted-foreground))] font-normal">x{line.quantity || 1}</span>
+                                      </p>
+                                      {line.material_reference && (
+                                        <p className="text-[10px] text-[hsl(var(--muted-foreground))] font-mono mt-0.5">{line.material_reference}</p>
+                                      )}
+                                    </div>
+
+                                    {/* Col 2 — Stock */}
+                                    <div className="shrink-0">
+                                      <span className={`text-[10px] font-medium ${isRupture ? "text-rose-500" : isShortage ? "text-amber-500" : "text-[hsl(var(--muted-foreground))]"}`}>
+                                        {isRupture ? "Rupture" : isShortage ? `${line.qty_available} dispo.` : `${line.qty_available} en stock`}
+                                      </span>
+                                    </div>
+
+                                    {/* Col 3 — Prix */}
+                                    <div className="shrink-0 text-right">
+                                      <span className="text-xs text-[hsl(var(--muted-foreground))]">{fmt(line.unit_cost)} DH</span>
+                                    </div>
+
+                                    {/* Col 4 — Action */}
+                                    <div className="shrink-0">
+                                      {line.qty_available >= (line.quantity || 1) ? (
+                                        <button
+                                          onClick={() => handleMarkReady(line.id)}
+                                          disabled={actionLoading === line.id}
+                                          className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white border border-emerald-500/20 transition-all disabled:opacity-40"
+                                        >
+                                          {actionLoading === line.id
+                                            ? <RefreshCw size={12} className="animate-spin" />
+                                            : <PackageCheck size={12} />}
+                                          Confirmer
+                                        </button>
+                                      ) : line.status === "ordered" ? (
+                                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-[hsl(var(--secondary)/0.4)] text-[hsl(var(--muted-foreground))] border border-[hsl(var(--border)/0.5)]">
+                                          <Truck size={12} className="animate-pulse" />
+                                          En commande
+                                        </span>
+                                      ) : (
+                                        <button
+                                          onClick={() => handleOrderMaterial(line)}
+                                          disabled={actionLoading === line.id}
+                                          className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-[hsl(var(--secondary)/0.4)] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--primary))] hover:text-white border border-[hsl(var(--border)/0.5)] transition-all disabled:opacity-40"
+                                        >
+                                          {actionLoading === line.id
+                                            ? <RefreshCw size={12} className="animate-spin" />
+                                            : <ShoppingCart size={12} />}
+                                          Commander
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
-                            <span className="text-sm font-medium text-[hsl(var(--muted-foreground))]">
-                              {line.user_name}
-                            </span>
                           </div>
-
-                          <div className="w-px h-6 bg-[hsl(var(--border)/0.5)] hidden md:block"></div>
-
-                          <div className="flex items-center gap-2">
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-[hsl(var(--secondary)/0.5)] text-[hsl(var(--foreground))] text-xs font-mono">
-                              {line.ticket_name}
-                            </span>
-                            {getPriorityBadge(line.ticket_priority)}
-                          </div>
-                        </div>
-
-                        {/* Droite: Action */}
-                        <div className="shrink-0 flex justify-end">
-                          {line.qty_available > 0 ? (
-                            <button
-                              onClick={() => handleMarkReady(line.id)}
-                              disabled={actionLoading === line.id}
-                              className="inline-flex items-center bg-emerald-600/20 text-emerald-500 border border-emerald-500/30 hover:bg-emerald-600 hover:text-white text-xs font-bold px-4 py-2 rounded-md transition-all disabled:opacity-50"
-                            >
-                              {actionLoading === line.id ? (
-                                <RefreshCw
-                                  size={14}
-                                  className="animate-spin mr-2"
-                                />
-                              ) : (
-                                <PackageCheck size={16} className="mr-2" />
-                              )}
-                              Confirmer la sortie
-                            </button>
-                          ) : line.status === "ordered" ? (
-                            <span className="inline-flex items-center bg-indigo-500/10 text-indigo-400 font-bold text-xs px-4 py-2 rounded-md border border-indigo-500/20">
-                              <Truck size={16} className="mr-2 animate-pulse" />
-                              En commande
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => handleOrderMaterial(line)}
-                              disabled={actionLoading === line.id}
-                              className="inline-flex items-center bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-600 hover:text-white text-xs font-bold px-4 py-2 rounded-md transition-all disabled:opacity-50"
-                            >
-                              {actionLoading === line.id ? (
-                                <RefreshCw
-                                  size={14}
-                                  className="animate-spin mr-2"
-                                />
-                              ) : (
-                                <ShoppingCart size={16} className="mr-2" />
-                              )}
-                              Commander la pièce
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                        );
+                      });
+                    })()}
                   </div>
                 )}
               </div>
@@ -779,51 +797,125 @@ export default function AdminInventoryPage() {
                     <h2 className="text-xs font-black uppercase tracking-[0.2em] text-[hsl(var(--muted-foreground))] mb-4">
                       HISTORIQUE — Ressources Remises
                     </h2>
-                    <div className="space-y-3">
-                      {readyLines.map((line) => (
-                        <div
-                          key={line.id}
-                          className="opacity-60 flex flex-col md:flex-row md:items-center justify-between bg-[hsl(var(--secondary)/0.05)] border border-[hsl(var(--border)/0.3)] rounded-lg p-4 gap-4"
-                        >
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <div className="text-sm font-bold text-[hsl(var(--foreground))]">
-                                {line.material_name}
+                    
+                    {(() => {
+                      // 1. Group items by ticket
+                      const groupedHistory = readyLines.reduce<Record<number, typeof readyLines>>((acc, line) => {
+                        if (!acc[line.ticket_id]) acc[line.ticket_id] = [];
+                        acc[line.ticket_id].push(line);
+                        return acc;
+                      }, {});
+                      
+                      // 2. Sort groups (newest ticket or line first)
+                      // Sort by the max line.id in each group so the most recently remitted items are first
+                      const sortedGroups = Object.entries(groupedHistory).sort(([, linesA], [, linesB]) => {
+                        const maxIdA = Math.max(...linesA.map(l => l.id));
+                        const maxIdB = Math.max(...linesB.map(l => l.id));
+                        return maxIdB - maxIdA;
+                      });
+
+                      // 3. Pagination logic
+                      const ITEMS_PER_PAGE = 5;
+                      const totalPages = Math.ceil(sortedGroups.length / ITEMS_PER_PAGE);
+                      const currentPage = Math.min(Math.max(1, historyPage), totalPages);
+                      
+                      const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+                      const paginatedGroups = sortedGroups.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+                      return (
+                        <div className="space-y-6">
+                          <div className="space-y-4">
+                            {paginatedGroups.map(([ticketIdStr, lines]) => {
+                              const firstLine = lines[0];
+
+                              return (
+                                <div
+                                  key={ticketIdStr}
+                                  className="bg-[hsl(var(--card))] border border-[hsl(var(--border)/0.5)] rounded-xl overflow-hidden shadow-sm opacity-80 hover:opacity-100 transition-opacity"
+                                >
+                                  {/* ── Header du bloc Ticket ── */}
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 bg-[hsl(var(--secondary)/0.1)] border-b border-[hsl(var(--border)/0.4)]">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                      <div className="h-8 w-8 rounded-full bg-[hsl(var(--muted)/0.3)] text-[hsl(var(--muted-foreground))] flex items-center justify-center text-xs font-bold shrink-0">
+                                        {getInitials(firstLine.user_name)}
+                                      </div>
+                                      <div className="min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className="text-xs font-mono font-bold text-[hsl(var(--foreground))] bg-[hsl(var(--secondary)/0.5)] px-2 py-0.5 rounded">
+                                            {firstLine.ticket_name}
+                                          </span>
+                                          {getPriorityBadge(firstLine.ticket_priority)}
+                                        </div>
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                          <User size={11} className="text-[hsl(var(--muted-foreground))]" />
+                                          <span className="text-[11px] text-[hsl(var(--muted-foreground))]">{firstLine.user_name}</span>
+                                          <span className="text-[hsl(var(--border))]">&middot;</span>
+                                          <span className="text-[11px] text-[hsl(var(--muted-foreground))]">{lines.length} ressource{lines.length > 1 ? "s" : ""} remise{lines.length > 1 ? "s" : ""}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="shrink-0 flex justify-end">
+                                      <span className="inline-flex items-center text-[10px] font-bold px-3 py-1.5 rounded-md border border-emerald-500/20 bg-emerald-500/5 text-emerald-500">
+                                        <Check size={12} className="mr-1.5" />
+                                        REMIS
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* ── Lignes de ressources ── */}
+                                  <div className="divide-y divide-[hsl(var(--border)/0.2)]">
+                                    {lines.map((line) => (
+                                      <div
+                                        key={line.id}
+                                        className="grid grid-cols-[1fr_auto] items-center gap-4 px-4 py-3 hover:bg-[hsl(var(--secondary)/0.06)] transition-colors"
+                                      >
+                                        <div className="min-w-0">
+                                          <p className="text-sm font-medium text-[hsl(var(--foreground))] truncate">
+                                            {line.material_name}
+                                            <span className="ml-1.5 text-[hsl(var(--muted-foreground))] font-normal">x{line.quantity || 1}</span>
+                                          </p>
+                                          {line.material_reference && (
+                                            <p className="text-[10px] text-[hsl(var(--muted-foreground))] font-mono mt-0.5">{line.material_reference}</p>
+                                          )}
+                                        </div>
+                                        <div className="shrink-0 text-right">
+                                          <span className="text-xs text-[hsl(var(--muted-foreground))]">{fmt(line.unit_cost)} DH</span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          
+                          {/* Pagination Controls */}
+                          {totalPages > 1 && (
+                            <div className="flex items-center justify-between pt-2">
+                              <span className="text-xs text-[hsl(var(--muted-foreground))] font-medium">
+                                Page {currentPage} sur {totalPages}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => setHistoryPage(p => Math.max(1, p - 1))}
+                                  disabled={currentPage === 1}
+                                  className="h-8 w-8 rounded-lg flex items-center justify-center border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--secondary)/0.3)] hover:bg-[hsl(var(--secondary)/0.6)] text-[hsl(var(--foreground))] transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                                >
+                                  <ChevronLeft size={16} />
+                                </button>
+                                <button
+                                  onClick={() => setHistoryPage(p => Math.min(totalPages, p + 1))}
+                                  disabled={currentPage === totalPages}
+                                  className="h-8 w-8 rounded-lg flex items-center justify-center border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--secondary)/0.3)] hover:bg-[hsl(var(--secondary)/0.6)] text-[hsl(var(--foreground))] transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                                >
+                                  <ChevronRight size={16} />
+                                </button>
                               </div>
-                              <span className="text-[10px] font-black text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded">
-                                x{line.quantity || 1}
-                              </span>
                             </div>
-                            <div className="text-[11px] text-[hsl(var(--muted-foreground))] mt-0.5">
-                              {line.material_reference || "N/A"}
-                            </div>
-                          </div>
-                          <div className="flex-1 flex items-center gap-4">
-                            <div className="flex items-center gap-2">
-                              <div className="h-8 w-8 rounded-full bg-[hsl(var(--muted)/0.3)] text-[hsl(var(--muted-foreground))] flex items-center justify-center text-xs font-bold shrink-0">
-                                {getInitials(line.user_name)}
-                              </div>
-                              <span className="text-sm font-medium text-[hsl(var(--muted-foreground))]">
-                                {line.user_name}
-                              </span>
-                            </div>
-                            <div className="w-px h-6 bg-[hsl(var(--border)/0.5)] hidden md:block"></div>
-                            <div className="flex items-center gap-2">
-                              <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-[hsl(var(--secondary)/0.3)] text-[hsl(var(--muted-foreground))] text-xs font-mono">
-                                {line.ticket_name}
-                              </span>
-                              {getPriorityBadge(line.ticket_priority)}
-                            </div>
-                          </div>
-                          <div className="shrink-0 flex justify-end">
-                            <span className="inline-flex items-center text-[10px] font-bold px-3 py-1.5 rounded-md border border-emerald-500/20 bg-emerald-500/5 text-emerald-500/80">
-                              <Check size={12} className="mr-1.5" />
-                              REMIS
-                            </span>
-                          </div>
+                          )}
                         </div>
-                      ))}
-                    </div>
+                      );
+                    })()}
                   </div>
                 </div>
               )}

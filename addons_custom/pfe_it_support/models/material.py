@@ -7,6 +7,7 @@ class ItMaterialCategory(models.Model):
     _order = 'name'
 
     name = fields.Char(string='Nom de la catégorie', required=True)
+    active = fields.Boolean(default=True, string='Actif')
 
 
 class ItMaterial(models.Model):

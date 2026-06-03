@@ -188,14 +188,7 @@ function KnowledgePage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => fetchArticles(page)}
-            className="btn-ghost flex items-center gap-2 text-sm"
-            title="Actualiser"
-          >
-            <RefreshCw size={14} />
-            Actualiser
-          </button>
+
           {canWrite && (
             <button
               onClick={() => setEditArticle(null)}

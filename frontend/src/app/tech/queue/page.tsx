@@ -424,21 +424,7 @@ function QueuePage() {
               </span>
             )}
 
-            <button
-              onClick={async () => {
-                setLoading(true);
-                await Promise.all([
-                  fetchQueue(),
-                  new Promise((r) => setTimeout(r, 500)),
-                ]);
-                setLoading(false);
-              }}
-              className="btn-ghost flex items-center gap-2 text-sm"
-              title="Actualiser"
-            >
-              <RefreshCw size={15} />
-              Actualiser
-            </button>
+
             <div className="hidden md:block">
               <NotificationBell />
             </div>
@@ -622,7 +608,7 @@ function QueuePage() {
                           e.stopPropagation();
                           openDispatch(ticket);
                         }}
-                        className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg border border-[hsl(var(--border)/0.5)] bg-transparent text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--primary))] hover:text-white hover:border-[hsl(var(--primary))] text-[11px] font-bold transition-all"
+                        className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg border border-[hsl(var(--primary))] bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-transparent hover:text-[hsl(var(--primary))] text-[11px] font-bold transition-all disabled:opacity-50"
                       >
                         <Users size={14} /> Assigner à
                       </button>
@@ -634,7 +620,7 @@ function QueuePage() {
                           e.stopPropagation();
                           handleAccept(ticket.id);
                         }}
-                        className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg border border-[hsl(var(--border)/0.5)] bg-transparent text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--primary))] hover:text-white hover:border-[hsl(var(--primary))] text-[11px] font-bold transition-all disabled:opacity-50"
+                        className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg border border-[hsl(var(--primary))] bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-transparent hover:text-[hsl(var(--primary))] text-[11px] font-bold transition-all disabled:opacity-50"
                       >
                         <ShieldCheck size={14} />
                         {assigning === ticket.id
@@ -648,7 +634,7 @@ function QueuePage() {
                           e.stopPropagation();
                           handleAssign(ticket.id);
                         }}
-                        className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-transparent text-slate-600 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white text-[11px] font-bold transition-all disabled:opacity-50"
+                        className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg border border-[hsl(var(--primary))] bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-transparent hover:text-[hsl(var(--primary))] text-[11px] font-bold transition-all disabled:opacity-50"
                       >
                         <Inbox size={14} />
                         {assigning === ticket.id

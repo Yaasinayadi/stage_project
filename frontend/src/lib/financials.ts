@@ -5,6 +5,8 @@ export interface FinancialMetrics {
   tva: number;
   totalTtc: number;
   netMinutes: number;
+  totalElapsedMinutes: number;
+  pausedMinutes: number;
 }
 
 export function calculateTicketFinancials(ticket: any, timelineData?: any): FinancialMetrics {
@@ -58,5 +60,7 @@ export function calculateTicketFinancials(ticket: any, timelineData?: any): Fina
     tva,
     totalTtc,
     netMinutes,
+    totalElapsedMinutes,
+    pausedMinutes,
   };
 }

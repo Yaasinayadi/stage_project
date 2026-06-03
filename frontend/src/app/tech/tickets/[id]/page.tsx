@@ -21,6 +21,7 @@ import {
   BookOpen,
   Loader2,
   ChevronRight,
+  ChevronDown,
   MessageSquare,
   Paperclip,
   Download,
@@ -31,6 +32,7 @@ import {
   X,
   Tag,
   AlertTriangle,
+
   ExternalLink,
   ShieldAlert,
   ShieldCheck,
@@ -366,6 +368,90 @@ function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} Ko`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+}
+
+function CustomResolutionSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const OPTIONS = [
+    { id: "success", label: "Succès Total", dot: "bg-emerald-500" },
+    { id: "partial", label: "Succès Partiel (Contournement)", dot: "bg-amber-500" },
+    { id: "failed", label: "Échec (Non résolu)", dot: "bg-rose-500" },
+  ];
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const selectedOption = OPTIONS.find((o) => o.id === value) || OPTIONS[0];
+
+  return (
+    <div ref={ref} className="relative w-full">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="input-field w-full text-sm p-3 flex items-center justify-between"
+      >
+        <div className="flex items-center gap-2 text-[hsl(var(--foreground))]">
+          <span
+            className={`w-2 h-2 rounded-full flex-shrink-0 ${selectedOption.dot}`}
+          />
+          <span className="font-semibold">{selectedOption.label}</span>
+        </div>
+        <ChevronDown
+          size={14}
+          className={`transition-transform text-[hsl(var(--muted-foreground))] ${
+            open ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute top-[calc(100%+8px)] left-0 z-50 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-2xl backdrop-blur-lg overflow-hidden animate-fade-in flex flex-col">
+          <div className="p-2 space-y-1">
+            {OPTIONS.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => {
+                  onChange(opt.id);
+                  setOpen(false);
+                }}
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-semibold transition-all
+                  ${
+                    opt.id === value
+                      ? "bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]"
+                      : "hover:bg-[hsl(var(--muted)/0.5)] text-[hsl(var(--foreground)/0.8)] hover:text-[hsl(var(--foreground))]"
+                  }`}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full flex-shrink-0 ${opt.dot}`}
+                />
+                {opt.label}
+                {opt.id === value && (
+                  <Check
+                    size={14}
+                    className="ml-auto text-[hsl(var(--foreground))]"
+                  />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function TicketDetailPage() {
@@ -1302,48 +1388,56 @@ function TicketDetailPage() {
                   {selectedMaterialIds.map((item) => {
                     const mat = allMaterials.find((m) => m.id === item.id);
                     if (!mat) return null;
-                    const isAtMax = item.quantity >= (mat.qty_available ?? 999);
+                    const isExceedingStock = item.quantity > (mat.qty_available || 0);
                     return (
-                      <div key={item.id} className="flex items-center justify-between p-2 bg-zinc-900/50 border border-border/50 rounded-lg mb-2">
-                        <div className="flex items-center gap-2">
-                          <Cpu size={14} className="text-[hsl(var(--muted-foreground))]" />
-                          <span className="text-xs font-medium text-[hsl(var(--foreground))]">{mat.name}</span>
-                        </div>
-                        
-                        <div className="flex items-center gap-4">
-                          {/* Financials */}
-                          {(mat.unit_cost ?? 0) > 0 && (
-                            <span className="text-[10px] text-[hsl(var(--muted-foreground))]">
-                              {item.quantity} x {mat.unit_cost?.toFixed(2)} MAD
-                            </span>
-                          )}
-                          
-                          {/* Stepper */}
-                          <div className="flex items-center gap-3 bg-zinc-800/50 rounded-md px-2 py-1">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setSelectedMaterialIds(prev => prev.map(x => x.id === item.id ? {...x, quantity: Math.max(1, x.quantity - 1)} : x)); }}
-                              className="text-[hsl(var(--muted-foreground))] hover:text-emerald-500 transition-colors"
-                            >
-                              <Minus size={14} />
-                            </button>
-                            <span className="font-mono text-xs font-bold w-4 text-center text-[hsl(var(--foreground))]">{item.quantity}</span>
-                            <button
-                              disabled={isAtMax}
-                              onClick={(e) => { e.stopPropagation(); setSelectedMaterialIds(prev => prev.map(x => x.id === item.id ? {...x, quantity: Math.min(mat.qty_available ?? 999, x.quantity + 1)} : x)); }}
-                              className={`transition-colors ${isAtMax ? "text-[hsl(var(--muted-foreground))/30] cursor-not-allowed" : "text-[hsl(var(--muted-foreground))] hover:text-emerald-500"}`}
-                            >
-                              <Plus size={14} />
-                            </button>
+                      <div key={item.id} className="flex flex-col p-2 bg-[hsl(var(--muted)/0.3)] border border-[hsl(var(--border)/0.5)] rounded-lg mb-2 gap-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Cpu size={14} className="text-[hsl(var(--muted-foreground))]" />
+                            <span className="text-xs font-medium text-[hsl(var(--foreground))]">{mat.name}</span>
                           </div>
                           
-                          {/* Remove button */}
-                          <button
-                            onClick={() => setSelectedMaterialIds((prev) => prev.filter((x) => x.id !== item.id))}
-                            className="text-[hsl(var(--muted-foreground))] hover:text-red-500 transition-colors ml-2"
-                          >
-                            <X size={14} />
-                          </button>
+                          <div className="flex items-center gap-4">
+                            {/* Financials */}
+                            {(mat.unit_cost ?? 0) > 0 && (
+                              <span className="text-[10px] text-[hsl(var(--muted-foreground))]">
+                                {item.quantity} x {mat.unit_cost?.toFixed(2)} MAD
+                              </span>
+                            )}
+                            
+                            {/* Stepper */}
+                            <div className="flex items-center gap-3 bg-[hsl(var(--background))] border border-[hsl(var(--border)/0.5)] rounded-md px-2 py-1">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setSelectedMaterialIds(prev => prev.map(x => x.id === item.id ? {...x, quantity: Math.max(1, x.quantity - 1)} : x)); }}
+                                className="text-[hsl(var(--muted-foreground))] hover:text-emerald-500 transition-colors"
+                              >
+                                <Minus size={14} />
+                              </button>
+                              <span className={`font-mono text-xs font-bold w-4 text-center ${isExceedingStock ? "text-amber-500" : "text-[hsl(var(--foreground))]"}`}>
+                                {item.quantity}
+                              </span>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setSelectedMaterialIds(prev => prev.map(x => x.id === item.id ? {...x, quantity: x.quantity + 1} : x)); }}
+                                className="text-[hsl(var(--muted-foreground))] hover:text-emerald-500 transition-colors"
+                              >
+                                <Plus size={14} />
+                              </button>
+                            </div>
+                            
+                            {/* Remove button */}
+                            <button
+                              onClick={() => setSelectedMaterialIds((prev) => prev.filter((x) => x.id !== item.id))}
+                              className="text-[hsl(var(--muted-foreground))] hover:text-red-500 transition-colors ml-2"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
                         </div>
+                        {isExceedingStock && (
+                          <div className="text-[10px] text-amber-500/80 italic px-1">
+                            Attention : Dépassement de stock. L&apos;admin devra valider ou commander.
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -1396,7 +1490,7 @@ function TicketDetailPage() {
                         width: Math.max(dropdownRect.width, 300),
                         zIndex: 9999,
                       }}
-                      className="rounded-xl border border-white/10 bg-[hsl(240_15%_6%)] shadow-2xl shadow-black/60 p-2 animate-scale-in"
+                      className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-2xl shadow-black/60 p-2 animate-scale-in"
                     >
                       {/* Recherche */}
                       <div className="flex items-center gap-2 px-2 py-1.5 mb-1 border-b border-[hsl(var(--border)/0.5)]">
@@ -1406,7 +1500,7 @@ function TicketDetailPage() {
                           value={editMatSearch}
                           onChange={(e) => setEditMatSearch(e.target.value)}
                           placeholder="Rechercher un matériel..."
-                          className="flex-1 bg-transparent text-xs outline-none placeholder:text-[hsl(var(--muted-foreground))]"
+                          className="flex-1 bg-transparent text-[hsl(var(--foreground))] text-xs outline-none placeholder:text-[hsl(var(--muted-foreground))]"
                         />
                         {materialsLoading && <RefreshCw size={12} className="text-sky-400 animate-spin shrink-0" />}
                       </div>
@@ -1913,7 +2007,7 @@ function TicketDetailPage() {
           onClick={() => setShowWaitModal(false)}
         >
           <div
-            className="glass-card w-full max-w-lg p-6 space-y-4 animate-scale-in shadow-2xl border-[hsl(var(--border))]"
+            className="bg-[hsl(var(--card))] rounded-2xl border w-full max-w-lg p-6 space-y-4 animate-scale-in shadow-2xl border-[hsl(var(--border))]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-2">
@@ -1973,7 +2067,7 @@ function TicketDetailPage() {
           onClick={() => setShowWaitMaterialModal(false)}
         >
           <div
-            className="glass-card w-full max-w-lg animate-scale-in shadow-2xl border-[hsl(var(--border))] flex flex-col max-h-[90vh]"
+            className="bg-[hsl(var(--card))] rounded-2xl border w-full max-w-lg animate-scale-in shadow-2xl border-[hsl(var(--border))] flex flex-col max-h-[90vh]"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -2005,48 +2099,58 @@ function TicketDetailPage() {
                     {selectedMaterialIds.map((item) => {
                       const m = allMaterials.find((mat) => mat.id === item.id);
                       if (!m) return null;
-                      const isAtMax = item.quantity >= (m.qty_available ?? 999);
+                      const isExceedingStock = item.quantity > (m.qty_available || 0);
                       return (
-                        <div key={m.id} className="flex items-center justify-between p-2 bg-zinc-900/50 border border-border/50 rounded-lg mb-2">
-                          <div className="flex items-center gap-2">
-                            <Cpu size={14} className="text-sky-500/80" />
-                            <span className="text-xs font-medium text-[hsl(var(--foreground))]">{m.name}</span>
-                          </div>
-                          
-                          <div className="flex items-center gap-4">
-                            {/* Financials */}
-                            {(m.unit_cost ?? 0) > 0 && (
-                              <span className="text-[10px] text-[hsl(var(--muted-foreground))]">
-                                {item.quantity} x {m.unit_cost?.toFixed(2)} MAD
-                              </span>
-                            )}
-                            
-                            {/* Stepper */}
-                            <div className="flex items-center gap-3 bg-zinc-800/50 rounded-md px-2 py-1">
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setSelectedMaterialIds(prev => prev.map(x => x.id === item.id ? {...x, quantity: Math.max(1, x.quantity - 1)} : x)); }}
-                                className="text-[hsl(var(--muted-foreground))] hover:text-emerald-500 transition-colors"
-                              >
-                                <Minus size={14} />
-                              </button>
-                              <span className="font-mono text-xs font-bold w-4 text-center text-[hsl(var(--foreground))]">{item.quantity}</span>
-                              <button
-                                disabled={isAtMax}
-                                onClick={(e) => { e.stopPropagation(); setSelectedMaterialIds(prev => prev.map(x => x.id === item.id ? {...x, quantity: Math.min(m.qty_available ?? 999, x.quantity + 1)} : x)); }}
-                                className={`transition-colors ${isAtMax ? "text-[hsl(var(--muted-foreground))/30] cursor-not-allowed" : "text-[hsl(var(--muted-foreground))] hover:text-emerald-500"}`}
-                              >
-                                <Plus size={14} />
-                              </button>
+                        <div key={m.id} className="flex flex-col p-2 bg-[hsl(var(--muted)/0.3)] border border-[hsl(var(--border)/0.5)] rounded-lg mb-2 gap-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Cpu size={14} className="text-sky-500/80" />
+                              <span className="text-xs font-medium text-[hsl(var(--foreground))]">{m.name}</span>
                             </div>
                             
-                            {/* Remove button */}
-                            <button
-                              onClick={() => setSelectedMaterialIds(prev => prev.filter(x => x.id !== m.id))}
-                              className="text-[hsl(var(--muted-foreground))] hover:text-red-500 transition-colors ml-2"
-                            >
-                              <X size={14} />
-                            </button>
+                            <div className="flex items-center gap-4">
+                              {/* Financials */}
+                              {(m.unit_cost ?? 0) > 0 && (
+                                <span className="text-[10px] text-[hsl(var(--muted-foreground))]">
+                                  {item.quantity} x {m.unit_cost?.toFixed(2)} MAD
+                                </span>
+                              )}
+                              
+                              {/* Stepper */}
+                              <div className="flex items-center gap-3 bg-[hsl(var(--background))] border border-[hsl(var(--border)/0.5)] rounded-md px-2 py-1">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setSelectedMaterialIds(prev => prev.map(x => x.id === item.id ? {...x, quantity: Math.max(1, x.quantity - 1)} : x)); }}
+                                  className="text-[hsl(var(--muted-foreground))] hover:text-emerald-500 transition-colors"
+                                >
+                                  <Minus size={14} />
+                                </button>
+                                
+                                <span className={`font-mono text-xs font-bold w-4 text-center ${isExceedingStock ? "text-amber-500" : "text-[hsl(var(--foreground))]"}`}>
+                                  {item.quantity}
+                                </span>
+
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setSelectedMaterialIds(prev => prev.map(x => x.id === item.id ? {...x, quantity: x.quantity + 1} : x)); }}
+                                  className="text-[hsl(var(--muted-foreground))] hover:text-emerald-500 transition-colors"
+                                >
+                                  <Plus size={14} />
+                                </button>
+                              </div>
+                              
+                              {/* Remove button */}
+                              <button
+                                onClick={() => setSelectedMaterialIds(prev => prev.filter(x => x.id !== m.id))}
+                                className="text-[hsl(var(--muted-foreground))] hover:text-red-500 transition-colors ml-2"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
                           </div>
+                          {isExceedingStock && (
+                            <div className="text-[10px] text-amber-500/80 italic flex items-start px-1">
+                              Attention : Dépassement de stock. L&apos;admin devra valider ou commander.
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -2054,7 +2158,7 @@ function TicketDetailPage() {
                   
                   {/* Live total cost */}
                   {liveTotalCost > 0 && (
-                    <div className="flex items-center justify-between mb-4 pt-2 border-t border-white/10 px-1">
+                    <div className="flex items-center justify-between mb-4 pt-2 border-t border-[hsl(var(--border))] px-1">
                       <div className="flex items-center">
                         <Wallet size={14} className="text-emerald-500 mr-2" />
                         <span className="text-sm font-bold text-emerald-500/90">
@@ -2096,13 +2200,13 @@ function TicketDetailPage() {
                         left: waitDropdownRect.left,
                         width: waitDropdownRect.width,
                       }}
-                      className="z-[9999] rounded-xl border border-white/10 bg-zinc-950 shadow-2xl overflow-hidden animate-fade-in flex flex-col"
+                      className="z-[9999] rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-2xl overflow-hidden animate-fade-in flex flex-col"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <div className="p-2 border-b border-white/5 bg-zinc-950">
+                      <div className="p-2 border-b border-[hsl(var(--border))] bg-[hsl(var(--card))]">
                         <div className="relative flex items-center">
                           <Search
-                            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+                            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]"
                             size={14}
                           />
                           <input
@@ -2110,7 +2214,7 @@ function TicketDetailPage() {
                             value={matSearch}
                             onChange={(e) => setMatSearch(e.target.value)}
                             placeholder="Rechercher un matériel..."
-                            className="w-full bg-transparent text-sm pl-8 pr-8 h-8 outline-none text-zinc-100 placeholder:text-muted-foreground"
+                            className="w-full bg-transparent text-sm pl-8 pr-8 h-8 outline-none text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
                             autoFocus
                           />
                           {materialsLoading && (
@@ -2118,7 +2222,7 @@ function TicketDetailPage() {
                           )}
                         </div>
                       </div>
-                      <div className="p-1 max-h-[300px] overflow-y-auto custom-scrollbar bg-zinc-950">
+                      <div className="p-1 max-h-[300px] overflow-y-auto custom-scrollbar bg-[hsl(var(--card))]">
                         {allMaterials
                           .filter(
                             (m) =>
@@ -2143,16 +2247,16 @@ function TicketDetailPage() {
                                       : [...prev, { id: m.id, quantity: 1 }],
                                   );
                                 }}
-                                className={`w-full flex flex-col p-3 cursor-pointer border-b border-white/5 last:border-0 transition-colors text-left
+                                className={`w-full flex flex-col p-3 cursor-pointer border-b border-[hsl(var(--border))] last:border-0 transition-colors text-left
                                   ${
                                     isSelected
                                       ? "bg-sky-500/5 hover:bg-sky-500/10"
-                                      : "hover:bg-white/5 bg-transparent"
+                                      : "hover:bg-[hsl(var(--muted))] bg-transparent"
                                   }`}
                               >
                                 <div className="w-full flex items-center justify-between">
                                   <div className="flex flex-col gap-0.5">
-                                    <span className={`text-sm font-bold ${isSelected ? "text-sky-400" : "text-zinc-100"}`}>
+                                    <span className={`text-sm font-bold ${isSelected ? "text-sky-500" : "text-[hsl(var(--foreground))]"}`}>
                                       {m.name}
                                     </span>
                                     {m.reference && (
@@ -2182,8 +2286,8 @@ function TicketDetailPage() {
                                         isSelected
                                           ? "bg-sky-500 border-sky-500"
                                           : outOfStock
-                                            ? "border-border/50 bg-transparent"
-                                            : "border-white/20 bg-transparent"
+                                            ? "border-[hsl(var(--border))] bg-transparent"
+                                            : "border-[hsl(var(--border))] bg-[hsl(var(--background))]"
                                       }`}
                                     >
                                       {isSelected && (
@@ -2268,7 +2372,7 @@ function TicketDetailPage() {
           onClick={() => setShowResolveModal(false)}
         >
           <div
-            className="glass-card w-full max-w-lg p-6 space-y-5 animate-scale-in shadow-2xl border-[hsl(var(--border))]"
+            className="bg-[hsl(var(--card))] rounded-2xl border w-full max-w-lg p-6 space-y-5 animate-scale-in shadow-2xl border-[hsl(var(--border))]"
             onClick={(e) => e.stopPropagation()}
           >
             {/* ── Header ── */}
@@ -2306,15 +2410,10 @@ function TicketDetailPage() {
               <label className="text-[10px] font-bold uppercase tracking-wider text-[hsl(var(--muted-foreground))] mb-2 block">
                 Type de Résolution <span className="text-red-400">*</span>
               </label>
-              <select
+              <CustomResolutionSelect
                 value={resolutionType}
-                onChange={(e) => setResolutionType(e.target.value)}
-                className="input-field w-full text-sm p-3 appearance-none"
-              >
-                <option value="success">Succès Total</option>
-                <option value="partial">Succès Partiel (Contournement)</option>
-                <option value="failed">Échec (Non résolu)</option>
-              </select>
+                onChange={setResolutionType}
+              />
             </div>
 
             {/* ── Signature Digitale ── */}
@@ -2517,7 +2616,7 @@ function TicketDetailPage() {
           onClick={() => setShowEscalateModal(false)}
         >
           <div
-            className="glass-card w-full max-w-lg p-6 space-y-5 animate-scale-in shadow-2xl border-[hsl(var(--border))]"
+            className="bg-[hsl(var(--card))] rounded-2xl border w-full max-w-lg p-6 space-y-5 animate-scale-in shadow-2xl border-[hsl(var(--border))]"
             onClick={(e) => e.stopPropagation()}
           >
             {/* ── Header ── */}
@@ -2536,10 +2635,10 @@ function TicketDetailPage() {
             </div>
 
             {/* ── Alerte contexte ── */}
-            <div className="flex items-start gap-2.5 p-3 rounded-xl bg-purple-500/5 border border-purple-500/15">
-              <ShieldAlert size={15} className="text-purple-400 mt-0.5 flex-shrink-0" />
-              <p className="text-[11px] text-purple-300 leading-relaxed">
-                Le SLA Résolution sera <strong>mis en pause</strong> pendant le transfert.
+            <div className="flex items-start gap-3 p-3.5 rounded-xl bg-purple-100 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/30">
+              <ShieldAlert size={16} className="text-purple-700 dark:text-purple-400 mt-0.5 flex-shrink-0" />
+              <p className="text-xs font-semibold text-purple-700 dark:text-purple-300 leading-relaxed">
+                Le SLA Résolution sera <strong className="font-bold">mis en pause</strong> pendant le transfert.
                 Un bonus de temps sera automatiquement accordé sur votre deadline.
               </p>
             </div>
@@ -2594,7 +2693,7 @@ function TicketDetailPage() {
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4"
         >
           <div
-            className="glass-card w-full max-w-sm animate-scale-in shadow-2xl border-[hsl(var(--border))] flex flex-col"
+            className="bg-[hsl(var(--card))] rounded-2xl border w-full max-w-sm animate-scale-in shadow-2xl border-[hsl(var(--border))] flex flex-col"
           >
             <div className="p-5 pb-4">
               <div className="flex items-center gap-3 mb-3">

@@ -27,7 +27,7 @@ import axios from "axios";
 import { useAuth } from "@/lib/auth";
 import { ODOO_URL } from "@/lib/config";
 import TicketDetailsModal from "./TicketDetailsModal";
-
+import { calculateTicketFinancials } from "@/lib/financials";
 type Message = {
   sender: "user" | "bot";
   text: React.ReactNode;
@@ -127,15 +127,25 @@ export default function Chatbot({
       if (res.data.status === 200) {
         setRawUserTickets(res.data.data);
         setUserTickets(
-          res.data.data.map((t: any) => ({
-            reference: `TK-${String(t.id).padStart(4, "0")}`,
-            sujet: t.name,
-            statut: t.state,
-            assigne_a: t.assigned_to || "Non assigné",
-            categorie: t.category,
-            priorite: t.priority,
-            escalated_by_name: t.escalated_by_name || null,
-          })),
+          res.data.data.map((t: any) => {
+            const financials = calculateTicketFinancials(t);
+            return {
+              reference: `TK-${String(t.id).padStart(4, "0")}`,
+              sujet: t.name,
+              statut: t.state,
+              assigne_a: t.assigned_to || "Non assigné",
+              categorie: t.category,
+              priorite: t.priority,
+              escalated_by_name: t.escalated_by_name || null,
+              temps_net_minutes: financials.netMinutes,
+              temps_suspendu_minutes: financials.pausedMinutes,
+              temps_total_minutes: financials.totalElapsedMinutes,
+              cout_main_oeuvre: financials.laborCost,
+              cout_materiel: financials.resourcesCost,
+              total_ht: financials.grandTotal,
+              total_ttc: financials.totalTtc,
+            };
+          }),
         );
         return res.data.data;
       }
@@ -162,15 +172,25 @@ export default function Chatbot({
           if (res.data.status === 200) {
             setRawUserTickets(res.data.data);
             setUserTickets(
-              res.data.data.map((t: any) => ({
-                reference: `TK-${String(t.id).padStart(4, "0")}`,
-                sujet: t.name,
-                statut: t.state,
-                assigne_a: t.assigned_to || "Non assign\u00e9",
-                categorie: t.category,
-                priorite: t.priority,
-                escalated_by_name: t.escalated_by_name || null,
-              }))
+              res.data.data.map((t: any) => {
+                const financials = calculateTicketFinancials(t);
+                return {
+                  reference: `TK-${String(t.id).padStart(4, "0")}`,
+                  sujet: t.name,
+                  statut: t.state,
+                  assigne_a: t.assigned_to || "Non assigné",
+                  categorie: t.category,
+                  priorite: t.priority,
+                  escalated_by_name: t.escalated_by_name || null,
+                  temps_net_minutes: financials.netMinutes,
+                  temps_suspendu_minutes: financials.pausedMinutes,
+                  temps_total_minutes: financials.totalElapsedMinutes,
+                  cout_main_oeuvre: financials.laborCost,
+                  cout_materiel: financials.resourcesCost,
+                  total_ht: financials.grandTotal,
+                  total_ttc: financials.totalTtc,
+                };
+              })
             );
           }
         })
@@ -284,22 +304,41 @@ export default function Chatbot({
       // Rafraîchir les tickets avant d'envoyer pour inclure les tickets récemment créés
       const freshRaw = await fetchTickets();
       const freshTickets = freshRaw
-        ? freshRaw.map((t: any) => ({
-            reference: `TK-${String(t.id).padStart(4, "0")}`,
-            sujet: t.name,
-            statut: t.state,
-            assigne_a: t.assigned_to || "Non assigné",
-            categorie: t.category,
-            priorite: t.priority,
-            escalated_by_name: t.escalated_by_name || null,
-          }))
+        ? freshRaw.map((t: any) => {
+            const financials = calculateTicketFinancials(t);
+            return {
+              reference: `TK-${String(t.id).padStart(4, "0")}`,
+              sujet: t.name,
+              statut: t.state,
+              assigne_a: t.assigned_to || "Non assigné",
+              categorie: t.category,
+              priorite: t.priority,
+              escalated_by_name: t.escalated_by_name || null,
+              temps_net_minutes: financials.netMinutes,
+              temps_suspendu_minutes: financials.pausedMinutes,
+              temps_total_minutes: financials.totalElapsedMinutes,
+              cout_main_oeuvre: financials.laborCost,
+              cout_materiel: financials.resourcesCost,
+              total_ht: financials.grandTotal,
+              total_ttc: financials.totalTtc,
+            };
+          })
         : userTickets;
+
+      const liteTickets = freshTickets.map((t: any) => ({
+        ref: t.reference,
+        sujet: t.sujet,
+        statut: t.statut,
+        assigne_a: t.assigne_a,
+        priorite: t.priorite,
+        escalade: t.escalated_by_name || undefined
+      }));
 
       const iaUrl = `http://${window.location.hostname}:8000/chat`;
       const res = await axios.post(iaUrl, {
         user_message: userMessage,
         session_id: sessionId,
-        user_tickets: freshTickets,
+        user_tickets: liteTickets,
         user_name: user?.name || "Utilisateur",
       });
       const botText = res.data.text || res.data.bot_reply || "";
@@ -917,6 +956,7 @@ export default function Chatbot({
           ticket={selectedTicket.data}
           viewType={selectedTicket.viewType}
           onClose={() => setSelectedTicket(null)}
+          hideBack={true}
         />
       )}
     </>
