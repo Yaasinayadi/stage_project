@@ -14,8 +14,11 @@ import {
   TrendingUp,
   Calendar,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   X,
   ExternalLink,
+  Info,
 } from "lucide-react";
 import StatsCard from "@/components/StatsCard";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -39,31 +42,46 @@ import {
 import { ODOO_URL } from "@/lib/config";
 
 const COLORS = [
-  "#6366f1","#10b981","#f59e0b","#ec4899","#8b5cf6",
-  "#06b6d4","#ef4444","#84cc16","#14b8a6","#3b82f6",
-  "#d946ef","#f97316","#64748b","#a855f7","#eab308",
+  "#6366f1",
+  "#10b981",
+  "#f59e0b",
+  "#ec4899",
+  "#8b5cf6",
+  "#06b6d4",
+  "#ef4444",
+  "#84cc16",
+  "#14b8a6",
+  "#3b82f6",
+  "#d946ef",
+  "#f97316",
+  "#64748b",
+  "#a855f7",
+  "#eab308",
 ];
 
 /* ── Period filter pills ─────────────────────────────────────────── */
 const VISIBLE_PERIODS = [
   { id: "today", label: "Aujourd'hui" },
-  { id: "week",  label: "7 Jours"     },
-  { id: "month", label: "Mois"        },
-  { id: "all",   label: "Global"      },
+  { id: "week", label: "7 Jours" },
+  { id: "month", label: "Mois" },
+  { id: "all", label: "Global" },
 ];
 const MORE_PERIODS = [
   { id: "yesterday", label: "Hier" },
   { id: "30days", label: "30 Jours" },
 ];
 
-/* ── Custom recharts tooltip ─────────────────────────────────────── */
+/* ── Custom tooltip for AreaChart ───────────────────────────── */
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-[hsl(var(--card))] border border-[hsl(var(--border))] shadow-lg p-3 rounded-xl text-sm font-semibold z-50">
-        <p className="text-[hsl(var(--muted-foreground))] mb-1">{label}</p>
-        <p style={{ color: payload[0].color || payload[0].payload.fill }}>
-          {payload[0].name}: {payload[0].value}
+      <div
+        className="bg-[hsl(var(--card))] border border-[hsl(var(--border))] shadow-2xl px-3 py-2 rounded-xl text-sm z-[100] text-[hsl(var(--foreground))] pointer-events-none"
+        style={{ backgroundColor: "hsl(var(--card))" }}
+      >
+        <p className="text-[hsl(var(--muted-foreground))] text-[10px] mb-0.5">{label}</p>
+        <p style={{ color: payload[0].color }} className="font-bold">
+          {payload[0].name}: <span>{payload[0].value}</span>
         </p>
       </div>
     );
@@ -71,11 +89,99 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
+/* ── Pie active shape with liaison ──────────────────────────────── */
+const RADIAN = Math.PI / 180;
+const renderPieActiveShape = (props: any) => {
+  const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, payload, value } = props;
+  const midAngle = (startAngle + endAngle) / 2;
+  const labelR = outerRadius + 24; // Push label 24px outside
+  let lx = cx + labelR * Math.cos(-midAngle * RADIAN);
+  let ly = cy + labelR * Math.sin(-midAngle * RADIAN);
+
+  // Manual offsets to perfect the visual organization (stronger adjustments for presentation)
+  const nameLower = (payload.name || "").toLowerCase();
+  if (nameLower.includes("matériel") || nameLower.includes("materiel")) {
+    ly += 40; // Move down
+    lx += 55; // Move RIGHT (inwards, away from the left edge to prevent clipping)
+  } else if (nameLower.includes("infrastruct")) {
+    ly -= 35; // Move up
+    lx -= 55; // Move LEFT (inwards, away from the right edge to prevent clipping)
+  }
+
+  // Use a very large fixed container width to guarantee NO text clipping.
+  // The flex layout inside will auto-align the actual card perfectly to the line.
+  const containerW = 300; 
+  const boxH = 34;
+  const isLeft = midAngle > 90 && midAngle < 270;
+  
+  // If on the left side, the container spans [lx - 300, lx]. Flex-end pushes the card to touch lx.
+  // If on the right side, the container spans [lx, lx + 300]. Flex-start pushes the card to touch lx.
+  const bx = isLeft ? lx - containerW : lx; 
+  const by = ly - boxH / 2;
+
+  return (
+    <g>
+      {/* 1. Draw the slice exactly as it is (no zoom) */}
+      <path
+        d={[
+          `M`, cx + innerRadius * Math.cos(-startAngle * RADIAN), cy + innerRadius * Math.sin(-startAngle * RADIAN),
+          `A`, innerRadius, innerRadius, 0, Math.abs(endAngle - startAngle) > 180 ? 1 : 0, 0,
+          cx + innerRadius * Math.cos(-endAngle * RADIAN), cy + innerRadius * Math.sin(-endAngle * RADIAN),
+          `L`, cx + outerRadius * Math.cos(-endAngle * RADIAN), cy + outerRadius * Math.sin(-endAngle * RADIAN),
+          `A`, outerRadius, outerRadius, 0, Math.abs(endAngle - startAngle) > 180 ? 1 : 0, 1,
+          cx + outerRadius * Math.cos(-startAngle * RADIAN), cy + outerRadius * Math.sin(-startAngle * RADIAN),
+          `Z`,
+        ].join(' ')}
+        fill={fill}
+      />
+      {/* 2. Liaison line */}
+      <line
+        x1={cx + outerRadius * Math.cos(-midAngle * RADIAN)}
+        y1={cy + outerRadius * Math.sin(-midAngle * RADIAN)}
+        x2={lx}
+        y2={ly}
+        stroke={fill}
+        strokeWidth={1.5}
+        strokeDasharray="3 3"
+        opacity={0.8}
+      />
+      {/* 3. The card label */}
+      <foreignObject x={bx} y={by} width={containerW} height={boxH + 20} style={{ overflow: 'visible' }}>
+        <div style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: isLeft ? "flex-end" : "flex-start",
+          paddingTop: "2px" // slight padding to account for shadow
+        }}>
+          <div
+            style={{
+              backgroundColor: "hsl(var(--card))",
+              border: "1px solid hsl(var(--border))",
+              borderRadius: "10px",
+              padding: "6px 12px",
+              boxShadow: "0 6px 16px rgba(0,0,0,0.25)",
+              whiteSpace: "nowrap",
+              fontSize: "13px",
+              fontWeight: 800,
+              color: fill,
+              lineHeight: 1.2,
+            }}
+          >
+            {payload.name}: {value}
+          </div>
+        </div>
+      </foreignObject>
+    </g>
+  );
+};
+
 /* ── Main component ──────────────────────────────────────────────── */
 function AnalyticsDashboard() {
   const { user } = useAuth();
-  const [loading, setLoading]         = useState(true);
-  const [period, setPeriod]           = useState("all");
+  const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState("all");
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
   const [isMorePeriodsOpen, setIsMorePeriodsOpen] = useState(false);
@@ -84,6 +190,14 @@ function AnalyticsDashboard() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [categoryTickets, setCategoryTickets] = useState<any[]>([]);
   const [loadingCatTickets, setLoadingCatTickets] = useState(false);
+  const [drillDownPage, setDrillDownPage] = useState(0);
+  const [pieActiveIndex, setPieActiveIndex] = useState<number | null>(null);
+  const DRILL_PAGE_SIZE = 4;
+
+  // Reset pie hover tooltip when SLA modal opens to prevent SVG foreignObject z-index bug
+  useEffect(() => {
+    if (isSlaModalOpen) setPieActiveIndex(null);
+  }, [isSlaModalOpen]);
 
   const fetchCategoryTickets = async (catName: string) => {
     setLoadingCatTickets(true);
@@ -91,10 +205,9 @@ function AnalyticsDashboard() {
       const res = await axios.get(`${ODOO_URL}/api/tickets`);
       const all: any[] = res.data?.data || [];
       const filtered = all.filter(
-        (t: any) =>
-          (t.category || "").toLowerCase() === catName.toLowerCase()
+        (t: any) => (t.category || "").toLowerCase() === catName.toLowerCase(),
       );
-      setCategoryTickets(filtered.slice(0, 10));
+      setCategoryTickets(filtered);
     } catch {
       setCategoryTickets([]);
     } finally {
@@ -104,8 +217,11 @@ function AnalyticsDashboard() {
 
   const customDateError = (() => {
     if (!customStartDate && !customEndDate) return null;
-    const todayStr = new Date().toISOString().split('T')[0];
-    if ((customStartDate && customStartDate > todayStr) || (customEndDate && customEndDate > todayStr)) {
+    const todayStr = new Date().toISOString().split("T")[0];
+    if (
+      (customStartDate && customStartDate > todayStr) ||
+      (customEndDate && customEndDate > todayStr)
+    ) {
       return "La date ne peut pas être dans le futur.";
     }
     if (customStartDate && customEndDate && customStartDate > customEndDate) {
@@ -116,23 +232,23 @@ function AnalyticsDashboard() {
   const [data, setData] = useState({
     counters: { total: 0, overdue: 0, at_risk: 0, in_progress: 0, resolved: 0 },
     categories: [] as any[],
-    trend:      [] as any[],
-    kpis:       { mttr_hours: 0, sla_compliance: 100 },
+    trend: [] as any[],
+    kpis: { mttr_hours: 0, sla_compliance: 100 },
   });
 
   const fetchStats = async (selectedPeriod: string) => {
     if (!user) return;
     setLoading(true);
     try {
-      const isTech    = user?.x_support_role === "tech";
-      let endpoint  = isTech
+      const isTech = user?.x_support_role === "tech";
+      let endpoint = isTech
         ? `${ODOO_URL}/api/tech/stats?period=${selectedPeriod}&tech_id=${user.id}`
         : `${ODOO_URL}/api/admin/stats?period=${selectedPeriod}`;
-      
+
       if (selectedPeriod === "custom") {
         endpoint += `&start_date=${customStartDate}&end_date=${customEndDate}`;
       }
-      
+
       const res = await axios.get(endpoint);
       if (res.data.status === 200) setData(res.data.data);
     } catch (e) {
@@ -142,27 +258,33 @@ function AnalyticsDashboard() {
     }
   };
 
-  useEffect(() => { fetchStats(period); }, [period, user]);
+  useEffect(() => {
+    fetchStats(period);
+  }, [period, user]);
 
   const isTechUser = user?.x_support_role === "tech";
 
   const pieData = isTechUser
     ? [
-        { name: "Résolus",    value: data.counters.resolved },
-        { name: "À résoudre", value: data.counters.overdue + data.counters.at_risk + data.counters.in_progress },
+        { name: "Résolus", value: data.counters.resolved },
+        {
+          name: "À résoudre",
+          value:
+            data.counters.overdue +
+            data.counters.at_risk +
+            data.counters.in_progress,
+        },
       ].filter((d) => d.value > 0)
     : data.categories;
 
-  const pieTitle = isTechUser ? "Progression des Tickets" : "Répartition IA (Catégories)";
+  const pieTitle = isTechUser
+    ? "Progression des Tickets"
+    : "Répartition par Catégorie";
 
   return (
     /* ── outer wrapper: prevents horizontal overflow ── */
-    <div 
-      className="w-full"
-      onClick={() => setIsMorePeriodsOpen(false)}
-    >
+    <div className="w-full" onClick={() => setIsMorePeriodsOpen(false)}>
       <div className="p-4 sm:p-6 lg:p-8 max-w-[1400px] mx-auto space-y-6">
-
         {/* ── HEADER ───────────────────────────────────────────────── */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-in relative z-50">
           <div className="flex items-center gap-3">
@@ -179,8 +301,8 @@ function AnalyticsDashboard() {
             </div>
           </div>
 
-          {/* Period filter */}
-          <div className="flex items-center gap-2 relative z-50">
+          {/* Right section: Period filter + Bell */}
+          <div className="flex items-center gap-3 relative z-50">
             <div className="flex bg-[hsl(var(--muted)/0.3)] p-1.5 rounded-xl border border-[hsl(var(--border)/0.5)] shadow-sm w-max">
               {/* Primary Tabs */}
               {VISIBLE_PERIODS.map((p) => (
@@ -196,7 +318,7 @@ function AnalyticsDashboard() {
                   {p.label}
                 </button>
               ))}
-              
+
               {/* More button */}
               <button
                 onClick={(e) => {
@@ -204,30 +326,46 @@ function AnalyticsDashboard() {
                   setIsMorePeriodsOpen(!isMorePeriodsOpen);
                 }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-                  MORE_PERIODS.some(p => p.id === period) || period === "custom"
+                  MORE_PERIODS.some((p) => p.id === period) ||
+                  period === "custom"
                     ? "bg-[hsl(var(--background))] text-[hsl(var(--primary))] shadow-sm border border-[hsl(var(--border)/0.5)]"
                     : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] border border-transparent"
                 }`}
               >
                 {period === "custom" ? (
-                  <><Calendar size={13} /> {customStartDate && customEndDate ? `${new Date(customStartDate).toLocaleDateString('fr-FR', {day: '2-digit', month: 'short'})} - ${new Date(customEndDate).toLocaleDateString('fr-FR', {day: '2-digit', month: 'short'})}` : "Personnalisé"}</>
+                  <>
+                    <Calendar size={13} />{" "}
+                    {customStartDate && customEndDate
+                      ? `${new Date(customStartDate).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })} - ${new Date(customEndDate).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}`
+                      : "Personnalisé"}
+                  </>
                 ) : (
-                  MORE_PERIODS.find(p => p.id === period)?.label || <><Calendar size={13} /> Plus</>
+                  MORE_PERIODS.find((p) => p.id === period)?.label || (
+                    <>
+                      <Calendar size={13} /> Plus
+                    </>
+                  )
                 )}
-                <ChevronDown size={13} className={`transition-transform ${isMorePeriodsOpen ? "rotate-180" : ""}`} />
+                <ChevronDown
+                  size={13}
+                  className={`transition-transform ${isMorePeriodsOpen ? "rotate-180" : ""}`}
+                />
               </button>
             </div>
 
             {isMorePeriodsOpen && (
-              <div 
-                className="absolute top-[calc(100%+8px)] right-0 w-64 bg-[hsl(var(--popover))] border border-[hsl(var(--border))] rounded-xl shadow-2xl z-[100] p-2 animate-fade-in text-[hsl(var(--popover-foreground))]"
-                onClick={e => e.stopPropagation()}
+              <div
+                className="absolute top-[calc(100%+8px)] right-0 md:right-12 w-64 bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl shadow-2xl z-[100] p-2 animate-fade-in text-[hsl(var(--foreground))]"
+                onClick={(e) => e.stopPropagation()}
               >
                 <div className="space-y-1 mb-2 pb-2 border-b border-[hsl(var(--border)/0.5)]">
-                  {MORE_PERIODS.map(p => (
+                  {MORE_PERIODS.map((p) => (
                     <button
                       key={p.id}
-                      onClick={() => { setPeriod(p.id); setIsMorePeriodsOpen(false); }}
+                      onClick={() => {
+                        setPeriod(p.id);
+                        setIsMorePeriodsOpen(false);
+                      }}
                       className={`w-full text-left text-xs px-3 py-2 rounded-md font-semibold transition-colors
                         ${period === p.id ? "bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]" : "hover:bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]"}`}
                     >
@@ -235,54 +373,74 @@ function AnalyticsDashboard() {
                     </button>
                   ))}
                 </div>
-                
+
                 <div className="px-1 pt-1 space-y-2">
-                  <span className="text-[0.65rem] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide px-2">Personnalisé</span>
+                  <span className="text-[0.65rem] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide px-2">
+                    Personnalisé
+                  </span>
                   <div className="flex flex-col gap-2 px-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-[hsl(var(--muted-foreground))] w-6">Du</span>
-                      <input 
-                        type="date" 
-                        max={new Date().toISOString().split('T')[0]}
+                      <span className="text-xs text-[hsl(var(--muted-foreground))] w-6">
+                        Du
+                      </span>
+                      <input
+                        type="date"
+                        max={new Date().toISOString().split("T")[0]}
                         className={`flex-1 bg-[hsl(var(--background))] border rounded text-[10px] p-1.5 outline-none transition-colors ${
-                          customDateError && customStartDate && (!customEndDate || customStartDate > customEndDate || customStartDate > new Date().toISOString().split('T')[0])
-                            ? "border-red-500/50 focus:border-red-500" 
+                          customDateError &&
+                          customStartDate &&
+                          (!customEndDate ||
+                            customStartDate > customEndDate ||
+                            customStartDate >
+                              new Date().toISOString().split("T")[0])
+                            ? "border-red-500/50 focus:border-red-500"
                             : "border-[hsl(var(--border))] focus:border-[hsl(var(--primary))]"
                         }`}
                         value={customStartDate}
-                        onChange={e => setCustomStartDate(e.target.value)}
+                        onChange={(e) => setCustomStartDate(e.target.value)}
                       />
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-[hsl(var(--muted-foreground))] w-6">Au</span>
-                      <input 
-                        type="date" 
-                        max={new Date().toISOString().split('T')[0]}
+                      <span className="text-xs text-[hsl(var(--muted-foreground))] w-6">
+                        Au
+                      </span>
+                      <input
+                        type="date"
+                        max={new Date().toISOString().split("T")[0]}
                         className={`flex-1 bg-[hsl(var(--background))] border rounded text-[10px] p-1.5 outline-none transition-colors ${
-                          customDateError && customEndDate && (customStartDate > customEndDate || customEndDate > new Date().toISOString().split('T')[0])
-                            ? "border-red-500/50 focus:border-red-500" 
+                          customDateError &&
+                          customEndDate &&
+                          (customStartDate > customEndDate ||
+                            customEndDate >
+                              new Date().toISOString().split("T")[0])
+                            ? "border-red-500/50 focus:border-red-500"
                             : "border-[hsl(var(--border))] focus:border-[hsl(var(--primary))]"
                         }`}
                         value={customEndDate}
-                        onChange={e => setCustomEndDate(e.target.value)}
+                        onChange={(e) => setCustomEndDate(e.target.value)}
                       />
                     </div>
                   </div>
                   {customDateError && (
                     <div className="text-[10px] text-red-500 font-medium px-1 mt-2 leading-tight flex items-start gap-1.5 animate-fade-in">
-                      <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" /> 
+                      <AlertTriangle
+                        size={12}
+                        className="flex-shrink-0 mt-0.5"
+                      />
                       <span>{customDateError}</span>
                     </div>
                   )}
                   <button
-                    disabled={!customStartDate || !customEndDate || !!customDateError}
-                    onClick={() => { 
+                    disabled={
+                      !customStartDate || !customEndDate || !!customDateError
+                    }
+                    onClick={() => {
                       if (period === "custom") {
                         fetchStats("custom");
                       } else {
-                        setPeriod("custom"); 
+                        setPeriod("custom");
                       }
-                      setIsMorePeriodsOpen(false); 
+                      setIsMorePeriodsOpen(false);
                     }}
                     className="w-full mt-2 py-1.5 rounded-lg bg-[hsl(var(--primary))] text-white text-[11px] font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:opacity-90"
                   >
@@ -291,17 +449,16 @@ function AnalyticsDashboard() {
                 </div>
               </div>
             )}
-          </div>
-          
-          {/* Nouvelle Cloche - Alignée à droite */}
-          <div className="hidden md:block ml-2">
-            <NotificationBell />
+
+            <div className="hidden md:block">
+              <NotificationBell />
+            </div>
           </div>
         </div>
 
         {/* ── KPI CARDS ────────────────────────────────────────────── */}
         {/* 2 col on xs/sm, 4 on lg */}
-        <div className="grid gap-2 sm:gap-4 grid-cols-2 lg:grid-cols-4 animate-fade-in [animation-delay:100ms]">
+        <div className="grid gap-2 sm:gap-4 grid-cols-2 lg:grid-cols-4 animate-fade-in [animation-delay:100ms] relative z-40 has-[:hover]:z-[60]">
           <StatsCard
             title="Total Tickets"
             value={data.counters.total}
@@ -313,7 +470,11 @@ function AnalyticsDashboard() {
           />
           <StatsCard
             title="En Traitement"
-            value={(data.counters.overdue || 0) + (data.counters.at_risk || 0) + (data.counters.in_progress || 0)}
+            value={
+              (data.counters.overdue || 0) +
+              (data.counters.at_risk || 0) +
+              (data.counters.in_progress || 0)
+            }
             icon={<Activity size={20} />}
             color="#f59e0b"
             loading={loading}
@@ -336,7 +497,7 @@ function AnalyticsDashboard() {
             color="#10b981"
             loading={loading}
             delay={240}
-            onClick={() => setIsSlaModalOpen(true)}
+            onClick={() => { setIsSlaModalOpen(true); setPieActiveIndex(null); }}
             tooltip={
               !isTechUser
                 ? "Taux de tickets résolus avant la deadline SLA. Cliquez pour voir le détail par technicien."
@@ -348,7 +509,7 @@ function AnalyticsDashboard() {
         {/* ── CHARTS ROW ───────────────────────────────────────────── */}
         {/* Stack on mobile, side-by-side (2/3 + 1/3) on lg */}
         <div
-          className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 animate-fade-in"
+          className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 animate-fade-in relative z-40 has-[:hover]:z-[60]"
           style={{ animationDelay: "0.2s" }}
         >
           {/* Area Chart — takes 2 columns on lg */}
@@ -372,14 +533,35 @@ function AnalyticsDashboard() {
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={data.trend} margin={{ top: 10, right: 8, left: -24, bottom: 0 }}>
+                  <AreaChart
+                    data={data.trend}
+                    margin={{ top: 10, right: 8, left: -24, bottom: 0 }}
+                  >
                     <defs>
-                      <linearGradient id="colorTickets" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor="hsl(var(--primary))" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}   />
+                      <linearGradient
+                        id="colorTickets"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop
+                          offset="5%"
+                          stopColor="hsl(var(--primary))"
+                          stopOpacity={0.4}
+                        />
+                        <stop
+                          offset="95%"
+                          stopColor="hsl(var(--primary))"
+                          stopOpacity={0}
+                        />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      vertical={false}
+                      stroke="hsl(var(--border))"
+                    />
                     <XAxis
                       dataKey="name"
                       stroke="hsl(var(--muted-foreground))"
@@ -397,7 +579,11 @@ function AnalyticsDashboard() {
                     />
                     <RechartsTooltip
                       content={<CustomTooltip />}
-                      cursor={{ stroke: "hsl(var(--primary)/0.5)", strokeWidth: 1, strokeDasharray: "4 4" }}
+                      cursor={{
+                        stroke: "hsl(var(--primary)/0.5)",
+                        strokeWidth: 1,
+                        strokeDasharray: "4 4",
+                      }}
                     />
                     <Area
                       type="monotone"
@@ -419,30 +605,47 @@ function AnalyticsDashboard() {
             <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-[hsl(var(--muted-foreground))] flex items-center gap-2 mb-4 sm:mb-6">
               <Target size={16} /> {pieTitle}
               {!isTechUser && (
-                <span className="ml-auto text-[0.6rem] font-normal normal-case text-[hsl(var(--muted-foreground)/0.6)] italic">
-                  Cliquez une tranche pour détailler
-                </span>
+                <div className="ml-auto relative group">
+                  <Info
+                    size={14}
+                    className="text-[hsl(var(--muted-foreground))] cursor-help transition-colors group-hover:text-[hsl(var(--foreground))]"
+                  />
+                  <div
+                    className="absolute right-0 bottom-full mb-2 w-48 p-2.5 bg-[hsl(var(--popover))] border border-[hsl(var(--border))] rounded-lg shadow-2xl text-[10px] text-[hsl(var(--popover-foreground))] opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-[100] font-medium text-center normal-case tracking-normal"
+                    style={{ backgroundColor: "hsl(var(--popover))" }}
+                  >
+                    Cliquez sur une tranche pour détailler les tickets
+                    <div
+                      className="absolute top-full right-[3px] border-[6px] border-transparent"
+                      style={{ borderTopColor: "hsl(var(--border))" }}
+                    />
+                    <div
+                      className="absolute top-full right-[4px] border-[5px] border-transparent"
+                      style={{ borderTopColor: "hsl(var(--popover))" }}
+                    />
+                  </div>
+                </div>
               )}
             </h3>
 
             <div className="flex-1 flex flex-col justify-center">
               {loading ? (
-                <div className="w-full h-[200px] flex items-center justify-center">
+                <div className="w-full h-[240px] flex items-center justify-center">
                   <span className="text-xs font-bold text-[hsl(var(--muted-foreground))] animate-pulse">
                     Chargement…
                   </span>
                 </div>
               ) : pieData.length === 0 ? (
-                <div className="w-full h-[200px] flex items-center justify-center flex-col text-[hsl(var(--muted-foreground))]">
+                <div className="w-full h-[240px] flex items-center justify-center flex-col text-[hsl(var(--muted-foreground))]">
                   <BarChart3 opacity={0.3} size={40} className="mb-2" />
                   <span className="text-xs font-medium">Aucune donnée</span>
                 </div>
               ) : (
                 <>
                   {/* Donut */}
-                  <div className="relative w-full h-[200px]">
+                  <div className="relative w-full h-[240px] [&>div]:!overflow-visible [&_.recharts-wrapper]:!overflow-visible">
                     <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
+                      <PieChart style={{ overflow: 'visible' }}>
                         <Pie
                           data={pieData}
                           cx="50%"
@@ -453,26 +656,50 @@ function AnalyticsDashboard() {
                           dataKey="value"
                           stroke="none"
                           cornerRadius={4}
-                          onClick={!isTechUser ? (entry: any) => {
-                            const cat = entry.name;
-                            setSelectedCategory(cat);
-                            fetchCategoryTickets(cat);
-                          } : undefined}
-                          style={!isTechUser ? { cursor: 'pointer' } : undefined}
+                          isAnimationActive={false}
+                          {...(pieActiveIndex !== null && !isSlaModalOpen ? { activeIndex: pieActiveIndex } : {})}
+                          activeShape={renderPieActiveShape}
+                          onMouseEnter={(_, index) => setPieActiveIndex(index)}
+                          onMouseLeave={() => setPieActiveIndex(null)}
+                          onClick={
+                            !isTechUser
+                              ? (entry: any) => {
+                                  const cat = entry.name;
+                                  if (selectedCategory === cat) {
+                                    setSelectedCategory(null);
+                                    setCategoryTickets([]);
+                                    setDrillDownPage(0);
+                                  } else {
+                                    setSelectedCategory(cat);
+                                    fetchCategoryTickets(cat);
+                                    setDrillDownPage(0);
+                                  }
+                                }
+                              : undefined
+                          }
+                          style={
+                            !isTechUser ? { cursor: "pointer" } : undefined
+                          }
                         >
                           {pieData.map((entry: any, index: number) => (
                             <Cell
                               key={`cell-${index}`}
                               fill={
                                 isTechUser
-                                  ? entry.name === "Résolus" ? "#10b981" : "#f59e0b"
+                                  ? entry.name === "Résolus"
+                                    ? "#10b981"
+                                    : "#f59e0b"
                                   : COLORS[index % COLORS.length]
                               }
-                              opacity={selectedCategory && selectedCategory !== entry.name ? 0.4 : 1}
+                              opacity={
+                                selectedCategory &&
+                                selectedCategory !== entry.name
+                                  ? 0.4
+                                  : 1
+                              }
                             />
                           ))}
                         </Pie>
-                        <RechartsTooltip content={<CustomTooltip />} />
                       </PieChart>
                     </ResponsiveContainer>
 
@@ -482,8 +709,11 @@ function AnalyticsDashboard() {
                         {selectedCategory
                           ? categoryTickets.length
                           : isTechUser
-                          ? data.counters.resolved + data.counters.overdue + data.counters.at_risk + data.counters.in_progress
-                          : data.counters.total}
+                            ? data.counters.resolved +
+                              data.counters.overdue +
+                              data.counters.at_risk +
+                              data.counters.in_progress
+                            : data.counters.total}
                       </span>
                       <p className="text-[0.6rem] font-bold uppercase tracking-widest text-[hsl(var(--muted-foreground))]">
                         {selectedCategory ? "tickets" : "Total"}
@@ -496,26 +726,36 @@ function AnalyticsDashboard() {
                     {pieData.map((c: any, i: number) => (
                       <button
                         key={i}
-                        onClick={!isTechUser ? () => {
-                          if (selectedCategory === c.name) {
-                            setSelectedCategory(null);
-                            setCategoryTickets([]);
-                          } else {
-                            setSelectedCategory(c.name);
-                            fetchCategoryTickets(c.name);
-                          }
-                        } : undefined}
+                        onClick={
+                          !isTechUser
+                            ? () => {
+                                if (selectedCategory === c.name) {
+                                  setSelectedCategory(null);
+                                  setCategoryTickets([]);
+                                  setDrillDownPage(0);
+                                } else {
+                                  setSelectedCategory(c.name);
+                                  fetchCategoryTickets(c.name);
+                                  setDrillDownPage(0);
+                                }
+                              }
+                            : undefined
+                        }
                         className={`flex items-center gap-1.5 text-xs font-medium transition-opacity ${
-                          !isTechUser ? 'cursor-pointer hover:opacity-100' : ''
+                          !isTechUser ? "cursor-pointer hover:opacity-100" : ""
                         } ${
-                          selectedCategory && selectedCategory !== c.name ? 'opacity-40' : ''
+                          selectedCategory && selectedCategory !== c.name
+                            ? "opacity-40"
+                            : ""
                         }`}
                       >
                         <div
                           className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
                           style={{
                             backgroundColor: isTechUser
-                              ? c.name === "Résolus" ? "#10b981" : "#f59e0b"
+                              ? c.name === "Résolus"
+                                ? "#10b981"
+                                : "#f59e0b"
                               : COLORS[i % COLORS.length],
                           }}
                         />
@@ -528,51 +768,120 @@ function AnalyticsDashboard() {
                   </div>
 
                   {/* Phase 4.2 — Dréll-down panel : liste des tickets de la catégorie */}
-                  {selectedCategory && !isTechUser && (
-                    <div className="mt-4 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--muted)/0.2)] overflow-hidden animate-fade-in">
-                      <div className="flex items-center justify-between px-3 py-2 border-b border-[hsl(var(--border)/0.4)]">
-                        <span className="text-[11px] font-bold text-[hsl(var(--foreground))] truncate">
-                          📂 {selectedCategory}
-                        </span>
-                        <button
-                          onClick={() => { setSelectedCategory(null); setCategoryTickets([]); }}
-                          className="p-0.5 rounded hover:bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]"
-                        >
-                          <X size={12} />
-                        </button>
-                      </div>
-                      <div className="max-h-[160px] overflow-y-auto custom-scrollbar divide-y divide-[hsl(var(--border)/0.3)]">
-                        {loadingCatTickets ? (
-                          <div className="flex items-center justify-center py-4">
-                            <span className="text-xs text-[hsl(var(--muted-foreground))] animate-pulse">Chargement…</span>
-                          </div>
-                        ) : categoryTickets.length === 0 ? (
-                          <p className="text-xs text-center py-4 text-[hsl(var(--muted-foreground))]">Aucun ticket trouvé</p>
-                        ) : (
-                          categoryTickets.map((t: any) => (
-                            <div key={t.id} className="flex items-center gap-2 px-3 py-2">
-                              <span className="text-[10px] font-mono text-[hsl(var(--muted-foreground))] flex-shrink-0">
-                                TK-{String(t.id).padStart(4, '0')}
-                              </span>
-                              <span className="text-[11px] truncate flex-1">{t.name}</span>
-                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
-                                t.state === 'resolved' ? 'bg-emerald-500/15 text-emerald-500'
-                                : t.state === 'escalated' ? 'bg-orange-500/15 text-orange-500'
-                                : 'bg-blue-500/15 text-blue-500'
-                              }`}>
-                                {t.state}
+                  {selectedCategory &&
+                    !isTechUser &&
+                    (() => {
+                      const selIdx = pieData.findIndex(
+                        (p: any) => p.name === selectedCategory,
+                      );
+                      const selColor =
+                        COLORS[selIdx % COLORS.length] || "hsl(var(--primary))";
+
+                      return (
+                        <div className="mt-5 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-lg overflow-hidden animate-fade-in flex flex-col">
+                          {/* Header */}
+                          <div className="flex items-center justify-between px-4 py-3 bg-[hsl(var(--muted)/0.3)] border-b border-[hsl(var(--border))]">
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="w-2.5 h-2.5 rounded-full shadow-sm"
+                                style={{ backgroundColor: selColor }}
+                              />
+                              <h4 className="text-xs font-bold text-[hsl(var(--foreground))] uppercase tracking-wide">
+                                {selectedCategory}
+                              </h4>
+                              <span className="ml-1 text-[10px] font-semibold text-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted))] px-1.5 py-0.5 rounded-md">
+                                {categoryTickets.length}
                               </span>
                             </div>
-                          ))
-                        )}
-                      </div>
-                      {categoryTickets.length === 10 && (
-                        <div className="px-3 py-1.5 text-center border-t border-[hsl(var(--border)/0.3)]">
-                          <span className="text-[10px] text-[hsl(var(--muted-foreground))]">Affichage limité aux 10 premiers</span>
+                            <button
+                              onClick={() => {
+                                setSelectedCategory(null);
+                                setCategoryTickets([]);
+                              }}
+                              className="p-1 rounded-md hover:bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+
+                          {/* Paginated Ticket Cards */}
+                          {(() => {
+                            const totalPages = Math.ceil(categoryTickets.length / DRILL_PAGE_SIZE);
+                            const pageTickets = categoryTickets.slice(
+                              drillDownPage * DRILL_PAGE_SIZE,
+                              (drillDownPage + 1) * DRILL_PAGE_SIZE
+                            );
+                            return (
+                              <>
+                                <div className="p-2 space-y-2 flex-1">
+                                  {loadingCatTickets ? (
+                                    <div className="flex flex-col items-center justify-center py-6 gap-2">
+                                      <Activity size={18} className="text-[hsl(var(--primary))] animate-pulse" />
+                                      <span className="text-[10px] font-medium text-[hsl(var(--muted-foreground))]">Chargement…</span>
+                                    </div>
+                                  ) : categoryTickets.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center py-6">
+                                      <span className="text-[10px] font-medium text-[hsl(var(--muted-foreground))]">Aucun ticket dans cette catégorie</span>
+                                    </div>
+                                  ) : (
+                                    pageTickets.map((t: any) => (
+                                      <div
+                                        key={t.id}
+                                        className="group flex flex-col gap-1.5 p-2.5 rounded-xl bg-[hsl(var(--muted)/0.3)] hover:bg-[hsl(var(--muted)/0.5)] transition-colors border border-[hsl(var(--border)/0.5)] hover:border-[hsl(var(--border))]"
+                                      >
+                                        {/* Top row: ID + Status */}
+                                        <div className="flex items-center justify-between gap-2">
+                                          <span className="text-[10px] font-black text-[hsl(var(--muted-foreground))] tracking-wide">
+                                            #{String(t.id).padStart(4, "0")}
+                                          </span>
+                                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider flex-shrink-0 ${
+                                            t.state === "resolved"
+                                              ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                                              : t.state === "escalated"
+                                                ? "bg-orange-500/10 text-orange-500 border border-orange-500/20"
+                                                : "bg-blue-500/10 text-blue-500 border border-blue-500/20"
+                                          }`}>
+                                            {t.state === "resolved" ? "✓ Résolu" : t.state === "escalated" ? "⚡ Escaladé" : "⏳ En cours"}
+                                          </span>
+                                        </div>
+                                        {/* Title - full wrap, no clamping to guarantee full title visibility */}
+                                        <p className="text-[11.5px] font-semibold text-[hsl(var(--foreground))] line-clamp-none leading-snug group-hover:text-[hsl(var(--primary))] transition-colors">
+                                          {t.name}
+                                        </p>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+
+                                {/* Pagination footer */}
+                                {totalPages > 1 && (
+                                  <div className="flex items-center justify-between px-3 py-2 border-t border-[hsl(var(--border))] bg-[hsl(var(--muted)/0.2)]">
+                                    <button
+                                      onClick={() => setDrillDownPage(p => Math.max(0, p - 1))}
+                                      disabled={drillDownPage === 0}
+                                      className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-[hsl(var(--muted))] hover:bg-[hsl(var(--border))] disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-[hsl(var(--foreground))]"
+                                    >
+                                      <ChevronLeft size={12} /> Préc.
+                                    </button>
+                                    <span className="text-[10px] font-semibold text-[hsl(var(--muted-foreground))]">
+                                      {drillDownPage + 1} / {totalPages}
+                                      <span className="ml-1 opacity-60">({categoryTickets.length} tickets)</span>
+                                    </span>
+                                    <button
+                                      onClick={() => setDrillDownPage(p => Math.min(totalPages - 1, p + 1))}
+                                      disabled={drillDownPage === totalPages - 1}
+                                      className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-[hsl(var(--muted))] hover:bg-[hsl(var(--border))] disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-[hsl(var(--foreground))]"
+                                    >
+                                      Suiv. <ChevronRight size={12} />
+                                    </button>
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
-                      )}
-                    </div>
-                  )}
+                      );
+                    })()}
                 </>
               )}
             </div>

@@ -15,20 +15,33 @@ type StatsCardProps = {
   isActive?: boolean;
 };
 
-export default function StatsCard({ title, value, icon, color, loading, delay = 0, onClick, tooltip, isActive }: StatsCardProps) {
+export default function StatsCard({
+  title,
+  value,
+  icon,
+  color,
+  loading,
+  delay = 0,
+  onClick,
+  tooltip,
+  isActive,
+}: StatsCardProps) {
   const [displayValue, setDisplayValue] = useState<number | string>(0);
   const [showTooltip, setShowTooltip] = useState(false);
 
   // Count-up animation
   useEffect(() => {
     if (loading) return;
-    
-    if (typeof value === 'string') {
+
+    if (typeof value === "string") {
       setDisplayValue(value);
       return;
     }
-    
-    if (value === 0) { setDisplayValue(0); return; }
+
+    if (value === 0) {
+      setDisplayValue(0);
+      return;
+    }
 
     const duration = 800;
     const startTime = Date.now();
@@ -46,7 +59,10 @@ export default function StatsCard({ title, value, icon, color, loading, delay = 
 
   if (loading) {
     return (
-      <div className="stat-card animate-fade-in" style={{ animationDelay: `${delay}ms` }}>
+      <div
+        className="stat-card animate-fade-in"
+        style={{ animationDelay: `${delay}ms` }}
+      >
         <div className="flex items-center justify-between mb-3">
           <div className="w-20 h-3 rounded animate-shimmer" />
           <div className="w-10 h-10 rounded-xl animate-shimmer" />
@@ -58,21 +74,19 @@ export default function StatsCard({ title, value, icon, color, loading, delay = 
 
   return (
     <div
-      className={`stat-card animate-fade-in relative transition-all duration-200 ${
+      className={`stat-card animate-fade-in relative transition-all duration-200 hover:z-[100] ${
         onClick ? "cursor-pointer hover:shadow-md" : ""
-      } ${
-        isActive 
-          ? "shadow-sm" 
-          : ""
-      }`}
-      style={{ 
-        animationDelay: `${delay}ms`, 
-        overflow: 'visible',
-        ...(isActive ? { 
-            borderColor: color, 
-            backgroundColor: `${color}15`, // extremely subtle background tint
-            boxShadow: `0 0 0 1px ${color}` // 2px equivalent border without layout shift
-        } : {})
+      } ${isActive ? "shadow-sm" : ""}`}
+      style={{
+        animationDelay: `${delay}ms`,
+        overflow: "visible",
+        ...(isActive
+          ? {
+              borderColor: color,
+              backgroundColor: `${color}15`, // extremely subtle background tint
+              boxShadow: `0 0 0 1px ${color}`, // 2px equivalent border without layout shift
+            }
+          : {}),
       }}
       onClick={onClick}
     >
@@ -90,15 +104,21 @@ export default function StatsCard({ title, value, icon, color, loading, delay = 
         </span>
         <div className="flex items-center gap-1.5 md:gap-2">
           {tooltip && (
-            <div 
+            <div
               className="relative flex items-center justify-center cursor-help text-[hsl(var(--muted-foreground))]"
               onMouseEnter={() => setShowTooltip(true)}
               onMouseLeave={() => setShowTooltip(false)}
-              onClick={(e) => { e.stopPropagation(); setShowTooltip(!showTooltip); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowTooltip(!showTooltip);
+              }}
             >
               <Info size={16} />
               {showTooltip && (
-                <div className="absolute bottom-full right-0 mb-2 w-64 p-3 bg-[hsl(var(--popover))] border border-[hsl(var(--border))] rounded-lg shadow-2xl text-xs text-[hsl(var(--popover-foreground))] z-[100] normal-case font-medium leading-relaxed">
+                <div 
+                  className="absolute bottom-full right-0 mb-2 w-64 p-3 bg-[hsl(var(--popover))] border border-[hsl(var(--border))] rounded-lg shadow-2xl text-xs text-[hsl(var(--popover-foreground))] z-[100] normal-case font-medium leading-relaxed"
+                  style={{ backgroundColor: 'hsl(var(--popover))', opacity: 1 }}
+                >
                   {tooltip}
                 </div>
               )}
@@ -114,7 +134,10 @@ export default function StatsCard({ title, value, icon, color, loading, delay = 
       </div>
 
       <div className="flex items-end gap-2 relative z-10">
-        <span className="text-2xl sm:text-2xl md:text-3xl font-bold tracking-tight animate-count-up" style={{ animationDelay: `${delay + 200}ms` }}>
+        <span
+          className="text-2xl sm:text-2xl md:text-3xl font-bold tracking-tight animate-count-up"
+          style={{ animationDelay: `${delay + 200}ms` }}
+        >
           {displayValue}
         </span>
       </div>

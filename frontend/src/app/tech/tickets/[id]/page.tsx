@@ -59,6 +59,7 @@ import {
   PenTool,
   Keyboard,
   PenLine,
+  Lock,
 } from "lucide-react";
 import SignatureCanvas from "react-signature-canvas";
 import SlaBadge from "@/components/SlaBadge";
@@ -1563,139 +1564,177 @@ function TicketDetailPage() {
 
 
           {/* Quick Actions */}
-          {!isResolved && (
-            <div className="glass-card p-4">
-              <h2 className="text-sm font-semibold mb-3 text-[hsl(var(--muted-foreground))] uppercase tracking-wider">
-                Actions rapides
-              </h2>
-              <div className="flex flex-wrap gap-2">
-                {/* ── Bouton 1 : En attente client (position fixe) ──────── */}
-                {ticket.state !== "waiting_material" && (
-                  ticket.state === "waiting" ? (
-                    /* État actif → affiche "En cours" en bleu */
+          {!isResolved && (() => {
+            const isPaused   = ticket.state === "waiting" || ticket.state === "waiting_material";
+            const isEscalated = ticket.state === "escalated";
+            const hasPendingMaterials = ticket.state === "waiting_material" &&
+              (ticket.materials?.some((m) => m.status === "requested" || m.status === "ordered") ?? false);
+
+            return (
+              <div className="glass-card p-4 space-y-3">
+                <h2 className="text-sm font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">
+                  Actions rapides
+                </h2>
+
+                {/* ── Alerte logistique (priorité maximale) ── */}
+                {hasPendingMaterials && (
+                  <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg border border-amber-500/25 bg-amber-500/8">
+                    <Lock size={14} className="text-amber-500 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-[11px] font-semibold text-amber-500">Reprise bloquée — logistique en attente</p>
+                      <p className="text-[10px] text-amber-500/70 mt-0.5">
+                        L&apos;administrateur doit valider ou livrer les ressources avant que vous puissiez reprendre.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Boutons d'action ── */}
+                <div className="flex flex-wrap gap-2">
+
+                  {/* Reprendre le travail — En attente client */}
+                  {ticket.state === "waiting" && (
                     <button
                       disabled={actionLoading === "resume"}
                       onClick={handleResume}
-                      className="flex items-center text-xs font-semibold px-4 py-2 rounded-lg border border-blue-500/40
-                        bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors disabled:opacity-60"
+                      className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg border border-blue-500/40 bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors disabled:opacity-60"
                     >
-                      {actionLoading === "resume" ? (
-                        <Loader2 size={15} className="animate-spin mr-2" />
-                      ) : (
-                        <PlayCircle size={15} className="mr-2" />
-                      )}
-                      En cours
+                      {actionLoading === "resume"
+                        ? <Loader2 size={15} className="animate-spin" />
+                        : <PlayCircle size={15} />}
+                      Reprendre le travail
                     </button>
-                  ) : (
-                    /* État normal → affiche "En attente client" en ambre */
+                  )}
+
+                  {/* Reprendre le travail — En attente matériel */}
+                  {ticket.state === "waiting_material" && (
                     <button
-                      onClick={() => {
-                        setWaitJustification("");
-                        setShowWaitModal(true);
-                      }}
-                      className="flex items-center text-xs font-semibold px-4 py-2 rounded-lg border border-amber-500/30
-                        bg-amber-600/20 text-amber-500 hover:bg-amber-600/30 transition-colors"
+                      disabled={actionLoading === "resume" || hasPendingMaterials}
+                      onClick={handleResume}
+                      className={`flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg border transition-colors
+                        ${hasPendingMaterials
+                          ? "border-blue-500/15 bg-blue-500/5 text-blue-400/40 opacity-50 cursor-not-allowed"
+                          : "border-blue-500/40 bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 disabled:opacity-60"
+                        }`}
                     >
-                      <Clock size={15} className="mr-2" />
+                      {actionLoading === "resume"
+                        ? <Loader2 size={15} className="animate-spin" />
+                        : hasPendingMaterials
+                          ? <Lock size={15} />
+                          : <PlayCircle size={15} />}
+                      Reprendre le travail
+                    </button>
+                  )}
+
+                  {/* En attente client — visible uniquement en état normal */}
+                  {!isPaused && !isEscalated && (
+                    <button
+                      onClick={() => { setWaitJustification(""); setShowWaitModal(true); }}
+                      className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg border border-amber-500/30 bg-amber-600/20 text-amber-500 hover:bg-amber-600/30 transition-colors"
+                    >
+                      <Clock size={15} />
                       En attente client
                     </button>
-                  )
-                )}
+                  )}
 
-                {/* ── Bouton 2 : En attente matériel / SLA (position fixe) ── */}
-                {ticket.state !== "waiting" && (
-                  ticket.state === "waiting_material" ? (
-                    /* État actif → affiche "En cours" en bleu avec icône pause */
+                  {/* En attente matériel — visible uniquement en état normal */}
+                  {!isPaused && !isEscalated && (
                     <button
-                      disabled={actionLoading === "resume"}
-                      onClick={handleResume}
-                      className="flex items-center text-xs font-semibold px-4 py-2 rounded-lg border border-blue-500/40
-                        bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors disabled:opacity-60"
+                      onClick={() => { setWaitJustification(""); setShowWaitMaterialModal(true); }}
+                      className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg border border-amber-500/30 bg-amber-600/20 text-amber-500 hover:bg-amber-600/30 transition-colors"
                     >
-                      {actionLoading === "resume" ? (
-                        <Loader2 size={15} className="animate-spin mr-2" />
-                      ) : (
-                        <PlayCircle size={15} className="mr-2" />
-                      )}
-                      En cours
-                    </button>
-                  ) : (
-                    /* État normal → affiche "En attente matériel" en ambre */
-                    <button
-                      onClick={() => {
-                        setWaitJustification("");
-                        setShowWaitMaterialModal(true);
-                      }}
-                      className="flex items-center text-xs font-semibold px-4 py-2 rounded-lg border border-amber-500/30
-                        bg-amber-600/20 text-amber-500 hover:bg-amber-600/30 transition-colors"
-                    >
-                      <PackageSearch size={15} className="mr-2" />
+                      <PackageSearch size={15} />
                       En attente matériel
                     </button>
-                  )
-                )}
+                  )}
 
-                {/* Escalader / Annuler Escalade */}
-                {ticket.state === "escalated" &&
-                ticket.escalated_by_id === user?.id ? (
-                  <button
-                    disabled={actionLoading === "unescalate"}
-                    onClick={handleUnescalate}
-                    className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg border border-[hsl(var(--muted-foreground)/0.3)]
-                      bg-[hsl(var(--muted)/0.5)] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-colors disabled:opacity-60"
-                  >
-                    {actionLoading === "unescalate" ? (
-                      <Loader2 size={13} className="animate-spin" />
-                    ) : (
-                      <ArrowLeft size={13} />
-                    )}
-                    Annuler l'escalade
-                  </button>
-                ) : (
-                  ticket.state !== "escalated" && (
-                    <button
-                      disabled={escalating}
-                      onClick={() => {
-                        setEscalationNote("");
-                        setShowEscalateModal(true);
-                      }}
-                      className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg border border-purple-500/30
-                      bg-purple-500/10 text-purple-500 hover:bg-purple-500/20 transition-colors disabled:opacity-60"
-                    >
-                      {escalating ? (
-                        <Loader2 size={13} className="animate-spin" />
-                      ) : (
-                        <ArrowUpCircle size={13} />
+                  {/* Escalader — désactivé si pausé */}
+                  {!isEscalated && (
+                    <div className="relative group">
+                      <button
+                        disabled={isPaused || escalating}
+                        onClick={() => { if (isPaused) return; setEscalationNote(""); setShowEscalateModal(true); }}
+                        className={`flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg border transition-colors
+                          ${isPaused
+                            ? "border-purple-500/15 bg-purple-500/5 text-purple-500/40 opacity-50 cursor-not-allowed"
+                            : "border-purple-500/30 bg-purple-500/10 text-purple-500 hover:bg-purple-500/20 disabled:opacity-60"
+                          }`}
+                      >
+                        {escalating ? <Loader2 size={13} className="animate-spin" /> : <ArrowUpCircle size={13} />}
+                        Escalader
+                      </button>
+                      {isPaused && (
+                        <div className="absolute bottom-[calc(100%+6px)] left-1/2 -translate-x-1/2 z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                          <div className="bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-lg shadow-xl px-3 py-2 w-64">
+                            <p className="text-[11px] text-[hsl(var(--muted-foreground))] text-center leading-relaxed">
+                              Veuillez reprendre l&apos;intervention pour débloquer cette action
+                            </p>
+                          </div>
+                          <div className="w-2 h-2 bg-[hsl(var(--card))] border-b border-r border-[hsl(var(--border))] rotate-45 mx-auto -mt-1" />
+                        </div>
                       )}
-                      Escalader
-                    </button>
-                  )
-                )}
+                    </div>
+                  )}
 
-                {/* Résoudre */}
-                <button
-                  onClick={() => {
-                    const pendingMaterials = ticket.materials?.some(
-                      (m) => m.status === "requested" || m.status === "ordered"
-                    );
-                    if (pendingMaterials) {
-                      toast.error(
-                        "Impossible de résoudre : un ou plusieurs matériels sont encore en attente ou en commande.",
-                        { duration: 5000 }
-                      );
-                      return;
-                    }
-                    setShowResolveModal(true);
-                  }}
-                  className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg border border-emerald-500/30
-                    bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 transition-colors"
-                >
-                  <CheckCircle2 size={13} />
-                  Résoudre
-                </button>
+                  {/* Annuler l'escalade */}
+                  {isEscalated && ticket.escalated_by_id === user?.id && (
+                    <button
+                      disabled={actionLoading === "unescalate"}
+                      onClick={handleUnescalate}
+                      className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg border border-[hsl(var(--muted-foreground)/0.3)] bg-[hsl(var(--muted)/0.5)] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-colors disabled:opacity-60"
+                    >
+                      {actionLoading === "unescalate" ? <Loader2 size={13} className="animate-spin" /> : <ArrowLeft size={13} />}
+                      Annuler l&apos;escalade
+                    </button>
+                  )}
+
+                  {/* Résoudre — désactivé si pausé */}
+                  <div className="relative group">
+                    <button
+                      disabled={isPaused}
+                      onClick={() => {
+                        if (isPaused) return;
+                        const pendingMaterials = ticket.materials?.some(
+                          (m) => m.status === "requested" || m.status === "ordered"
+                        );
+                        if (pendingMaterials) {
+                          toast.error("Impossible de résoudre : un ou plusieurs matériels sont encore en attente ou en commande.", { duration: 5000 });
+                          return;
+                        }
+                        setShowResolveModal(true);
+                      }}
+                      className={`flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg border transition-colors
+                        ${isPaused
+                          ? "border-emerald-500/15 bg-emerald-500/5 text-emerald-600/40 opacity-50 cursor-not-allowed"
+                          : "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20"
+                        }`}
+                    >
+                      <CheckCircle2 size={13} />
+                      Résoudre
+                    </button>
+                    {isPaused && (
+                      <div className="absolute bottom-[calc(100%+6px)] left-1/2 -translate-x-1/2 z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        <div className="bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-lg shadow-xl px-3 py-2 w-64">
+                          <p className="text-[11px] text-[hsl(var(--muted-foreground))] text-center leading-relaxed">
+                            Veuillez reprendre l&apos;intervention pour débloquer cette action
+                          </p>
+                        </div>
+                        <div className="w-2 h-2 bg-[hsl(var(--card))] border-b border-r border-[hsl(var(--border))] rotate-45 mx-auto -mt-1" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Bannière SLA suspendu (en bas, secondaire) ── */}
+                {isPaused && !hasPendingMaterials && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-blue-400/20 bg-blue-500/5 text-blue-300 text-[11px] font-medium">
+                    <PauseCircle size={13} className="text-blue-400 shrink-0" />
+                    <span>SLA suspendu — reprenez l&apos;intervention pour débloquer les autres actions.</span>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {isResolved && (
             <div className="glass-card p-4 border border-emerald-500/20 bg-emerald-500/5">
