@@ -297,14 +297,23 @@ class SupportTicketController(http.Controller):
 
         # Filtrer par user_id ou assigned_to si fourni
         user_id = kw.get('user_id')
+        role = kw.get('role', '')
         assigned_to = kw.get('assigned_to')
         category = kw.get('category')
         domain = []
         
         if user_id:
             user = request.env['res.users'].sudo().browse(int(user_id))
-            if user.exists() and getattr(user, 'x_support_role', '') != 'admin':
-                domain.append(('user_id', '=', int(user_id)))
+            if user.exists():
+                effective_role = role or getattr(user, 'x_support_role', 'user') or 'user'
+                if effective_role == 'admin':
+                    pass  # Admin voit TOUS les tickets — aucun filtre
+                elif effective_role == 'tech':
+                    # Tech voit tous les tickets qui lui sont assignés (quelle que soit l'acceptation)
+                    domain.append(('assigned_to_id', '=', int(user_id)))
+                else:
+                    # Utilisateur standard : tickets qu'il a créés
+                    domain.append(('user_id', '=', int(user_id)))
             
         if assigned_to:
             # "Mes Tickets" : tickets assignés au technicien ET explicitement acceptés
@@ -315,6 +324,7 @@ class SupportTicketController(http.Controller):
             domain.append(('ai_classification.name', '=ilike', category))
 
         tickets = env.search(domain, order='create_date desc')
+
         data = [{
             'id': t.id,
             'name': t.name,

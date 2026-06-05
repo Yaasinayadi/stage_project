@@ -634,13 +634,12 @@ function Dashboard() {
         />
       </div>
 
-      {/* ─── Unified Toolbar ─── */}
       <div
         className="glass-card relative z-20 shadow-sm animate-fade-in"
         style={{ animationDelay: "0.2s" }}
         onClick={() => setOpenDropdown(null)}
       >
-        <div className="flex items-center gap-2 p-2.5 sm:p-3 flex-wrap sm:flex-nowrap">
+        <div className="flex items-center gap-2 p-2.5 sm:p-3 flex-nowrap">
 
           {/* ── SEARCH: icon-only on mobile, full bar on desktop ── */}
           <div className="relative flex items-center" onClick={(e) => e.stopPropagation()}>
@@ -680,12 +679,12 @@ function Dashboard() {
           </div>
 
           {/* ── DESKTOP DROPDOWNS (hidden on mobile) ── */}
-          <div className="hidden md:flex items-center gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
+          <div className="hidden md:flex items-center gap-1.5 lg:gap-2 flex-nowrap" onClick={(e) => e.stopPropagation()}>
             {/* Categories */}
             <div className="relative">
               <button
                 onClick={() => setOpenDropdown(openDropdown === "category" ? null : "category")}
-                className={`flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-semibold transition-all border ${
+                className={`flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-semibold transition-all border whitespace-nowrap ${
                   activeFilters.categories.length > 0 || openDropdown === "category"
                     ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
                     : "bg-transparent border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)] hover:text-[hsl(var(--foreground))]"
@@ -711,7 +710,7 @@ function Dashboard() {
             <div className="relative">
               <button
                 onClick={() => setOpenDropdown(openDropdown === "status" ? null : "status")}
-                className={`flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-semibold transition-all border ${
+                className={`flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-semibold transition-all border whitespace-nowrap ${
                   activeFilters.statuses.length > 0 || openDropdown === "status"
                     ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
                     : "bg-transparent border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)] hover:text-[hsl(var(--foreground))]"
@@ -737,7 +736,7 @@ function Dashboard() {
             <div className="relative">
               <button
                 onClick={() => setOpenDropdown(openDropdown === "priority" ? null : "priority")}
-                className={`flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-semibold transition-all border ${
+                className={`flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-semibold transition-all border whitespace-nowrap ${
                   activeFilters.priorities.length > 0 || openDropdown === "priority"
                     ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
                     : "bg-transparent border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)] hover:text-[hsl(var(--foreground))]"
@@ -764,7 +763,7 @@ function Dashboard() {
               <div className="relative">
                 <button
                   onClick={() => setOpenDropdown(openDropdown === "agent" ? null : "agent")}
-                  className={`flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-semibold transition-all border ${
+                  className={`flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-semibold transition-all border whitespace-nowrap ${
                     selectedAgent !== "" || openDropdown === "agent"
                       ? "bg-[hsl(var(--primary)/0.12)] border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
                       : "bg-transparent border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/0.2)] hover:text-[hsl(var(--foreground))]"
@@ -806,9 +805,10 @@ function Dashboard() {
 
             {/* Reset */}
             {hasActiveFilters && (
-              <button onClick={resetFilters} className="flex items-center gap-1.5 h-9 px-3 text-xs font-semibold text-red-500 hover:text-red-600 bg-red-500/10 hover:bg-red-500/20 rounded-lg transition-colors border border-red-500/20">
+              <button onClick={resetFilters} className="flex items-center gap-1.5 h-9 px-3 text-xs font-semibold text-red-500 hover:text-red-600 bg-red-500/10 hover:bg-red-500/20 rounded-lg transition-colors border border-red-500/20 whitespace-nowrap">
                 <XCircle size={14} />
-                Réinitialiser
+                <span className="hidden xl:inline">Réinitialiser</span>
+                <span className="xl:hidden">Réinit.</span>
               </button>
             )}
           </div>

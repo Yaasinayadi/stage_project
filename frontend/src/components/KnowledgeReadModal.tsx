@@ -90,7 +90,7 @@ export default function KnowledgeReadModal({
       onClick={handleOverlayClick}
     >
       <div
-        className="glass-card w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden scale-in"
+        className="relative w-full max-w-2xl max-h-[90vh] flex flex-col rounded-2xl border border-[hsl(var(--border)/0.6)] bg-[hsl(var(--background))] shadow-2xl overflow-hidden scale-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── Header ── */}

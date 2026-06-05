@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
 import json
+import re as _re
 
 from langchain_groq import ChatGroq
 from langchain.schema import SystemMessage, HumanMessage, AIMessage
@@ -173,8 +174,6 @@ def extract_keywords():
 # ─────────────────────────────────────────────
 # ROUTE : Chatbot IA
 # ─────────────────────────────────────────────
-import re as _re
-
 @app.route("/chat", methods=["POST"])
 def chat_with_bot():
     data = request.get_json()
@@ -183,20 +182,52 @@ def chat_with_bot():
         
     user_message = data["user_message"]
     session_id = data.get("session_id", "default")
-    user_tickets = data.get("user_tickets", [])
+    context = data.get("context", {})
+    user_tickets = context.get("user_tickets_details", [])
+    live_dashboard_stats = context.get("live_dashboard_stats", {})
     user_name = data.get("user_name", "Utilisateur")
-    
+
+    # ── Compression de la liste des tickets ──
     if user_tickets:
         try:
-            tickets_data_str = json.dumps(user_tickets, ensure_ascii=False, indent=2)
+            compressed_lines = []
+            for t in user_tickets:
+                ref     = t.get("ref", "")
+                statut  = t.get("statut", "")
+                assigne = t.get("assigne_a") or "Non assigné"
+                createur = t.get("createur") or "Système"
+                sujet   = t.get("sujet", "")
+                compressed_lines.append(f"{ref}|{statut}|{assigne}|{createur}|{sujet}")
+            tickets_data_str = "\n".join(compressed_lines)
         except Exception:
             tickets_data_str = "Erreur de lecture des tickets."
     else:
         tickets_data_str = "LISTE VIDE"
-        
-    dynamic_system_prompt = f"""ALERTE : Tu es intégré à Odoo. Voici les tickets de l'utilisateur {user_name} :
-{tickets_data_str}
 
+    # ── Statistiques dynamiques injectées depuis le frontend ──
+    total_tickets         = live_dashboard_stats.get("total", 0)
+    resolved_count        = live_dashboard_stats.get("resolved", 0)
+    in_progress_count     = live_dashboard_stats.get("in_progress", 0)
+    overdue_count         = live_dashboard_stats.get("overdue", 0)
+    latest_ticket         = live_dashboard_stats.get("latest_ticket", "Aucun")
+    latest_resolved       = live_dashboard_stats.get("latest_resolved_ticket", "Aucun")
+    latest_in_progress    = live_dashboard_stats.get("latest_in_progress_ticket", "Aucun")
+
+    stats_injection = (
+        f"\n[STATISTIQUES EN TEMPS RÉEL]\n"
+        f"Total tickets: {total_tickets}\n"
+        f"Résolus: {resolved_count}\n"
+        f"En cours: {in_progress_count}\n"
+        f"En retard: {overdue_count}\n"
+        f"Dernier ticket résolu: {latest_resolved}\n"
+        f"Dernier ticket en cours: {latest_in_progress}\n"
+        f"Ticket le plus récent (tous statuts): {latest_ticket}\n"
+        f"[/STATISTIQUES]\n"
+    )
+
+    dynamic_system_prompt = f"""ALERTE : Tu es intégré à Odoo. Voici les tickets de l'utilisateur {user_name} (format: ref|statut|assigné|créateur|sujet) :
+{tickets_data_str}
+{stats_injection}
 RÈGLES STRICTES :
 1. Ne demande JAMAIS l'ID ou le nom à l'utilisateur.
 2. Si l'utilisateur demande la LISTE de ses tickets (plusieurs), génère EXACTEMENT la balise : [SHOW_TICKETS: TK-XXXX, TK-YYYY].
@@ -205,8 +236,13 @@ RÈGLES STRICTES :
 5. Pour déterminer l'état d'assignation : Pas d'assigné = Non assigné. Assigné mais x_accepted est False = Assigné (en attente de confirmation). Assigné et x_accepted est True = En cours de traitement.
 6. N'UTILISE AUCUN EMOJI. Rédige ton texte de manière ultra-concise et professionnelle.
 7. Si la liste de l'utilisateur est VIDE (LISTE VIDE), dis simplement : "Vous n'avez pas de tickets ouverts".
-8. Si le ticket est en statut 'escalated', tu DOIS impérativement utiliser cette formulation précise : "Le ticket [Référence] a été escaladé par [escalated_by_name] et attend une ré-assignation par l'administrateur." (où [Référence] est le name du ticket, et [escalated_by_name] est le nom de celui qui a escaladé)."""
-    
+8. Si le ticket est en statut 'escalated', tu DOIS impérativement utiliser cette formulation précise : "Le ticket [Référence] a été escaladé par [escalated_by_name] et attend une ré-assignation par l'administrateur."
+9. STATISTIQUES EXACTES (TRÈS IMPORTANT) : Pour toutes les questions sur "combien", "dernier", "total", utilise EXCLUSIVEMENT les valeurs de [STATISTIQUES EN TEMPS RÉEL]. Ces valeurs sont calculées par le système et sont 100% exactes. Ne calcule jamais toi-même.
+10. Si l'utilisateur demande UNIQUEMENT de "compter" ou le "nombre" de tickets, donne la réponse chiffrée et NE METS AUCUNE balise [SHOW_TICKETS].
+11. Pour "dernier ticket résolu" : utilise la valeur de "Dernier ticket résolu" dans [STATISTIQUES EN TEMPS RÉEL]. Cherche ensuite son sujet dans la liste des tickets et réponds naturellement. Finis par [SHOW_TICKETS: TK-XXXX].
+12. Pour "dernier ticket résolu par X" : dans la liste des tickets, filtre les tickets dont l'assigné = X et le statut = résolu, prends celui avec le ref le plus grand (plus récent). Finis par [SHOW_TICKETS: TK-XXXX].
+13. Pour "tickets créés par X" ou "liste des tickets de X" : génère la balise [SHOW_TICKETS] en incluant TOUTES les références correspondantes (ex: [SHOW_TICKETS: TK-0001, TK-0002])."""
+
     if not llm:
         return jsonify({"bot_reply": "Erreur système: Connexion à l'IA non configurée (Clé API manquante).", "text": "Erreur système: Connexion à l'IA non configurée.", "ticket_id": None})
         
@@ -219,11 +255,35 @@ RÈGLES STRICTES :
         history = chat_histories[session_id]
         history.append(HumanMessage(content=user_message))
         
-        if len(history) > 21:
-            chat_histories[session_id] = [history[0]] + history[-20:]
+        # Garder max 5 échanges (11 messages: sys + 5 paires)
+        if len(history) > 11:
+            chat_histories[session_id] = [history[0]] + history[-10:]
             history = chat_histories[session_id]
+
+        def try_invoke(hist):
+            return llm.invoke(hist)
             
-        response = llm.invoke(history)
+        try:
+            response = try_invoke(history)
+        except Exception as api_err:
+            err_str = str(api_err)
+            print(f"Erreur LLM (tentative 1): {api_err}", flush=True)
+            if "413" in err_str or "Request too large" in err_str or "rate_limit_exceeded" in err_str:
+                # Fallback 1: historique réduit à 2 derniers messages
+                h2 = [history[0]] + history[-2:]
+                try:
+                    response = try_invoke(h2)
+                    chat_histories[session_id] = h2
+                except Exception as api_err2:
+                    print(f"Erreur LLM (tentative 2): {api_err2}", flush=True)
+                    # Fallback 2: sans la liste des tickets, juste les stats
+                    minimal_prompt = f"Assistant IT de {user_name}. {stats_injection} Réponds à la question. Utilise [SHOW_TICKETS: TK-...] pour les tickets."
+                    h3 = [SystemMessage(content=minimal_prompt), HumanMessage(content=user_message)]
+                    response = try_invoke(h3)
+                    chat_histories[session_id] = h3
+            else:
+                raise api_err
+
         raw_reply = response.content
         history.append(AIMessage(content=raw_reply))
         
@@ -232,7 +292,6 @@ RÈGLES STRICTES :
         ticket_id_match = _re.search(r'\[TICKET_ID:\s*(TK-\d+)\]', raw_reply)
         if ticket_id_match:
             ticket_id = ticket_id_match.group(1)
-            # Nettoyer le texte en retirant la balise
             clean_text = _re.sub(r'\s*\[TICKET_ID:\s*TK-\d+\]', '', raw_reply).strip()
         else:
             clean_text = raw_reply
@@ -244,9 +303,8 @@ RÈGLES STRICTES :
         })
     except Exception as e:
         import traceback
-        err_msg = traceback.format_exc()
-        print(f"Erreur LLM chat: {err_msg}", flush=True)
-        return jsonify({"bot_reply": f"Erreur LLM: {str(e)}", "text": f"Erreur LLM: {str(e)}", "ticket_id": None})
+        print(f"Erreur LLM chat: {traceback.format_exc()}", flush=True)
+        return jsonify({"bot_reply": "Désolé, une erreur est survenue. Veuillez réessayer.", "text": "Désolé, une erreur est survenue.", "ticket_id": None})
 
 # ─────────────────────────────────────────────
 # HEALTH CHECK

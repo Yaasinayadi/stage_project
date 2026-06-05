@@ -1,8 +1,17 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { X, Loader2, CheckCircle2, BookOpen, ClipboardList, Lightbulb } from "lucide-react";
+import {
+  X,
+  Loader2,
+  CheckCircle2,
+  BookOpen,
+  ClipboardList,
+  Lightbulb,
+  ChevronDown,
+  Check,
+} from "lucide-react";
 import axios from "axios";
 import type { KbArticle, KbTag } from "./KnowledgeCard";
 import { ODOO_URL } from "@/lib/config";
@@ -21,6 +30,74 @@ type Props = {
 };
 
 type Step = "form" | "saving" | "success";
+
+function InlineCategorySelect({
+  value,
+  onChange,
+  categories,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  categories: string[];
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative w-full">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between text-left bg-[hsl(var(--secondary)/0.5)] border border-[hsl(var(--border)/0.8)] focus:border-[hsl(var(--primary)/0.6)] focus:ring-2 focus:ring-[hsl(var(--primary)/0.15)] rounded-lg px-3.5 py-2.5 text-sm text-[hsl(var(--foreground))] transition-all outline-none font-medium"
+      >
+        <span className="truncate pr-4">
+          {value || "— Choisir une catégorie —"}
+        </span>
+        <ChevronDown
+          size={16}
+          className={`transition-transform text-[hsl(var(--muted-foreground))] flex-shrink-0 ${
+            open ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute top-[calc(100%+6px)] left-0 z-50 w-full rounded-xl overflow-hidden shadow-2xl animate-fade-in flex flex-col bg-white border border-slate-200 text-slate-900 dark:bg-zinc-900/50 dark:border-white/10 dark:text-white backdrop-blur-md">
+          <div className="p-1.5 space-y-0.5 max-h-56 overflow-y-auto custom-scrollbar">
+            {categories.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => {
+                  onChange(c);
+                  setOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                  value === c
+                    ? "bg-slate-100 dark:bg-white/10"
+                    : "hover:bg-slate-50 dark:hover:bg-white/5"
+                }`}
+              >
+                <span className="truncate pr-2">{c}</span>
+                {value === c && <Check size={14} className="flex-shrink-0" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function KnowledgeModal({
   article,
@@ -47,7 +124,9 @@ export default function KnowledgeModal({
     article?.tags.map((t) => t.name).join(", ") ?? "",
   );
   // Phase 4.4 — Deux champs séparés : description du problème + solution
-  const [problemDescription, setProblemDescription] = useState(initialProblemDescription ?? "");
+  const [problemDescription, setProblemDescription] = useState(
+    initialProblemDescription ?? "",
+  );
   const [solution, setSolution] = useState(initialContent ?? "");
   const [isPublished, setIsPublished] = useState(
     article?.is_published ?? false,
@@ -83,14 +162,15 @@ export default function KnowledgeModal({
         .then((res) => {
           if (res.data.status === 200) {
             const raw: string = res.data.data.solution ?? "";
-            const problem_desc: string = res.data.data.problem_description ?? "";
-            
+            const problem_desc: string =
+              res.data.data.problem_description ?? "";
+
             if (problem_desc) {
-                setProblemDescription(problem_desc);
-                setSolution(raw);
-            } else if (raw.includes('---SOLUTION---')) {
+              setProblemDescription(problem_desc);
+              setSolution(raw);
+            } else if (raw.includes("---SOLUTION---")) {
               // Rétrocompatibilité si un article a été sauvegardé avec le séparateur avant la maj Odoo
-              const [desc, sol] = raw.split('---SOLUTION---');
+              const [desc, sol] = raw.split("---SOLUTION---");
               setProblemDescription(desc.trim());
               setSolution(sol.trim());
             } else {
@@ -99,7 +179,10 @@ export default function KnowledgeModal({
             }
           }
         })
-        .catch(() => { setProblemDescription(""); setSolution(""); });
+        .catch(() => {
+          setProblemDescription("");
+          setSolution("");
+        });
     }
   }, [article]);
 
@@ -218,7 +301,7 @@ export default function KnowledgeModal({
       }}
     >
       <div
-        className="glass-card w-full max-w-xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden scale-in"
+        className="relative w-full max-w-xl max-h-[90vh] flex flex-col rounded-2xl border border-[hsl(var(--border)/0.6)] bg-[hsl(var(--background))] shadow-2xl overflow-hidden scale-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── Contextual banner when opened from ticket resolve ── */}
@@ -295,18 +378,11 @@ export default function KnowledgeModal({
                 <label className="block text-sm font-semibold mb-1.5">
                   Catégorie IT
                 </label>
-                <select
+                <InlineCategorySelect
                   value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="input-field focus-ring w-full"
-                >
-                  <option value="">— Choisir une catégorie —</option>
-                  {categories.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setCategory}
+                  categories={categories}
+                />
               </div>
 
               {/* Tags */}
@@ -328,9 +404,14 @@ export default function KnowledgeModal({
               {/* Phase 4.4 — Champ 1 : Description du problème */}
               <div>
                 <label className="block text-sm font-semibold mb-1.5 flex items-center gap-1.5">
-                  <ClipboardList size={14} className="text-[hsl(var(--muted-foreground))]" />
+                  <ClipboardList
+                    size={14}
+                    className="text-[hsl(var(--muted-foreground))]"
+                  />
                   Description du problème
-                  <span className="text-[hsl(var(--muted-foreground))] font-normal text-xs ml-1">(optionnelle)</span>
+                  <span className="text-[hsl(var(--muted-foreground))] font-normal text-xs ml-1">
+                    (optionnelle)
+                  </span>
                 </label>
                 <textarea
                   value={problemDescription}
@@ -356,7 +437,8 @@ export default function KnowledgeModal({
                   placeholder="Décrivez les étapes de résolution, commandes, liens utiles..."
                 />
                 <p className="text-[0.65rem] text-[hsl(var(--muted-foreground))] mt-1">
-                  HTML accepté : &lt;b&gt;, &lt;ul&gt;, &lt;li&gt;, &lt;p&gt;, &lt;h3&gt;
+                  HTML accepté : &lt;b&gt;, &lt;ul&gt;, &lt;li&gt;, &lt;p&gt;,
+                  &lt;h3&gt;
                 </p>
               </div>
 

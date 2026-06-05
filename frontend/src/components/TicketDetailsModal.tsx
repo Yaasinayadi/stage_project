@@ -152,6 +152,7 @@ type TicketDetailsModalProps = {
   onClose: () => void;
   onRefresh?: () => void;
   hideBack?: boolean;
+  hideEdit?: boolean;
 };
 
 // ─── Constants ───
@@ -2094,6 +2095,7 @@ export default function TicketDetailsModal({
   onClose,
   onRefresh,
   hideBack = false,
+  hideEdit = false,
 }: TicketDetailsModalProps) {
   // ══════════════════════════════════════════
   //  HOOKS — tous AVANT le return conditionnel
@@ -2824,8 +2826,8 @@ export default function TicketDetailsModal({
               </button>
             )}
 
-            {/* Bouton MODIFIER — uniquement en mode lecture */}
-            {!isEditing && canEdit && (
+            {/* Bouton MODIFIER — uniquement en mode lecture, masqué depuis le chatbot */}
+            {!isEditing && canEdit && !hideEdit && (
               <button
                 onClick={() => setIsEditing(true)}
                 className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-semibold text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.1)] border border-[hsl(var(--primary)/0.2)] transition-all"

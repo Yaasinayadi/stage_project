@@ -123,7 +123,10 @@ export default function Chatbot({
   const fetchTickets = async () => {
     if (!user) return;
     try {
-      const res = await axios.get(`${ODOO_URL}/api/tickets?user_id=${user.id}`);
+      const role = user.x_support_role || "user";
+      const res = await axios.get(
+        `${ODOO_URL}/api/tickets?user_id=${user.id}&role=${role}`
+      );
       if (res.data.status === 200) {
         setRawUserTickets(res.data.data);
         setUserTickets(
@@ -134,6 +137,7 @@ export default function Chatbot({
               sujet: t.name,
               statut: t.state,
               assigne_a: t.assigned_to || "Non assigné",
+              createur: t.user_name || "Système",
               categorie: t.category,
               priorite: t.priority,
               escalated_by_name: t.escalated_by_name || null,
@@ -166,8 +170,9 @@ export default function Chatbot({
   // ── Refresh tickets whenever the chat is opened ──
   useEffect(() => {
     if (isOpen && user) {
+      const role = user.x_support_role || "user";
       axios
-        .get(`${ODOO_URL}/api/tickets?user_id=${user.id}`)
+        .get(`${ODOO_URL}/api/tickets?user_id=${user.id}&role=${role}`)
         .then((res) => {
           if (res.data.status === 200) {
             setRawUserTickets(res.data.data);
@@ -179,6 +184,7 @@ export default function Chatbot({
                   sujet: t.name,
                   statut: t.state,
                   assigne_a: t.assigned_to || "Non assigné",
+                  createur: t.user_name || "Système",
                   categorie: t.category,
                   priorite: t.priority,
                   escalated_by_name: t.escalated_by_name || null,
@@ -311,6 +317,7 @@ export default function Chatbot({
               sujet: t.name,
               statut: t.state,
               assigne_a: t.assigned_to || "Non assigné",
+              createur: t.user_name || "Système",
               categorie: t.category,
               priorite: t.priority,
               escalated_by_name: t.escalated_by_name || null,
@@ -330,15 +337,68 @@ export default function Chatbot({
         sujet: t.sujet,
         statut: t.statut,
         assigne_a: t.assigne_a,
+        createur: t.createur,
         priorite: t.priorite,
+        categorie: t.categorie,
         escalade: t.escalated_by_name || undefined
       }));
+
+      let latest_ticket = "Aucun";
+      let latest_resolved_ticket = "Aucun";
+      let latest_in_progress_ticket = "Aucun";
+      
+      if (freshRaw && freshRaw.length > 0) {
+        const sortedByCreate = [...freshRaw].sort((a, b) => {
+          const dateA = String(a.create_date || "0");
+          const dateB = String(b.create_date || "0");
+          return dateB.localeCompare(dateA);
+        });
+        if (sortedByCreate.length > 0) latest_ticket = `TK-${String(sortedByCreate[0].id).padStart(4, "0")}`;
+        
+        const resolvedList = freshRaw.filter((t: any) => ["done", "resolved", "closed", "résolu"].includes(t.state));
+        if (resolvedList.length > 0) {
+          const sortedByResolved = [...resolvedList].sort((a, b) => {
+            const dateA = String(a.create_date || "0");
+            const dateB = String(b.create_date || "0");
+            return dateB.localeCompare(dateA);
+          });
+          latest_resolved_ticket = `TK-${String(sortedByResolved[0].id).padStart(4, "0")}`;
+        }
+        
+        const inProgressList = freshRaw.filter((t: any) => t.state === "in_progress" || t.state === "cours");
+        if (inProgressList.length > 0) {
+          const sortedByProgress = [...inProgressList].sort((a, b) => {
+            const dateA = String(a.create_date || "0");
+            const dateB = String(b.create_date || "0");
+            return dateB.localeCompare(dateA);
+          });
+          latest_in_progress_ticket = `TK-${String(sortedByProgress[0].id).padStart(4, "0")}`;
+        }
+      }
+
+      const live_dashboard_stats = {
+        total: freshRaw ? freshRaw.length : 0,
+        resolved: freshRaw ? freshRaw.filter((t: any) => ["done", "resolved", "closed", "résolu"].includes(t.state)).length : 0,
+        in_progress: freshRaw ? freshRaw.filter((t: any) => t.state === "in_progress" || t.state === "cours").length : 0,
+        overdue: freshRaw ? freshRaw.filter((t: any) => {
+          if (["done", "resolved", "closed", "résolu"].includes(t.state)) return false;
+          if (!t.deadline) return false;
+          return new Date(t.deadline) < new Date();
+        }).length : 0,
+        latest_ticket,
+        latest_resolved_ticket,
+        latest_in_progress_ticket,
+      };
 
       const iaUrl = `http://${window.location.hostname}:8000/chat`;
       const res = await axios.post(iaUrl, {
         user_message: userMessage,
         session_id: sessionId,
-        user_tickets: liteTickets,
+        context: {
+          last_sync_timestamp: new Date().toISOString(),
+          live_dashboard_stats: live_dashboard_stats,
+          user_tickets_details: liteTickets
+        },
         user_name: user?.name || "Utilisateur",
       });
       const botText = res.data.text || res.data.bot_reply || "";
@@ -957,6 +1017,7 @@ export default function Chatbot({
           viewType={selectedTicket.viewType}
           onClose={() => setSelectedTicket(null)}
           hideBack={true}
+          hideEdit={true}
         />
       )}
     </>
