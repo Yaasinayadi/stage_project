@@ -66,6 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const persistUser = useCallback((userData: User) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(userData));
     setUser(userData);
+    window.dispatchEvent(new Event("auth_changed"));
   }, []);
 
   // Fetch fresh user data from Odoo and update if changed
@@ -214,6 +215,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
     setUser(null);
+    window.dispatchEvent(new Event("auth_changed"));
   }, []);
 
   return (

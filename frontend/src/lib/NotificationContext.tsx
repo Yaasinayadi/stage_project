@@ -71,7 +71,11 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const fetchNotifications = useCallback(async (silent = false) => {
     const userId = getUserId();
-    if (!userId) return;
+    if (!userId) {
+      setNotifs([]);
+      prevUnreadRef.current = 0;
+      return;
+    }
 
     if (!silent) setLoading(true);
     try {
@@ -132,8 +136,23 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(() => fetchNotifications(true), 30000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => fetchNotifications(true), 10000);
+
+    const handleAuthChange = () => {
+      const userId = getUserId();
+      if (!userId) {
+        setNotifs([]);
+        prevUnreadRef.current = 0;
+      } else {
+        fetchNotifications();
+      }
+    };
+
+    window.addEventListener("auth_changed", handleAuthChange);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("auth_changed", handleAuthChange);
+    };
   }, [fetchNotifications]);
 
   const markRead = async (id: number, silent = false) => {
