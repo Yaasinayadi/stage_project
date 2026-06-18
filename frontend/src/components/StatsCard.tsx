@@ -116,7 +116,7 @@ export default function StatsCard({
               <Info size={16} />
               {showTooltip && (
                 <div 
-                  className="absolute bottom-full right-0 mb-2 w-64 p-3 bg-[hsl(var(--popover))] border border-[hsl(var(--border))] rounded-lg shadow-2xl text-xs text-[hsl(var(--popover-foreground))] z-[100] normal-case font-medium leading-relaxed"
+                  className="absolute bottom-full mb-2 right-0 w-64 p-3 bg-[hsl(var(--popover))] border border-[hsl(var(--border))] rounded-lg shadow-2xl text-xs text-[hsl(var(--popover-foreground))] z-[100] normal-case font-medium leading-relaxed"
                   style={{ backgroundColor: 'hsl(var(--popover))', opacity: 1 }}
                 >
                   {tooltip}

@@ -120,7 +120,7 @@ const renderPieActiveShape = (props: any) => {
   const by = ly - boxH / 2;
 
   return (
-    <g>
+    <g style={{ outline: 'none' }}>
       {/* 1. Draw the slice exactly as it is (no zoom) */}
       <path
         d={[
@@ -146,7 +146,7 @@ const renderPieActiveShape = (props: any) => {
         opacity={0.8}
       />
       {/* 3. The card label */}
-      <foreignObject x={bx} y={by} width={containerW} height={boxH + 20} style={{ overflow: 'visible' }}>
+      <foreignObject x={bx} y={by} width={containerW} height={boxH + 20} style={{ overflow: 'visible', outline: 'none' }}>
         <div style={{
           width: "100%",
           height: "100%",
@@ -286,7 +286,7 @@ function AnalyticsDashboard() {
     <div className="w-full" onClick={() => setIsMorePeriodsOpen(false)}>
       <div className="p-4 sm:p-6 lg:p-8 max-w-[1400px] mx-auto space-y-6">
         {/* ── HEADER ───────────────────────────────────────────────── */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-in relative z-50">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[hsl(var(--primary)/0.2)] flex items-center justify-center text-[hsl(var(--primary))] shadow-sm flex-shrink-0">
               <BarChart3 size={22} />
@@ -302,7 +302,7 @@ function AnalyticsDashboard() {
           </div>
 
           {/* Right section: Period filter + Bell */}
-          <div className="flex items-center gap-3 relative z-50">
+          <div className="flex items-center gap-3 relative">
             <div className="flex bg-[hsl(var(--muted)/0.3)] p-1.5 rounded-xl border border-[hsl(var(--border)/0.5)] shadow-sm w-max">
               {/* Primary Tabs */}
               {VISIBLE_PERIODS.map((p) => (
@@ -458,7 +458,7 @@ function AnalyticsDashboard() {
 
         {/* ── KPI CARDS ────────────────────────────────────────────── */}
         {/* 2 col on xs/sm, 4 on lg */}
-        <div className="grid gap-2 sm:gap-4 grid-cols-2 lg:grid-cols-4 animate-fade-in [animation-delay:100ms] relative z-40 has-[:hover]:z-[60]">
+        <div className="grid gap-2 sm:gap-4 grid-cols-2 lg:grid-cols-4 animate-fade-in [animation-delay:100ms] relative z-40 has-[:hover]:z-[60] pt-4 sm:pt-8">
           <StatsCard
             title="Total Tickets"
             value={data.counters.total}
@@ -643,7 +643,7 @@ function AnalyticsDashboard() {
               ) : (
                 <>
                   {/* Donut */}
-                  <div className="relative w-full h-[240px] [&>div]:!overflow-visible [&_.recharts-wrapper]:!overflow-visible">
+                  <div className="relative w-full h-[240px] [&>div]:!overflow-visible [&_.recharts-wrapper]:!overflow-visible [&_*]:!outline-none [&_*]:!ring-0">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart style={{ overflow: 'visible' }}>
                         <Pie
@@ -658,9 +658,9 @@ function AnalyticsDashboard() {
                           cornerRadius={4}
                           isAnimationActive={false}
                           {...(pieActiveIndex !== null && !isSlaModalOpen ? { activeIndex: pieActiveIndex } : {})}
-                          activeShape={renderPieActiveShape}
-                          onMouseEnter={(_, index) => setPieActiveIndex(index)}
-                          onMouseLeave={() => setPieActiveIndex(null)}
+                          activeShape={!isTechUser ? renderPieActiveShape : undefined}
+                          onMouseEnter={!isTechUser ? (_, index) => setPieActiveIndex(index) : undefined}
+                          onMouseLeave={!isTechUser ? () => setPieActiveIndex(null) : undefined}
                           onClick={
                             !isTechUser
                               ? (entry: any) => {
@@ -697,6 +697,7 @@ function AnalyticsDashboard() {
                                   ? 0.4
                                   : 1
                               }
+                              style={{ outline: 'none' }}
                             />
                           ))}
                         </Pie>
@@ -778,7 +779,7 @@ function AnalyticsDashboard() {
                         COLORS[selIdx % COLORS.length] || "hsl(var(--primary))";
 
                       return (
-                        <div className="mt-5 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-lg overflow-hidden animate-fade-in flex flex-col">
+                        <div className="mt-5 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-lg overflow-hidden animate-fade-in flex flex-col min-h-[340px] transition-all">
                           {/* Header */}
                           <div className="flex items-center justify-between px-4 py-3 bg-[hsl(var(--muted)/0.3)] border-b border-[hsl(var(--border))]">
                             <div className="flex items-center gap-2">

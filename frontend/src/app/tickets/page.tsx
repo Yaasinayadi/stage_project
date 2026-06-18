@@ -413,7 +413,7 @@ function Dashboard() {
       </Suspense>
 
       {/* ─── Header ─── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-in relative z-50">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
             {user
@@ -444,7 +444,7 @@ function Dashboard() {
             </div>
           </div>
         ) : (
-          <div className="flex items-center gap-3 relative z-50">
+          <div className="flex items-center gap-3 relative">
             <div className="flex bg-[hsl(var(--muted)/0.3)] p-1.5 rounded-xl border border-[hsl(var(--border)/0.5)] shadow-sm w-max">
               {/* Primary Tabs */}
               {VISIBLE_PERIODS.map((p) => (
@@ -557,7 +557,7 @@ function Dashboard() {
 
       {/* ─── KPI Stats Row ─── */}
       <div
-        className={`grid gap-2 sm:gap-4 ${isUser ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-2 lg:grid-cols-5"}`}
+        className={`grid gap-2 sm:gap-4 pt-4 sm:pt-8 ${isUser ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-2 lg:grid-cols-5"}`}
       >
         <StatsCard
           title="Total Tickets"

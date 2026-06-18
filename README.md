@@ -37,9 +37,9 @@ Le cœur de la sécurité repose sur un champ calculé unifié `x_support_role` 
 │  · support.ticket   │                    │  endpoints :          │
 │  · support.sla      │                    │  POST /classify_ticket│
 │  · support.knowledge│                    │  POST /ai_analyze     │
-│  · pfe.it.domain    │                    │  POST /extract_kw     │
+│  · pfe.it.domain/mat│                    │  POST /extract_kw     │
 │  · res.users (+ext) │                    │  POST /chat           │
-│                     │                    │  POST /upload         │
+│  · pfe.chat.history │                    │  POST /upload         │
 │  PostgreSQL 15      │                    │  SQLite (attachments) │
 └─────────────────────┘                    └──────────────────────┘
 ```
@@ -53,7 +53,7 @@ Le microservice IA (`ia_service/`) est construit avec **Flask + LangChain** et c
 | `POST /classify_ticket` | Classifie le ticket dans l'un des 8 domaines IT et fixe la priorité (0→3) avec un score de confiance |
 | `POST /ai_analyze_detailed` | Génère un diagnostic Markdown structuré : résumé, causes probables, plan d'action |
 | `POST /extract_keywords` | Extrait 2 mots-clés techniques pour le moteur de recherche RAG dans la Knowledge Base |
-| `POST /chat` | Chatbot IT conversationnel avec historique de session en mémoire (jusqu'à 20 échanges) |
+| `POST /chat` | Chatbot IT conversationnel avec historique de session persisté (modèles Odoo `pfe.chat.history`) |
 | `POST /api/ticket/<id>/upload` | Stockage de pièces jointes (10 Mo max, 5 fichiers/ticket) via SQLite |
 
 > En l'absence de clé Groq, chaque endpoint bascule automatiquement sur un mode **mock intelligent** sans lever d'exception — le système reste pleinement fonctionnel.
@@ -75,13 +75,16 @@ Le microservice IA (`ia_service/`) est construit avec **Flask + LangChain** et c
 
 | Modèle | Description |
 |---|---|
-| `support.ticket` | Ticket IT avec workflow 8 états, SLA auto-calculé, chatter `mail.thread` |
-| `support.sla` | Règle SLA par priorité (Basse 48h / Moyenne 24h / Haute 8h / Critique 2h) |
+| `support.ticket` | Ticket IT avec workflow 9 états (incluant Attente Matériel), SLA Dual (réponse/résolution) |
+| `support.sla` | Règle SLA par priorité avec gestion de pause/reprise selon le statut |
 | `support.knowledge` | Article KB avec contenu HTML riche, tags, publication, lien ticket source |
 | `support.knowledge.tag` | Tags libres Many2many pour la recherche et l'indexation RAG |
 | `support.ticket.comment` | Commentaires internes de ticket |
 | `pfe.it.domain` | Domaines d'expertise IT (8 prédéfinis : Réseau, Logiciel, Matériel…) |
-| `res.users` (héritage) | Extension avec `x_support_role` (computed), `it_domain_ids` (Many2many) et `role` étendu |
+| `pfe.it.material` | Gestion de l'inventaire matériel (PC, Serveurs, Périphériques, etc.) |
+| `support.ticket.material.line` | Lignes de commande/assignation de matériel pour un ticket |
+| `pfe.chat.history` | Historique persistant des conversations avec l'IA |
+| `res.users` (héritage) | Extension avec `x_support_role` (computed), `it_domain_ids` (Many2many) |
 
 **Groupes de sécurité :**
 
@@ -234,6 +237,9 @@ stage_project/
 │       │   ├── knowledge_tag.py   # support.knowledge.tag — tags Many2many
 │       │   ├── comment.py         # support.ticket.comment — fil de discussion
 │       │   ├── it_domain.py       # pfe.it.domain — domaines expertise
+│       │   ├── material.py        # pfe.it.material — inventaire matériel
+│       │   ├── chat_history.py    # pfe.chat.history — historique IA
+│       │   ├── notification.py    # centre de notifications
 │       │   └── res_users.py       # res.users (héritage) — x_support_role, it_domain_ids
 │       ├── controllers/
 │       │   ├── main.py            # 20+ endpoints REST : auth, tickets, KB, agents, SLA
@@ -260,6 +266,7 @@ stage_project/
 │       │   ├── tickets/           # Gestion complète des tickets (tableau, filtres, détails)
 │       │   ├── tech/              # Espace technicien (file d'attente, mes tickets)
 │       │   ├── analytics/         # Dashboard SLA & performance agents
+│       │   ├── admin/inventory/   # Gestion de l'inventaire matériel
 │       │   ├── profile/           # Profil utilisateur
 │       │   └── users/             # Gestion des utilisateurs (admin only)
 │       ├── components/
@@ -293,7 +300,7 @@ stage_project/
 
 ### 🎫 Gestion des Tickets
 
-- **Workflow complet** : `Nouveau → Assigné → En Cours → Attente Client → Bloqué → Escaladé → Résolu → Fermé`
+- **Workflow complet (9 états)** : `Nouveau → Assigné → En Cours → Attente Client → Attente Matériel → Bloqué → Escaladé → Résolu → Fermé`
 - **Niveaux de priorité** : 4 niveaux (Basse / Moyenne / Haute / Critique) avec SLA automatique associé
 - **File d'attente intelligente** : les techniciens ne voient que les tickets correspondant à leur domaine d'expertise (`it_domain_ids`)
 - **Système d'acceptation** : un ticket assigné doit être accepté (`x_accepted`) avant de rejoindre "Mes Tickets"
@@ -305,7 +312,7 @@ stage_project/
 - **Classification automatique** : à l'ouverture d'un ticket, LLaMA-3.3-70B identifie la catégorie IT, la priorité suggérée et un score de confiance
 - **Diagnostic détaillé** : analyse en 3 parties (résumé, causes probables, plan d'action) rendue en Markdown dans le modal ticket
 - **Suggestion KB** : après l'analyse, le moteur RAG extrait des mots-clés et retrouve l'article de la Knowledge Base le plus pertinent
-- **Chatbot IT** : assistant conversationnel flottant avec mémoire de session (20 tours) pour guider les utilisateurs
+- **Chatbot IT** : assistant conversationnel flottant avec mémoire de session persistée en base (modèles Odoo dédiés) pour guider les utilisateurs
 
 ### 📚 Base de Connaissances
 
@@ -317,7 +324,7 @@ stage_project/
 
 ### 📊 Analytiques & SLA
 
-- **Calcul SLA en temps réel** : deadline calculée à la création (`create_date + SLA hours`), gel automatique à la résolution (`date_done`)
+- **Dual SLA en temps réel** : SLA de Réponse et SLA de Résolution. Pause automatique du timer sur les états `Attente Client`, `Attente Matériel`, `Bloqué` et `Escaladé`. Bonus d'heures lors d'une escalade.
 - **Statuts SLA** : `on_track` / `at_risk` (< 1h avant échéance) / `breached`
 - **Dashboard SLA** : vue graphique Recharts des KPIs globaux par état, priorité et période (Aujourd'hui / Semaine / Mois / Global)
 - **Drill-down agent** : modal de performance par technicien — volume traité, taux SLA respecté, MTTR, classement avec badges colorés
